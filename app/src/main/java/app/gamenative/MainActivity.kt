@@ -289,6 +289,13 @@ class MainActivity : ComponentActivity() {
             EpicService.start(this)
         }
 
+        // Restart ItchService if it went down and user is authenticated
+        if (app.gamenative.service.itch.ItchService.hasStoredCredentials(this) &&
+            !app.gamenative.service.itch.ItchService.isRunning) {
+            Timber.i("ItchService was down on resume - restarting")
+            app.gamenative.service.itch.ItchService.start(this)
+        }
+
         PostHog.capture(event = "app_foregrounded")
     }
 

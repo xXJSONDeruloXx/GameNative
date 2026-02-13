@@ -759,6 +759,13 @@ object PrefManager {
             setPref(SHOW_EPIC_IN_LIBRARY, value)
         }
 
+    private val SHOW_ITCH_IN_LIBRARY = booleanPreferencesKey("show_itch_in_library")
+    var showItchInLibrary: Boolean
+        get() = getPref(SHOW_ITCH_IN_LIBRARY, true)
+        set(value) {
+            setPref(SHOW_ITCH_IN_LIBRARY, value)
+        }
+
     // Game counts for skeleton loaders
     private val CUSTOM_GAMES_COUNT = intPreferencesKey("custom_games_count")
     var customGamesCount: Int
@@ -800,6 +807,20 @@ object PrefManager {
         get() = getPref(EPIC_INSTALLED_GAMES_COUNT, 0)
         set(value) {
             setPref(EPIC_INSTALLED_GAMES_COUNT, value)
+        }
+
+    private val ITCH_GAMES_COUNT = intPreferencesKey("itch_games_count")
+    var itchGamesCount: Int
+        get() = getPref(ITCH_GAMES_COUNT, 0)
+        set(value) {
+            setPref(ITCH_GAMES_COUNT, value)
+        }
+
+    private val ITCH_INSTALLED_GAMES_COUNT = intPreferencesKey("itch_installed_games_count")
+    var itchInstalledGamesCount: Int
+        get() = getPref(ITCH_INSTALLED_GAMES_COUNT, 0)
+        set(value) {
+            setPref(ITCH_INSTALLED_GAMES_COUNT, value)
         }
 
     // Show dialog when adding custom game folder

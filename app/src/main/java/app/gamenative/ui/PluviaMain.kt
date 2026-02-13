@@ -416,6 +416,14 @@ fun PluviaMain(
                 app.gamenative.service.epic.EpicService.start(context)
             }
 
+            // Start ItchService if user has itch.io credentials
+            if (app.gamenative.service.itch.ItchService.hasStoredCredentials(context) &&
+                !app.gamenative.service.itch.ItchService.isRunning
+            ) {
+                Timber.d("[PluviaMain]: Starting ItchService for logged-in user")
+                app.gamenative.service.itch.ItchService.start(context)
+            }
+
             if (SteamService.isLoggedIn && !SteamService.keepAlive && navController.currentDestination?.route == PluviaScreen.LoginUser.route) {
                 navController.navigate(PluviaScreen.Home.route)
             }

@@ -69,5 +69,9 @@ class DatabaseModule {
 
     @Provides
     @Singleton
+    fun provideItchGameDao(db: PluviaDatabase) = db.itchGameDao()
+
+    @Provides
+    @Singleton
     fun provideDownloadingAppInfoDao(db: PluviaDatabase): DownloadingAppInfoDao = db.downloadingAppInfoDao()
 }

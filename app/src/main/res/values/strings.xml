@@ -1010,6 +1010,21 @@
     <string name="epic_logout_failed">Failed to logout: %s</string>
     <string name="epic_logout_in_progress">Logging out from Epic Games…</string>
 
+    <!-- Itch.io Integration -->
+    <string name="itch_integration_title">itch.io Integration (Alpha)</string>
+    <string name="itch_settings_login_title">Sign in</string>
+    <string name="itch_settings_login_subtitle">Sign in to your itch.io account</string>
+    <string name="itch_login_success_title">Login Successful</string>
+    <string name="itch_login_cancel">Cancel</string>
+    <string name="itch_settings_logout_title">Logout</string>
+    <string name="itch_settings_logout_subtitle">Sign out from your itch.io account</string>
+    <string name="itch_logout_confirm_title">Logout from itch.io?</string>
+    <string name="itch_logout_confirm_message">This will remove your itch.io credentials and clear your itch.io library from this device. You can sign in again at any time.</string>
+    <string name="itch_logout_confirm">Logout</string>
+    <string name="itch_logout_success">Logged out from itch.io successfully</string>
+    <string name="itch_logout_failed">Failed to logout: %s</string>
+    <string name="itch_logout_in_progress">Logging out from itch.io…</string>
+
     <string name="manifest_downloading_item">Downloading %1$s...</string>
     <string name="manifest_download_failed">Download failed: %1$s</string>
     <string name="manifest_install_failed">Failed to install %1$s</string>

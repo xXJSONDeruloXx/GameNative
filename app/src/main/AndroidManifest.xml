@@ -78,6 +78,11 @@
             android:exported="false"
             android:theme="@style/Theme.Pluvia" />
 
+        <activity
+            android:name=".ui.screen.auth.ItchOAuthActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Pluvia" />
+
         <!-- Launcher icon aliases to allow switching app icon at runtime -->
         <activity-alias
             android:name=".MainActivityAliasDefault"
@@ -117,6 +122,11 @@
 
         <service
             android:name=".service.epic.EpicService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+        <service
+            android:name=".service.itch.ItchService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="dataSync" />

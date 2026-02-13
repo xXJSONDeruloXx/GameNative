@@ -7,8 +7,8 @@ enum class GameSource {
     STEAM,
     CUSTOM_GAME,
     GOG,
-    EPIC
-    // Add other platforms here..
+    EPIC,
+    ITCH,
 }
 
 enum class GameCompatibilityStatus {
@@ -57,6 +57,10 @@ data class LibraryItem(
                 }
             }
             GameSource.EPIC -> {
+                iconHash
+            }
+            GameSource.ITCH -> {
+                // itch.io cover URLs are full URLs from the API
                 iconHash
             }
         }
