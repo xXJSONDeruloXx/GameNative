@@ -2,60 +2,84 @@ package app.gamenative.ui.screen.library.appscreen
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import app.gamenative.data.ItchGame
 import app.gamenative.data.LibraryItem
+import app.gamenative.service.itch.ItchConstants
+import app.gamenative.service.itch.ItchService
 import app.gamenative.ui.data.GameDisplayInfo
 import com.winlator.container.ContainerData
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
+import java.time.Instant
 
 /**
  * Itch.io-specific implementation of BaseAppScreen
- * 
- * This screen handles itch.io games that are not installed yet, properly
- * showing them as "not installed" initially instead of immediately showing a Play button.
  */
 class ItchAppScreen : BaseAppScreen() {
-    
+    private val itchGame = mutableStateOf<ItchGame?>(null)
+
     @Composable
     override fun getGameDisplayInfo(
         context: Context,
         libraryItem: LibraryItem
     ): GameDisplayInfo {
-        // For now, just use the library item data directly
-        // TODO: Fetch additional game details from database when needed
+        if (itchGame.value == null) {
+            CoroutineScope(Dispatchers.IO).launch {
+                val game = ItchService.getItchGameOf(libraryItem.gameId.toString())
+                itchGame.value = game
+            }
+        }
+
+        val game = itchGame.value
+        
         return GameDisplayInfo(
-            name = libraryItem.name,
-            developer = "Unknown",
-            releaseDate = 0L,
-            heroImageUrl = libraryItem.iconHash,
-            iconUrl = libraryItem.iconHash,
+            name = game?.title ?: libraryItem.name,
+            developer = game?.developer ?: "Unknown",
+            releaseDate = parseIsoDate(game?.createdAt),
+            heroImageUrl = game?.coverUrl ?: libraryItem.iconHash,
+            iconUrl = game?.coverUrl ?: libraryItem.iconHash,
             gameId = libraryItem.gameId,
             appId = libraryItem.appId,
-            installLocation = null,
-            sizeOnDisk = null
+            installLocation = game?.installPath,
+            sizeOnDisk = game?.installSize?.toString()
         )
     }
 
+    private fun parseIsoDate(isoDate: String?): Long {
+        return try {
+            if (isoDate != null) {
+                Instant.parse(isoDate).epochSecond
+            } else {
+                0L
+            }
+        } catch (e: Exception) {
+            0L
+        }
+    }
+
     override fun isInstalled(context: Context, libraryItem: LibraryItem): Boolean {
-        // Check the database for install status
-        // Note: This is synchronous, so we need to be careful. In reality, itch.io games
-        // don't support installation tracking yet, so this will always return false
-        Timber.tag("ItchAppScreen").d("isInstalled() called for ${libraryItem.appId} - returning false")
-        return false // TODO: Implement proper async check when download support is added
+        val game = itchGame.value
+        return game?.isInstalled == true
     }
 
     override fun isValidToDownload(context: Context, libraryItem: LibraryItem): Boolean {
-        // For now, itch.io games cannot be downloaded through the app
-        return false
+        return !isInstalled(context, libraryItem)
     }
 
     override fun isDownloading(context: Context, libraryItem: LibraryItem): Boolean {
-        // Not yet implemented for itch.io
-        return false
+        val gameId = libraryItem.gameId.toString()
+        val downloadInfo = ItchService.getDownloadInfo(gameId)
+        return downloadInfo != null && (downloadInfo.getProgress() ?: 0f) < 1f
     }
 
     override fun getDownloadProgress(context: Context, libraryItem: LibraryItem): Float {
-        // Not yet implemented for itch.io
-        return 0f
+        val gameId = libraryItem.gameId.toString()
+        val downloadInfo = ItchService.getDownloadInfo(gameId)
+        return downloadInfo?.getProgress() ?: 0f
     }
 
     override fun onDownloadInstallClick(
@@ -63,15 +87,85 @@ class ItchAppScreen : BaseAppScreen() {
         libraryItem: LibraryItem,
         onClickPlay: (Boolean) -> Unit
     ) {
-        // Not implemented yet - itch.io downloads not supported
+        Timber.tag("ItchAppScreen").i("onDownloadInstallClick: ${libraryItem.name}")
+        
+        val gameId = libraryItem.gameId.toString()
+        val downloadInfo = ItchService.getDownloadInfo(gameId)
+        val isDownloading = downloadInfo != null && (downloadInfo.getProgress() ?: 0f) < 1f
+        val installed = isInstalled(context, libraryItem)
+
+        when {
+            isDownloading -> {
+                Timber.tag("ItchAppScreen").i("Cancelling download for: ${libraryItem.name}")
+                downloadInfo.cancel()
+                ItchService.cleanupDownload(gameId)
+            }
+            installed -> {
+                Timber.tag("ItchAppScreen").i("Game already installed, launching: ${libraryItem.name}")
+                onClickPlay(false)
+            }
+            else -> {
+                performDownload(context, libraryItem, onClickPlay)
+            }
+        }
+    }
+
+    private fun performDownload(context: Context, libraryItem: LibraryItem, onClickPlay: (Boolean) -> Unit) {
+        val gameId = libraryItem.gameId.toString()
+        Timber.tag("ItchAppScreen").i("Starting download: ${libraryItem.name}")
+        
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val installPath = ItchConstants.getGameInstallPath(context, libraryItem.name)
+                Timber.tag("ItchAppScreen").d("Downloading to: $installPath")
+
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(
+                        context,
+                        "Starting download for ${libraryItem.name}...",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+
+                val result = ItchService.downloadGame(context, gameId, installPath)
+
+                if (result.isSuccess) {
+                    Timber.tag("ItchAppScreen").i("Download started successfully for: $gameId")
+                } else {
+                    val error = result.exceptionOrNull()
+                    Timber.tag("ItchAppScreen").e(error, "Failed to start download")
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(
+                            context,
+                            "Failed to start download: ${error?.message}",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.tag("ItchAppScreen").e(e, "Error during download")
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(
+                        context,
+                        "Download error: ${e.message}",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
     }
 
     override fun onPauseResumeClick(context: Context, libraryItem: LibraryItem) {
-        // Not implemented yet - itch.io downloads not supported
+        // Pause/resume not supported for itch.io
     }
 
     override fun onDeleteDownloadClick(context: Context, libraryItem: LibraryItem) {
-        // Not implemented yet - itch.io downloads not supported
+        val gameId = libraryItem.gameId.toString()
+        val downloadInfo = ItchService.getDownloadInfo(gameId)
+        if (downloadInfo != null) {
+            downloadInfo.cancel()
+            ItchService.cleanupDownload(gameId)
+        }
     }
 
     override fun onUpdateClick(context: Context, libraryItem: LibraryItem) {
@@ -81,8 +175,7 @@ class ItchAppScreen : BaseAppScreen() {
     override fun getExportFileExtension(): String = ".itch"
 
     override fun getInstallPath(context: Context, libraryItem: LibraryItem): String? {
-        // Itch games are not installed locally yet
-        return null
+        return itchGame.value?.installPath
     }
 
     override fun loadContainerData(context: Context, libraryItem: LibraryItem): ContainerData {

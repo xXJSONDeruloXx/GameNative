@@ -1,6 +1,9 @@
 package app.gamenative.service.itch
 
+import android.content.Context
 import android.net.Uri
+import android.os.Environment
+import java.io.File
 import java.security.SecureRandom
 
 /**
@@ -26,6 +29,7 @@ object ItchConstants {
 
     // itch.io API base URL (used with Bearer token)
     const val ITCH_API_BASE_URL = "https://api.itch.io"
+    const val API_BASE = ITCH_API_BASE_URL
 
     // OAuth authorization endpoint
     const val ITCH_AUTH_URL = "https://itch.io/user/oauth"
@@ -63,4 +67,22 @@ object ItchConstants {
      * User opens this in browser, completes OAuth, then copies token manually.
      */
     fun loginUrl(): String = ITCH_AUTH_LOGIN_URL
+
+    /**
+     * Gets the install path for an itch.io game
+     */
+    fun getGameInstallPath(context: Context, gameName: String): String {
+        val sanitizedName = gameName
+            .replace(Regex("[^a-zA-Z0-9_\\- ]"), "")
+            .replace(" ", "_")
+            .take(100)
+
+        val baseDir = if (Environment.getExternalStorageState() == Environment.MEDIA_MOUNTED) {
+            context.getExternalFilesDir(null)
+        } else {
+            context.filesDir
+        }
+
+        return File(baseDir, "itch/games/$sanitizedName").absolutePath
+    }
 }

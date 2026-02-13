@@ -5,10 +5,12 @@ import android.content.Context
 import android.content.Intent
 import android.os.IBinder
 import app.gamenative.data.ItchCredentials
+import app.gamenative.data.ItchGame
 import app.gamenative.events.AndroidEvent
 import app.gamenative.PluviaApp
 import app.gamenative.service.NotificationHelper
 import dagger.hilt.android.AndroidEntryPoint
+import java.io.File
 import javax.inject.Inject
 import kotlinx.coroutines.*
 import timber.log.Timber
@@ -168,6 +170,118 @@ class ItchService : Service() {
             return getInstance()?.itchManager?.refreshLibrary(context)
                 ?: Result.failure(Exception("Service not available"))
         }
+
+        fun getItchGameOf(gameId: String): ItchGame? {
+            return runBlocking(Dispatchers.IO) {
+                getInstance()?.itchManager?.getGameFromDbById(gameId.toIntOrNull() ?: 0)
+            }
+        }
+
+        // ==========================================================================
+        // DOWNLOAD OPERATIONS
+        // ==========================================================================
+
+        fun downloadGame(context: Context, gameId: String, installPath: String): Result<app.gamenative.data.DownloadInfo?> {
+            val instance = getInstance() ?: return Result.failure(Exception("Service not available"))
+            
+            val downloadInfo = app.gamenative.data.DownloadInfo(
+                jobCount = 1,
+                gameId = 0,
+                downloadingAppIds = java.util.concurrent.CopyOnWriteArrayList<Int>()
+            )
+
+            instance.activeDownloads[gameId] = downloadInfo
+
+            instance.scope.launch {
+                try {
+                    Timber.tag("Itch").d("[Download] Starting download for game $gameId")
+                    
+                    val game = getItchGameOf(gameId)
+                    if (game == null) {
+                        Timber.tag("Itch").e("Game $gameId not found in database")
+                        downloadInfo.setProgress(-1.0f)
+                        downloadInfo.setActive(false)
+                        return@launch
+                    }
+
+                    val result = instance.itchDownloadManager.downloadGame(
+                        game,
+                        File(installPath),
+                        downloadInfo
+                    )
+
+                    if (result.isFailure) {
+                        val error = result.exceptionOrNull()
+                        Timber.tag("Itch").e(error, "[Download] Failed for game $gameId")
+                        downloadInfo.setProgress(-1.0f)
+                        downloadInfo.setActive(false)
+
+                        withContext(Dispatchers.Main) {
+                            android.widget.Toast.makeText(
+                                context,
+                                "Download failed: ${error?.message ?: "Unknown error"}",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    } else {
+                        Timber.tag("Itch").i("[Download] Completed successfully for game $gameId")
+                        downloadInfo.setProgress(1.0f)
+                        downloadInfo.setActive(false)
+
+                        val updatedGame = game.copy(
+                            isInstalled = true,
+                            installPath = installPath,
+                            installSize = calculateDirectorySize(File(installPath))
+                        )
+                        instance.itchManager.updateGame(updatedGame)
+
+                        withContext(Dispatchers.Main) {
+                            android.widget.Toast.makeText(
+                                context,
+                                "Installation complete!",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("Itch").e(e, "[Download] Exception for game $gameId")
+                    downloadInfo.setProgress(-1.0f)
+                    downloadInfo.setActive(false)
+
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(
+                            context,
+                            "Download error: ${e.message ?: "Unknown error"}",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
+                } finally {
+                    instance.activeDownloads.remove(gameId)
+                }
+            }
+
+            return Result.success(downloadInfo)
+        }
+
+        fun getDownloadInfo(gameId: String): app.gamenative.data.DownloadInfo? {
+            return getInstance()?.activeDownloads?.get(gameId)
+        }
+
+        fun cleanupDownload(gameId: String) {
+            getInstance()?.activeDownloads?.remove(gameId)
+        }
+
+        private fun calculateDirectorySize(dir: File): Long {
+            var size = 0L
+            if (dir.exists()) {
+                dir.walkTopDown().forEach { file ->
+                    if (file.isFile) {
+                        size += file.length()
+                    }
+                }
+            }
+            return size
+        }
     }
 
     private lateinit var notificationHelper: NotificationHelper
@@ -175,7 +289,11 @@ class ItchService : Service() {
     @Inject
     lateinit var itchManager: ItchManager
 
+    @Inject
+    lateinit var itchDownloadManager: ItchDownloadManager
+
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val activeDownloads = mutableMapOf<String, app.gamenative.data.DownloadInfo>()
 
     private val onEndProcess: (AndroidEvent.EndProcess) -> Unit = { stop() }
 
