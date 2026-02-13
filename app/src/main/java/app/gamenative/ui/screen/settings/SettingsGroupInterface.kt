@@ -73,17 +73,20 @@ import app.gamenative.service.epic.EpicService
 import app.gamenative.service.epic.EpicAuthManager
 import app.gamenative.service.itch.ItchService
 import app.gamenative.service.itch.ItchAuthManager
+import app.gamenative.service.itch.ItchConstants
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.height
+import androidx.compose.material.icons.filled.OpenInBrowser
 import kotlinx.coroutines.CoroutineScope
 import timber.log.Timber
 import app.gamenative.PluviaApp
 import app.gamenative.events.AndroidEvent
 import app.gamenative.ui.screen.auth.EpicOAuthActivity
 import app.gamenative.ui.screen.auth.GOGOAuthActivity
-import app.gamenative.ui.screen.auth.ItchOAuthActivity
 
 /**
  * Shared GOG authentication handler that manages the complete auth flow.
@@ -309,6 +312,9 @@ fun SettingsGroupInterface(
 
     // Itch.io login state
     var itchLoginLoading by rememberSaveable { mutableStateOf(false) }
+    var showItchTokenDialog by rememberSaveable { mutableStateOf(false) }
+    var itchTokenInput by rememberSaveable { mutableStateOf("") }
+    var itchTokenError by rememberSaveable { mutableStateOf<String?>(null) }
 
     // Itch.io logout confirmation dialog state
     var showItchLogoutDialog by rememberSaveable { mutableStateOf(false) }
@@ -400,45 +406,7 @@ fun SettingsGroupInterface(
         }
     }
 
-    // Itch.io in-app OAuth (WebView) launcher; result delivers access token via implicit flow
-    val itchOAuthLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode != android.app.Activity.RESULT_OK) {
-            val message = result.data?.getStringExtra(ItchOAuthActivity.EXTRA_ERROR)
-                ?: context.getString(R.string.itch_login_cancel)
-            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
-            return@rememberLauncherForActivityResult
-        }
-        val token = result.data?.getStringExtra(ItchOAuthActivity.EXTRA_ACCESS_TOKEN)
-        if (token == null) {
-            val message = result.data?.getStringExtra(ItchOAuthActivity.EXTRA_ERROR)
-                ?: context.getString(R.string.itch_login_cancel)
-            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
-            return@rememberLauncherForActivityResult
-        }
-        lifecycleScope.launch {
-            handleItchAuthentication(
-                context = context,
-                accessToken = token,
-                coroutineScope = lifecycleScope,
-                onLoadingChange = { itchLoginLoading = it },
-                onError = { msg ->
-                    if (msg != null) {
-                        android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
-                    }
-                },
-                onSuccess = {
-                    android.widget.Toast.makeText(
-                        context,
-                        context.getString(R.string.itch_login_success_title),
-                        android.widget.Toast.LENGTH_SHORT
-                    ).show()
-                },
-                onDialogClose = { }
-            )
-        }
-    }
+    // Removed Itch.io OAuth launcher - now using manual token entry with external browser
 
     // Listen for GOG OAuth callback (e.g. from event)
     DisposableEffect(Unit) {
@@ -614,7 +582,7 @@ fun SettingsGroupInterface(
                 title = { Text(text = stringResource(R.string.itch_settings_login_title)) },
                 subtitle = { Text(text = stringResource(R.string.itch_settings_login_subtitle)) },
                 onClick = {
-                    itchOAuthLauncher.launch(Intent(context, ItchOAuthActivity::class.java))
+                    showItchTokenDialog = true
                 }
             )
         }
@@ -1096,6 +1064,119 @@ fun SettingsGroupInterface(
         progress = -1f,
         message = stringResource(R.string.itch_logout_in_progress)
     )
+
+    // Itch.io token entry dialog
+    if (showItchTokenDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { 
+                showItchTokenDialog = false
+                itchTokenInput = ""
+                itchTokenError = null
+            },
+            title = { Text(stringResource(R.string.itch_settings_login_title)) },
+            text = {
+                Column {
+                    Text(
+                        text = "Tap 'Open Browser' to authorize GameNative, then copy and paste your access token here.",
+                        style = androidx.compose.material3.MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = {
+                            val url = ItchConstants.loginUrl()
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            context.startActivity(intent)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        androidx.compose.material3.Icon(
+                            imageVector = Icons.Default.OpenInBrowser,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Open Browser")
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    androidx.compose.material3.OutlinedTextField(
+                        value = itchTokenInput,
+                        onValueChange = { 
+                            itchTokenInput = it
+                            itchTokenError = null
+                        },
+                        label = { Text("Access Token") },
+                        placeholder = { Text("Paste your token here") },
+                        isError = itchTokenError != null,
+                        supportingText = itchTokenError?.let { { Text(it, color = androidx.compose.material3.MaterialTheme.colorScheme.error) } },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = false,
+                        maxLines = 3
+                    )
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        val token = itchTokenInput.trim()
+                        if (token.isEmpty()) {
+                            itchTokenError = "Token cannot be empty"
+                            return@TextButton
+                        }
+                        if (token.length < 20) {
+                            itchTokenError = "Token appears too short"
+                            return@TextButton
+                        }
+                        
+                        lifecycleScope.launch {
+                            handleItchAuthentication(
+                                context = context,
+                                accessToken = token,
+                                coroutineScope = lifecycleScope,
+                                onLoadingChange = { itchLoginLoading = it },
+                                onError = { msg ->
+                                    itchTokenError = msg
+                                },
+                                onSuccess = {
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        context.getString(R.string.itch_login_success_title),
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                },
+                                onDialogClose = {
+                                    showItchTokenDialog = false
+                                    itchTokenInput = ""
+                                    itchTokenError = null
+                                }
+                            )
+                        }
+                    },
+                    enabled = !itchLoginLoading
+                ) {
+                    if (itchLoginLoading) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("Login")
+                    }
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        showItchTokenDialog = false
+                        itchTokenInput = ""
+                        itchTokenError = null
+                    },
+                    enabled = !itchLoginLoading
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
 }
 

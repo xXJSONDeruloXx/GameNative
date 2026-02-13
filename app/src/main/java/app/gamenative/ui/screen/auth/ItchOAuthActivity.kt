@@ -79,8 +79,9 @@ class ItchOAuthActivity : ComponentActivity() {
                         // Try to extract it from the page body via JavaScript.
                         tryExtractTokenFromUrl(url)
 
-                        // Also try extracting from the page content (OOB display page)
-                        webView.evaluateJavascript(
+                        // Only try extracting from page content if we're on the redirect URI page
+                        if (url.contains("urn:ietf:wg:oauth:2.0:oob") || url.contains("/authorize/") || url.contains("?code=") || url.contains("#access_token=")) {
+                            webView.evaluateJavascript(
                             """(function(){
                                 try {
                                     // itch.io OOB pages may display the token in a code element
@@ -104,6 +105,7 @@ class ItchOAuthActivity : ComponentActivity() {
                                 Timber.tag("Itch").d("Extracted access token from page body")
                                 finishWithToken(token)
                             }
+                        }
                         }
                     },
                 )

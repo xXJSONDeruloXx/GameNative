@@ -18,7 +18,7 @@ object ItchConstants {
     // itch.io OAuth Configuration
     // TODO: Replace with your registered OAuth application's client ID from
     //       https://itch.io/user/settings/oauth-apps
-    const val ITCH_CLIENT_ID = "TODO_REGISTER_OAUTH_APP"
+    const val ITCH_CLIENT_ID = "9090686bf0ccef25a3be8513b69f50af"
 
     // Redirect URI — using out-of-band so the WebView can show the token on a page we control
     // This matches the itch.io OOB pattern; the WebView will extract it from the fragment.
@@ -57,4 +57,10 @@ object ItchConstants {
         val url = "$ITCH_AUTH_LOGIN_URL&state=${Uri.encode(state)}"
         return url to state
     }
+
+    /**
+     * Simple login URL without state for manual token entry flow.
+     * User opens this in browser, completes OAuth, then copies token manually.
+     */
+    fun loginUrl(): String = ITCH_AUTH_LOGIN_URL
 }

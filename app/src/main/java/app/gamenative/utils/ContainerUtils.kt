@@ -581,6 +581,11 @@ object ContainerUtils {
                 "$defaultDrives$drive:$appDirPath"
             }
 
+            GameSource.ITCH -> {
+                // Itch.io games don't have local installation, use default drives
+                defaultDrives
+            }
+
             GameSource.CUSTOM_GAME -> {
                 // For Custom Games, find the game folder and map it to A: drive
                 val gameFolderPath = CustomGameScanner.getFolderPathFromAppId(appId)
@@ -889,6 +894,10 @@ object ContainerUtils {
             GameSource.EPIC -> {
                 val gameId = extractGameIdFromContainerId(appId)
                 EpicService.getInstallPath(gameId)
+            }
+
+            GameSource.ITCH -> {
+                null // Itch.io games don't have local installation tracking
             }
 
             GameSource.CUSTOM_GAME -> {

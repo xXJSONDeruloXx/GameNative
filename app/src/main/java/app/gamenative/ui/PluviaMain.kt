@@ -225,6 +225,10 @@ fun PluviaMain(
                                             EpicService.isGameInstalled(gameId)
                                         }
 
+                                        GameSource.ITCH -> {
+                                            false // Itch.io games don't have local installation tracking yet
+                                        }
+
                                         GameSource.CUSTOM_GAME -> {
                                             CustomGameScanner.isGameInstalled(gameId)
                                         }

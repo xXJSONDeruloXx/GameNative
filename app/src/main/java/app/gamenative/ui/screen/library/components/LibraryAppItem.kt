@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Face4
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.QuestionMark
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -214,6 +215,7 @@ internal fun AppItem(
 
                     val imageUrl = remember(appInfo.appId, paneType, imageRefreshCounter) {
                         val url = when (appInfo.gameSource) {
+                            GameSource.ITCH,
                             GameSource.CUSTOM_GAME -> {
                                 // For Custom Games, use SteamGridDB images
                                 when (paneType) {
@@ -649,6 +651,7 @@ fun GameSourceIcon(gameSource: GameSource, modifier: Modifier = Modifier, iconSi
         GameSource.CUSTOM_GAME -> Icon(imageVector = Icons.Filled.Folder, contentDescription = "Custom Game", modifier = modifier.size(iconSize.dp).alpha(0.7f))
         GameSource.GOG -> Icon(painter = painterResource(R.drawable.ic_gog), contentDescription = "Gog", modifier = modifier.size(iconSize.dp).alpha(0.7f))
         GameSource.EPIC -> Icon(painter = painterResource(R.drawable.ic_epic), contentDescription = "Epic", modifier = modifier.size(iconSize.dp).alpha(0.7f))
+        GameSource.ITCH -> Icon(imageVector = Icons.Filled.Language, contentDescription = "Itch.io", modifier = modifier.size(iconSize.dp).alpha(0.7f))
     }
 }
 
