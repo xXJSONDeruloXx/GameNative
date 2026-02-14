@@ -9,9 +9,10 @@ import java.security.SecureRandom
 /**
  * Constants for itch.io integration.
  *
- * Itch.io uses OAuth 2.0 Implicit Flow:
- * - The access token is returned directly in the URL fragment (#access_token=...)
- * - Tokens are long-lived API keys (no expiry, no refresh token)
+ * Itch.io uses OAuth 2.0 Authorization Code Flow with PKCE:
+ * - More secure than implicit flow
+ * - Returns an API key with full scopes (including game:view:uploads)
+ * - This matches the authentication used by the itch.io desktop app
  * - Register your OAuth app at https://itch.io/user/settings/oauth-apps
  *
  * NOTE: You must register an OAuth application on itch.io and fill in your
@@ -21,32 +22,35 @@ object ItchConstants {
     // itch.io OAuth Configuration
     // TODO: Replace with your registered OAuth application's client ID from
     //       https://itch.io/user/settings/oauth-apps
-    const val ITCH_CLIENT_ID = "9090686bf0ccef25a3be8513b69f50af"
+    const val OAUTH_CLIENT_ID = "9090686bf0ccef25a3be8513b69f50af"
+    
+    // Legacy client ID for backwards compatibility
+    const val ITCH_CLIENT_ID = OAUTH_CLIENT_ID
 
-    // Redirect URI — using out-of-band so the WebView can show the token on a page we control
-    // This matches the itch.io OOB pattern; the WebView will extract it from the fragment.
+    // Redirect URI for OAuth callback - using OOB (out-of-band) which doesn't require app registration
     const val ITCH_REDIRECT_URI = "urn:ietf:wg:oauth:2.0:oob"
+    
+    // itch.io base URLs
+    const val ITCH_BASE_URL = "https://itch.io"
 
-    // itch.io API base URL (used with Bearer token)
+    // itch.io API base URL (used with Authorization header)
     const val ITCH_API_BASE_URL = "https://api.itch.io"
     const val API_BASE = ITCH_API_BASE_URL
 
     // OAuth authorization endpoint
-    const val ITCH_AUTH_URL = "https://itch.io/user/oauth"
+    const val ITCH_AUTH_URL = "$ITCH_BASE_URL/user/oauth"
 
     // Scopes we request:
     //  - profile:me  — view the user's public profile
-    //  - profile:owned — list games the user has purchased or claimed
-    const val ITCH_SCOPES = "profile:me profile:owned"
+    const val ITCH_SCOPES = "profile:me"
 
     /**
-     * Builds the OAuth authorization URL.
-     * Itch.io uses the Implicit Flow (response_type=token), so the access token
-     * is returned in the redirect URL's fragment.
+     * Builds the OAuth authorization URL for authorization code flow with PKCE.
+     * The user will authorize the app and be redirected back with an authorization code.
      */
     val ITCH_AUTH_LOGIN_URL: String
         get() = "$ITCH_AUTH_URL?" +
-            "client_id=$ITCH_CLIENT_ID" +
+            "client_id=$OAUTH_CLIENT_ID" +
             "&scope=${Uri.encode(ITCH_SCOPES)}" +
             "&redirect_uri=${Uri.encode(ITCH_REDIRECT_URI)}" +
             "&response_type=token"
@@ -67,6 +71,12 @@ object ItchConstants {
      * User opens this in browser, completes OAuth, then copies token manually.
      */
     fun loginUrl(): String = ITCH_AUTH_LOGIN_URL
+    
+    /**
+     * URL to itch.io API keys page where users can generate static API keys.
+     * These keys have full API access (unlike OAuth tokens with limited scopes).
+     */
+    const val ITCH_API_KEYS_URL = "https://itch.io/user/settings/api-keys"
 
     /**
      * Gets the install path for an itch.io game

@@ -93,8 +93,8 @@ class ItchService : Service() {
         /**
          * Authenticate using access token from OAuth implicit flow.
          */
-        suspend fun authenticateWithToken(context: Context, accessToken: String): Result<ItchCredentials> {
-            return ItchAuthManager.authenticateWithToken(context, accessToken)
+        suspend fun authenticateWithApiKey(context: Context, apiKey: String): Result<ItchCredentials> {
+            return ItchAuthManager.authenticateWithApiKey(context, apiKey)
         }
 
         fun hasStoredCredentials(context: Context): Boolean {
@@ -174,6 +174,61 @@ class ItchService : Service() {
         fun getItchGameOf(gameId: String): ItchGame? {
             return runBlocking(Dispatchers.IO) {
                 getInstance()?.itchManager?.getGameFromDbById(gameId.toIntOrNull() ?: 0)
+            }
+        }
+
+        /**
+         * Fetches the upload size for a game (to show before download)
+         * Returns the size in bytes, or 0 if unavailable
+         */
+        suspend fun getUploadSize(context: Context, gameId: String): Long {
+            return withContext(Dispatchers.IO) {
+                try {
+                    val instance = getInstance()
+                    if (instance == null) {
+                        Timber.tag("Itch").w("Service not available for fetching upload size")
+                        return@withContext 0L
+                    }
+
+                    val game = getItchGameOf(gameId)
+                    if (game == null) {
+                        Timber.tag("Itch").w("Game $gameId not found in database")
+                        return@withContext 0L
+                    }
+
+                    val credentials = ItchAuthManager.getStoredCredentials(context).getOrNull()
+                    if (credentials == null) {
+                        Timber.tag("Itch").w("No credentials available for fetching upload size")
+                        return@withContext 0L
+                    }
+
+                    val uploadsResult = instance.itchDownloadManager.getUploads(
+                        credentials.apiKey,
+                        game.id,
+                        game.downloadKeyId
+                    )
+
+                    if (uploadsResult.isFailure) {
+                        Timber.tag("Itch").w(uploadsResult.exceptionOrNull(), "Failed to fetch uploads")
+                        return@withContext 0L
+                    }
+
+                    val uploads = uploadsResult.getOrNull() ?: emptyList()
+                    if (uploads.isEmpty()) {
+                        Timber.tag("Itch").w("No uploads found for game $gameId")
+                        return@withContext 0L
+                    }
+
+                    // Find best upload - prefer Windows builds
+                    val upload = uploads.firstOrNull { it.platform == "windows" }
+                        ?: uploads.first()
+
+                    Timber.tag("Itch").d("Found upload size for ${game.title}: ${upload.size} bytes")
+                    upload.size
+                } catch (e: Exception) {
+                    Timber.tag("Itch").e(e, "Exception fetching upload size")
+                    0L
+                }
             }
         }
 

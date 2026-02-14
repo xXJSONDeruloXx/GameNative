@@ -2,7 +2,11 @@ package app.gamenative.ui.screen.library.appscreen
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import app.gamenative.data.ItchGame
 import app.gamenative.data.LibraryItem
 import app.gamenative.service.itch.ItchConstants
@@ -36,6 +40,23 @@ class ItchAppScreen : BaseAppScreen() {
 
         val game = itchGame.value
         
+        // Fetch upload size if not installed
+        var sizeFromStore by remember { mutableStateOf<String?>(null) }
+        val isInstalled = game?.isInstalled == true
+        
+        LaunchedEffect(libraryItem.gameId, isInstalled) {
+            if (!isInstalled) {
+                try {
+                    val sizeBytes = ItchService.getUploadSize(context, libraryItem.gameId.toString())
+                    if (sizeBytes > 0) {
+                        sizeFromStore = formatBytes(sizeBytes)
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("ItchAppScreen").e(e, "Failed to fetch upload size")
+                }
+            }
+        }
+        
         return GameDisplayInfo(
             name = game?.title ?: libraryItem.name,
             developer = game?.developer ?: "Unknown",
@@ -45,8 +66,18 @@ class ItchAppScreen : BaseAppScreen() {
             gameId = libraryItem.gameId,
             appId = libraryItem.appId,
             installLocation = game?.installPath,
-            sizeOnDisk = game?.installSize?.toString()
+            sizeOnDisk = game?.installSize?.toString()?.let { formatBytes(it.toLong()) },
+            sizeFromStore = sizeFromStore
         )
+    }
+    
+    private fun formatBytes(bytes: Long): String {
+        return when {
+            bytes >= 1024 * 1024 * 1024 -> String.format("%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
+            bytes >= 1024 * 1024 -> String.format("%.2f MB", bytes / (1024.0 * 1024.0))
+            bytes >= 1024 -> String.format("%.2f KB", bytes / 1024.0)
+            else -> "$bytes B"
+        }
     }
 
     private fun parseIsoDate(isoDate: String?): Long {

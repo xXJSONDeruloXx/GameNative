@@ -37,7 +37,7 @@ object ItchApiClient {
                     )
                 }
 
-                val accessToken = credentials.getOrNull()!!.accessToken
+                val apiKey = credentials.getOrNull()!!.apiKey
                 val allGames = mutableListOf<ItchGame>()
                 var page = 1
                 var hasMore = true
@@ -47,7 +47,7 @@ object ItchApiClient {
 
                     val request = Request.Builder()
                         .url("${ItchConstants.ITCH_API_BASE_URL}/profile/owned-keys?page=$page")
-                        .header("Authorization", "Bearer $accessToken")
+                        .header("Authorization", apiKey)
                         .get()
                         .build()
 
@@ -117,14 +117,14 @@ object ItchApiClient {
         return withContext(Dispatchers.IO) {
             try {
                 val credentials = ItchAuthManager.getStoredCredentials(context)
-                val accessToken = credentials.getOrNull()?.accessToken ?: ""
+                val apiKey = credentials.getOrNull()?.apiKey ?: ""
 
                 val requestBuilder = Request.Builder()
                     .url("${ItchConstants.ITCH_API_BASE_URL}/games/$gameId")
                     .get()
 
-                if (accessToken.isNotEmpty()) {
-                    requestBuilder.header("Authorization", "Bearer $accessToken")
+                if (apiKey.isNotEmpty()) {
+                    requestBuilder.header("Authorization", "Bearer $apiKey")
                 }
 
                 httpClient.newCall(requestBuilder.build()).execute().use { response ->

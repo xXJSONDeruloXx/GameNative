@@ -195,7 +195,7 @@ private suspend fun handleEpicAuthentication(
  * Shared itch.io authentication handler that manages the complete auth flow.
  *
  * @param context Android context for service operations
- * @param accessToken The OAuth access token from implicit flow
+ * @param apiKey The itch.io API key from https://itch.io/user/settings/api-keys
  * @param coroutineScope Coroutine scope for async operations
  * @param onLoadingChange Callback when loading state changes
  * @param onError Callback when an error occurs (receives error message)
@@ -204,7 +204,7 @@ private suspend fun handleEpicAuthentication(
  */
 private suspend fun handleItchAuthentication(
     context: Context,
-    accessToken: String,
+    apiKey: String,
     coroutineScope: CoroutineScope,
     onLoadingChange: (Boolean) -> Unit,
     onError: (String?) -> Unit,
@@ -216,7 +216,7 @@ private suspend fun handleItchAuthentication(
 
     try {
         Timber.d("[SettingsItch]: Starting authentication...")
-        val result = ItchService.authenticateWithToken(context, accessToken)
+        val result = ItchService.authenticateWithApiKey(context, apiKey)
 
         if (result.isSuccess) {
             Timber.i("[SettingsItch]: ✓ Authentication successful!")
@@ -580,9 +580,11 @@ fun SettingsGroupInterface(
                 icon = { androidx.compose.material3.Icon(Icons.Default.Login, contentDescription = null) },
                 colors = settingsTileColorsAlt(),
                 title = { Text(text = stringResource(R.string.itch_settings_login_title)) },
-                subtitle = { Text(text = stringResource(R.string.itch_settings_login_subtitle)) },
+                subtitle = { Text(text = "Sign in with itch.io OAuth") },
                 onClick = {
-                    showItchTokenDialog = true
+                    // Launch OAuth flow
+                    val intent = Intent(context, app.gamenative.ui.ItchOAuthActivity::class.java)
+                    context.startActivity(intent)
                 }
             )
         }
@@ -1077,13 +1079,13 @@ fun SettingsGroupInterface(
             text = {
                 Column {
                     Text(
-                        text = "Tap 'Open Browser' to authorize GameNative, then copy and paste your access token here.",
+                        text = "Generate an API key at itch.io/user/settings/api-keys, then paste it here. API keys have full access to your library and downloads.",
                         style = androidx.compose.material3.MaterialTheme.typography.bodyMedium
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     androidx.compose.material3.OutlinedButton(
                         onClick = {
-                            val url = ItchConstants.loginUrl()
+                            val url = ItchConstants.ITCH_API_KEYS_URL
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                             context.startActivity(intent)
                         },
@@ -1095,7 +1097,7 @@ fun SettingsGroupInterface(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Open Browser")
+                        Text("Open API Keys Page")
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                     androidx.compose.material3.OutlinedTextField(
@@ -1104,8 +1106,8 @@ fun SettingsGroupInterface(
                             itchTokenInput = it
                             itchTokenError = null
                         },
-                        label = { Text("Access Token") },
-                        placeholder = { Text("Paste your token here") },
+                        label = { Text("API Key") },
+                        placeholder = { Text("Paste your API key here") },
                         isError = itchTokenError != null,
                         supportingText = itchTokenError?.let { { Text(it, color = androidx.compose.material3.MaterialTheme.colorScheme.error) } },
                         modifier = Modifier.fillMaxWidth(),
@@ -1130,7 +1132,7 @@ fun SettingsGroupInterface(
                         lifecycleScope.launch {
                             handleItchAuthentication(
                                 context = context,
-                                accessToken = token,
+                                apiKey = token,
                                 coroutineScope = lifecycleScope,
                                 onLoadingChange = { itchLoginLoading = it },
                                 onError = { msg ->

@@ -57,7 +57,7 @@ class ItchDownloadManager @Inject constructor(
             }
             
             // Step 1: Get list of uploads for this game (10%)
-            val uploads = getUploads(credentials.accessToken, game.downloadKeyId).getOrElse {
+            val uploads = getUploads(credentials.apiKey, game.id, game.downloadKeyId).getOrElse {
                 return@withContext Result.failure(it)
             }
             
@@ -73,7 +73,7 @@ class ItchDownloadManager @Inject constructor(
             downloadInfo.setProgress(0.1f)
             
             // Step 2: Get download URL (20%)
-            val downloadUrl = getDownloadUrl(credentials.accessToken, game.downloadKeyId, upload.id).getOrElse {
+            val downloadUrl = getDownloadUrl(credentials.apiKey, game.downloadKeyId, upload.id).getOrElse {
                 return@withContext Result.failure(it)
             }
             downloadInfo.setProgress(0.2f)
@@ -108,20 +108,39 @@ class ItchDownloadManager @Inject constructor(
     
     /**
      * Fetches list of uploads for a game
+     * Made public to allow checking file sizes before download
+     * 
+     * @param apiKey The static API key for authentication
+     * @param gameId The game ID
+     * @param downloadKeyId The download key ID for authentication
      */
-    private suspend fun getUploads(accessToken: String, downloadKeyId: Int): Result<List<ItchUpload>> {
+    suspend fun getUploads(apiKey: String, gameId: Int, downloadKeyId: Int): Result<List<ItchUpload>> {
+        return getUploadsForGame(apiKey, gameId, downloadKeyId)
+    }
+    
+    /**
+     * Fetches uploads for a specific game ID with download key credentials
+     * Uses itch.io API endpoint /games/:id/uploads with Authorization header and download_key_id parameter
+     */
+    private suspend fun getUploadsForGame(apiKey: String, gameId: Int, downloadKeyId: Int): Result<List<ItchUpload>> {
         return try {
-            val url = "${ItchConstants.API_BASE}/download-key/$downloadKeyId/uploads"
-            Timber.tag("Itch").d("[API] GET $url")
+            // Use the game uploads endpoint with Authorization header and download_key_id parameter
+            // Format: GET https://api.itch.io/games/:id/uploads?download_key_id=:key_id
+            // Header: Authorization: <api_key>
+            val url = "${ItchConstants.ITCH_API_BASE_URL}/games/$gameId/uploads?download_key_id=$downloadKeyId"
+            Timber.tag("Itch").d("[API] GET /games/$gameId/uploads?download_key_id=$downloadKeyId")
             
             val request = okhttp3.Request.Builder()
                 .url(url)
-                .header("Authorization", "Bearer $accessToken")
+                .header("Authorization", apiKey)
                 .get()
                 .build()
             
             httpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
+                    val errorBody = response.body?.string() ?: ""
+                    Timber.tag("Itch").e("[API] Failed to fetch uploads: HTTP ${response.code}")
+                    Timber.tag("Itch").e("[API] Response body: $errorBody")
                     return Result.failure(Exception("Failed to fetch uploads: HTTP ${response.code}"))
                 }
                 
@@ -131,9 +150,9 @@ class ItchDownloadManager @Inject constructor(
                 
                 for (i in 0 until uploadsArray.length()) {
                     val uploadJson = uploadsArray.getJSONObject(i)
-                    val pWindows = uploadJson.optString("p_windows", null)
-                    val pLinux = uploadJson.optString("p_linux", null)
-                    val pOsx = uploadJson.optString("p_osx", null)
+                    val pWindows = uploadJson.optString("p_windows", "")
+                    val pLinux = uploadJson.optString("p_linux", "")
+                    val pOsx = uploadJson.optString("p_osx", "")
                     
                     val platform = when {
                         !pWindows.isNullOrEmpty() -> "windows"
@@ -150,37 +169,31 @@ class ItchDownloadManager @Inject constructor(
                     ))
                 }
                 
+                Timber.tag("Itch").d("[API] Found ${uploads.size} uploads for game $gameId")
                 Result.success(uploads)
             }
         } catch (e: Exception) {
+            Timber.tag("Itch").e(e, "[API] Exception fetching uploads for game")
             Result.failure(e)
         }
     }
     
     /**
      * Gets download URL for a specific upload
+     * Generates the direct download URL using API key and download_key_id as parameters
      */
-    private suspend fun getDownloadUrl(accessToken: String, downloadKeyId: Int, uploadId: Long): Result<String> {
+    private suspend fun getDownloadUrl(apiKey: String, downloadKeyId: Int, uploadId: Long): Result<String> {
         return try {
-            val url = "${ItchConstants.API_BASE}/download-key/$downloadKeyId/download/$uploadId"
-            Timber.tag("Itch").d("[API] GET $url")
+            // Generate the direct download URL
+            // Format: https://api.itch.io/uploads/:id/download
+            // This URL includes auth credentials as query parameters
+            val downloadUrl = "${ItchConstants.ITCH_API_BASE_URL}/uploads/$uploadId/download" +
+                "?api_key=$apiKey&download_key_id=$downloadKeyId"
             
-            val request = okhttp3.Request.Builder()
-                .url(url)
-                .header("Authorization", "Bearer $accessToken")
-                .get()
-                .build()
-            
-            httpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    return Result.failure(Exception("Failed to get download URL: HTTP ${response.code}"))
-                }
-                
-                val json = org.json.JSONObject(response.body?.string() ?: "{}")
-                val downloadUrl = json.getString("url")
-                Result.success(downloadUrl)
-            }
+            Timber.tag("Itch").d("[API] Generated download URL for upload $uploadId")
+            Result.success(downloadUrl)
         } catch (e: Exception) {
+            Timber.tag("Itch").e(e, "[API] Exception generating download URL")
             Result.failure(e)
         }
     }

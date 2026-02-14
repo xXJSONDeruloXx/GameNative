@@ -83,11 +83,11 @@ data class ItchGame(
 }
 
 /**
- * Itch.io credentials — OAuth implicit flow returns a long-lived API key (access token).
- * Itch.io tokens do not expire and there is no refresh token.
+ * Itch.io credentials using static API keys from https://itch.io/user/settings/api-keys
+ * API keys do not expire and have full access to all scopes.
  */
 data class ItchCredentials(
-    val accessToken: String,
+    val apiKey: String,
     val userId: Int,
     val username: String,
     val displayName: String,

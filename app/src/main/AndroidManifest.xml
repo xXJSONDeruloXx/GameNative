@@ -79,9 +79,20 @@
             android:theme="@style/Theme.Pluvia" />
 
         <activity
-            android:name=".ui.screen.auth.ItchOAuthActivity"
-            android:exported="false"
-            android:theme="@style/Theme.Pluvia" />
+            android:name=".ui.ItchOAuthActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.Pluvia">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="gamenative"
+                    android:host="itch"
+                    android:pathPrefix="/callback" />
+            </intent-filter>
+        </activity>
 
         <!-- Launcher icon aliases to allow switching app icon at runtime -->
         <activity-alias

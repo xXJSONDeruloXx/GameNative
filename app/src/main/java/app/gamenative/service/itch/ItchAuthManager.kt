@@ -13,10 +13,10 @@ import java.io.File
 /**
  * Manages itch.io authentication and credential storage.
  *
- * Itch.io uses OAuth 2.0 Implicit Flow:
- * - The access token is returned directly in the URL fragment (#access_token=...)
- * - Tokens are long-lived API keys — they do not expire and there is no refresh token
- * - The token can be revoked by the user from their itch.io settings
+ * Uses OAuth authorization code flow with PKCE to obtain API keys with full scopes.
+ * This matches the authentication used by the itch.io desktop app.
+ * - API keys obtained via OAuth have full access to all scopes
+ * - API keys do not expire
  */
 object ItchAuthManager {
 
@@ -36,29 +36,29 @@ object ItchAuthManager {
     }
 
     /**
-     * Authenticate with itch.io using the access token from OAuth implicit flow.
-     * Validates the token by fetching the user's profile, then stores credentials.
+     * Authenticate with itch.io using a static API key.
+     * Validates the key by fetching the user's profile, then stores credentials.
      *
      * @param context Android context
-     * @param accessToken The OAuth access token from the URL fragment
+     * @param apiKey The API key from https://itch.io/user/settings/api-keys
      * @return Result containing ItchCredentials on success
      */
-    suspend fun authenticateWithToken(context: Context, accessToken: String): Result<ItchCredentials> {
+    suspend fun authenticateWithApiKey(context: Context, apiKey: String): Result<ItchCredentials> {
         return try {
-            Timber.tag("Itch").i("Starting itch.io authentication with access token...")
+            Timber.tag("Itch").i("Starting itch.io authentication with API key...")
 
-            if (accessToken.isBlank()) {
-                return Result.failure(Exception("Access token is empty"))
+            if (apiKey.isBlank()) {
+                return Result.failure(Exception("API key is empty"))
             }
 
-            // Validate the token by fetching the user's profile
-            Timber.tag("Itch").d("Validating token by fetching profile...")
-            val profileResult = fetchProfile(accessToken)
+            // Validate the key by fetching the user's profile
+            Timber.tag("Itch").d("Validating API key by fetching profile...")
+            val profileResult = fetchProfile(apiKey)
 
             if (profileResult.isFailure) {
                 val error = profileResult.exceptionOrNull()
-                Timber.tag("Itch").e(error, "Failed to validate token: ${error?.message}")
-                return Result.failure(error ?: Exception("Token validation failed"))
+                Timber.tag("Itch").e(error, "Failed to validate API key: ${error?.message}")
+                return Result.failure(error ?: Exception("API key validation failed"))
             }
 
             val credentials = profileResult.getOrNull()!!
@@ -75,15 +75,15 @@ object ItchAuthManager {
     }
 
     /**
-     * Fetch the user's profile from itch.io API to validate the token
+     * Fetch the user's profile from itch.io API to validate the API key
      * and extract user information.
      */
-    private suspend fun fetchProfile(accessToken: String): Result<ItchCredentials> {
+    private suspend fun fetchProfile(apiKey: String): Result<ItchCredentials> {
         return withContext(Dispatchers.IO) {
             try {
                 val request = Request.Builder()
                     .url("${ItchConstants.ITCH_API_BASE_URL}/profile")
-                    .header("Authorization", "Bearer $accessToken")
+                    .header("Authorization", apiKey)
                     .get()
                     .build()
 
@@ -110,7 +110,7 @@ object ItchAuthManager {
                     val userJson = json.getJSONObject("user")
 
                     val credentials = ItchCredentials(
-                        accessToken = accessToken,
+                        apiKey = apiKey,
                         userId = userJson.getInt("id"),
                         username = userJson.getString("username"),
                         displayName = userJson.optString("display_name", userJson.getString("username")),
@@ -128,8 +128,7 @@ object ItchAuthManager {
     }
 
     /**
-     * Get stored credentials. Itch.io tokens do not expire, so no refresh is needed.
-     * We validate the token by doing a lightweight credentials check.
+     * Get stored credentials. Itch.io API keys do not expire, so no refresh is needed.
      */
     suspend fun getStoredCredentials(context: Context): Result<ItchCredentials> {
         return try {
@@ -161,9 +160,87 @@ object ItchAuthManager {
         }
     }
 
+    /**
+     * Exchange OAuth authorization code for API key using PKCE.
+     * This matches the itch.io desktop app's OAuth flow.
+     *
+     * @param context Android context
+     * @param code Authorization code from OAuth redirect
+     * @param codeVerifier PKCE code verifier
+     * @param redirectUri OAuth redirect URI used in authorization
+     * @return Result containing ItchCredentials on success
+     */
+    suspend fun exchangeOAuthCode(
+        context: Context,
+        code: String,
+        codeVerifier: String,
+        redirectUri: String
+    ): Result<ItchCredentials> {
+        return withContext(Dispatchers.IO) {
+            try {
+                Timber.tag("Itch").d("Exchanging OAuth code for API key...")
+
+                val requestBody = okhttp3.FormBody.Builder()
+                    .add("grant_type", "authorization_code")
+                    .add("code", code)
+                    .add("code_verifier", codeVerifier)
+                    .add("redirect_uri", redirectUri)
+                    .add("client_id", ItchConstants.OAUTH_CLIENT_ID)
+                    .build()
+
+                val request = Request.Builder()
+                    .url("${ItchConstants.ITCH_API_BASE_URL}/oauth/token")
+                    .post(requestBody)
+                    .build()
+
+                httpClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        val errorBody = response.body?.string() ?: "Unknown error"
+                        Timber.tag("Itch").e("OAuth token exchange failed: HTTP ${response.code} - $errorBody")
+                        return@withContext Result.failure(
+                            Exception("Failed to exchange OAuth code: HTTP ${response.code}")
+                        )
+                    }
+
+                    val responseBody = response.body?.string()
+                        ?: return@withContext Result.failure(Exception("Empty response"))
+
+                    val json = JSONObject(responseBody)
+
+                    if (json.has("errors")) {
+                        val errors = json.getJSONArray("errors")
+                        val errorMsg = if (errors.length() > 0) errors.getString(0) else "Unknown error"
+                        return@withContext Result.failure(Exception("OAuth error: $errorMsg"))
+                    }
+
+                    // Extract API key from response
+                    val keyObj = json.getJSONObject("key")
+                    val apiKey = keyObj.getString("key")
+
+                    // Now validate the key and get user profile
+                    val profileResult = fetchProfile(apiKey)
+                    if (profileResult.isFailure) {
+                        return@withContext Result.failure(
+                            profileResult.exceptionOrNull() ?: Exception("Failed to fetch profile")
+                        )
+                    }
+
+                    val credentials = profileResult.getOrNull()!!
+                    saveCredentials(context, credentials)
+
+                    Timber.tag("Itch").i("OAuth authentication successful for user: ${credentials.username}")
+                    Result.success(credentials)
+                }
+            } catch (e: Exception) {
+                Timber.tag("Itch").e(e, "OAuth code exchange exception")
+                Result.failure(e)
+            }
+        }
+    }
+
     private fun saveCredentials(context: Context, credentials: ItchCredentials) {
         val json = JSONObject().apply {
-            put("access_token", credentials.accessToken)
+            put("api_key", credentials.apiKey)
             put("user_id", credentials.userId)
             put("username", credentials.username)
             put("display_name", credentials.displayName)
@@ -186,7 +263,7 @@ object ItchAuthManager {
             val json = JSONObject(file.readText())
 
             ItchCredentials(
-                accessToken = json.getString("access_token"),
+                apiKey = json.optString("api_key", json.optString("access_token", "")),
                 userId = json.getInt("user_id"),
                 username = json.getString("username"),
                 displayName = json.optString("display_name", json.getString("username")),
