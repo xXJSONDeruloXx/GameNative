@@ -132,7 +132,7 @@ class ItchDownloadManager @Inject constructor(
             
             val request = okhttp3.Request.Builder()
                 .url(url)
-                .header("Authorization", apiKey)
+                .header("Authorization", "Bearer $apiKey")
                 .get()
                 .build()
             
@@ -180,17 +180,17 @@ class ItchDownloadManager @Inject constructor(
     
     /**
      * Gets download URL for a specific upload
-     * Generates the direct download URL using API key and download_key_id as parameters
+     * The itch.io API endpoint returns a redirect or can directly serve the file
+     * We just need to construct the authenticated URL - the actual download happens later
      */
     private suspend fun getDownloadUrl(apiKey: String, downloadKeyId: Int, uploadId: Long): Result<String> {
         return try {
-            // Generate the direct download URL
-            // Format: https://api.itch.io/uploads/:id/download
-            // This URL includes auth credentials as query parameters
+            // The download URL with authentication parameters
+            // This URL will either redirect to a signed URL or directly serve the file
             val downloadUrl = "${ItchConstants.ITCH_API_BASE_URL}/uploads/$uploadId/download" +
-                "?api_key=$apiKey&download_key_id=$downloadKeyId"
+                "?download_key_id=$downloadKeyId&api_key=$apiKey"
             
-            Timber.tag("Itch").d("[API] Generated download URL for upload $uploadId")
+            Timber.tag("Itch").d("[API] Generated authenticated download URL for upload $uploadId")
             Result.success(downloadUrl)
         } catch (e: Exception) {
             Timber.tag("Itch").e(e, "[API] Exception generating download URL")

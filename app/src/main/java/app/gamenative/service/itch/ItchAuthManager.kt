@@ -83,7 +83,7 @@ object ItchAuthManager {
             try {
                 val request = Request.Builder()
                     .url("${ItchConstants.ITCH_API_BASE_URL}/profile")
-                    .header("Authorization", apiKey)
+                    .header("Authorization", "Bearer $apiKey")
                     .get()
                     .build()
 
@@ -180,6 +180,7 @@ object ItchAuthManager {
             try {
                 Timber.tag("Itch").d("Exchanging OAuth code for API key...")
 
+                // Build OAuth token exchange request (matches go-itchio implementation)
                 val requestBody = okhttp3.FormBody.Builder()
                     .add("grant_type", "authorization_code")
                     .add("code", code)
@@ -193,6 +194,7 @@ object ItchAuthManager {
                     .post(requestBody)
                     .build()
 
+                Timber.tag("Itch").d("Sending OAuth token exchange request...")
                 httpClient.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) {
                         val errorBody = response.body?.string() ?: "Unknown error"
@@ -213,10 +215,50 @@ object ItchAuthManager {
                         return@withContext Result.failure(Exception("OAuth error: $errorMsg"))
                     }
 
-                    // Extract API key from response
-                    val keyObj = json.getJSONObject("key")
-                    val apiKey = keyObj.getString("key")
+                    // OAuth responses can have different formats depending on flow/client
+                    // 1. key.key format (traditional API key response)
+                    // 2. accessToken format (OAuth2 token response)
+                    var apiKey: String? = null
+                    
+                    try {
+                        // Try traditional key format first
+                        val keyObj = json.optJSONObject("key")
+                        if (keyObj != null) {
+                            apiKey = keyObj.optString("key")
+                            if (!apiKey.isNullOrEmpty()) {
+                                Timber.tag("Itch").d("Found API key in 'key.key' format")
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Timber.tag("Itch").w(e, "Failed to extract key.key format")
+                    }
+                    
+                    // Try OAuth2 access token format
+                    if (apiKey.isNullOrEmpty()) {
+                        apiKey = json.optString("accessToken")
+                        if (!apiKey.isNullOrEmpty()) {
+                            Timber.tag("Itch").d("Found API key in 'accessToken' format")
+                        }
+                    }
+                    
+                    // Fallback: try direct 'key' field
+                    if (apiKey.isNullOrEmpty()) {
+                        apiKey = json.optString("key")
+                        if (!apiKey.isNullOrEmpty()) {
+                            Timber.tag("Itch").d("Found API key in direct 'key' format")
+                        }
+                    }
+                    
+                    if (apiKey.isNullOrEmpty()) {
+                        val keys = json.keys().asSequence().joinToString(", ")
+                        Timber.tag("Itch").e("OAuth response keys: $keys")
+                        Timber.tag("Itch").e("Full response: ${responseBody.take(200)}")
+                        return@withContext Result.failure(
+                            Exception("No API key found in OAuth response. Available fields: $keys")
+                        )
+                    }
 
+                    // Extract API key from response
                     // Now validate the key and get user profile
                     val profileResult = fetchProfile(apiKey)
                     if (profileResult.isFailure) {

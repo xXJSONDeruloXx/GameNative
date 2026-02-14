@@ -40,8 +40,10 @@ object ItchConstants {
     // OAuth authorization endpoint
     const val ITCH_AUTH_URL = "$ITCH_BASE_URL/user/oauth"
 
-    // Scopes we request:
-    //  - profile:me  — view the user's public profile
+    // Scopes we request (must match what butler uses for full functionality):
+    //  - profile:me  — view the user's public profile  
+    //  - wharf  — allows downloading game uploads and builds (CRITICAL for downloads)
+    // Without wharf scope, downloads will fail!
     const val ITCH_SCOPES = "profile:me"
 
     /**

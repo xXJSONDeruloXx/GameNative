@@ -47,7 +47,7 @@ object ItchApiClient {
 
                     val request = Request.Builder()
                         .url("${ItchConstants.ITCH_API_BASE_URL}/profile/owned-keys?page=$page")
-                        .header("Authorization", apiKey)
+                        .header("Authorization", "Bearer $apiKey")
                         .get()
                         .build()
 

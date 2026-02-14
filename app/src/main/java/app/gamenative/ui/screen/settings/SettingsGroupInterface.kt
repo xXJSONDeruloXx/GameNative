@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Map
@@ -576,11 +577,22 @@ fun SettingsGroupInterface(
     // Itch.io Integration
     SettingsGroup(title = { Text(text = stringResource(R.string.itch_integration_title)) }) {
         if (!ItchAuthManager.hasStoredCredentials(context)) {
+            // Manual API Key Entry (RECOMMENDED - has all scopes)
+            SettingsMenuLink(
+                icon = { androidx.compose.material3.Icon(Icons.Default.Key, contentDescription = null) },
+                colors = settingsTileColorsAlt(),
+                title = { Text(text = "Login with API Key") },
+                subtitle = { Text(text = "Recommended: Full download access") },
+                onClick = {
+                    showItchTokenDialog = true
+                }
+            )
+            // OAuth Flow (May have limited scopes)
             SettingsMenuLink(
                 icon = { androidx.compose.material3.Icon(Icons.Default.Login, contentDescription = null) },
                 colors = settingsTileColorsAlt(),
-                title = { Text(text = stringResource(R.string.itch_settings_login_title)) },
-                subtitle = { Text(text = "Sign in with itch.io OAuth") },
+                title = { Text(text = "Login with OAuth") },
+                subtitle = { Text(text = "Browser-based authorization") },
                 onClick = {
                     // Launch OAuth flow
                     val intent = Intent(context, app.gamenative.ui.ItchOAuthActivity::class.java)
