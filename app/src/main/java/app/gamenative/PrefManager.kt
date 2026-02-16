@@ -471,6 +471,14 @@ object PrefManager {
             setPref(DISABLE_MOUSE_INPUT, value)
         }
 
+    // Controller Rumble Preference (controller, phone, both)
+    private val CONTROLLER_RUMBLE_MODE = stringPreferencesKey("controller_rumble_mode")
+    var controllerRumbleMode: String
+        get() = getPref(CONTROLLER_RUMBLE_MODE, "controller")
+        set(value) {
+            setPref(CONTROLLER_RUMBLE_MODE, value)
+        }
+
     private val BOX_86_VERSION = stringPreferencesKey("box86_version")
     var box86Version: String
         get() = getPref(BOX_86_VERSION, DefaultVersion.BOX86)

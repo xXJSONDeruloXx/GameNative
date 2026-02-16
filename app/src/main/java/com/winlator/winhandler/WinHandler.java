@@ -24,6 +24,8 @@ import com.winlator.xserver.Pointer;
 import com.winlator.xserver.XKeycode;
 import com.winlator.xserver.XServer;
 
+import app.gamenative.PrefManager;
+
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -621,30 +623,49 @@ public class WinHandler {
             return;
         }
         isRumbling = true; // We know we are going to try to rumble.
-        // --- Step 2: Attempt to vibrate the physical controller first ---
-        if (currentController != null) {
+        
+        // Get user preference for rumble mode
+        String rumbleMode = PrefManager.INSTANCE.getControllerRumbleMode();
+        boolean useController = rumbleMode.equals("controller") || rumbleMode.equals("both");
+        boolean usePhone = rumbleMode.equals("phone") || rumbleMode.equals("both");
+        
+        // --- Step 2: Attempt to vibrate the physical controller ---
+        boolean controllerVibrated = false;
+        if (useController && currentController != null) {
             InputDevice device = InputDevice.getDevice(currentController.getDeviceId());
             if (device != null) {
                 Vibrator controllerVibrator = device.getVibrator();
                 if (controllerVibrator != null && controllerVibrator.hasVibrator()) {
-                    // Vibrate the physical controller and then we are done.
-                    controllerVibrator.vibrate(VibrationEffect.createOneShot(50, amplitude));
-                    return;
+                    // Use continuous waveform vibration for sustained rumble effect
+                    // This creates smooth continuous vibration that repeats until stopped
+                    long[] timings = {0, 1000}; // 0ms delay, then 1000ms vibration
+                    int[] amplitudes = {0, amplitude}; // Start at 0, then target amplitude
+                    controllerVibrator.vibrate(VibrationEffect.createWaveform(timings, amplitudes, 1)); // Repeat from index 1
+                    controllerVibrated = true;
+                    if (!usePhone) return; // If not using phone too, we're done
                 }
             }
         }
-        // --- Step 3: Fallback to phone vibration if physical controller fails or doesn't exist ---
-        Log.w("WinHandler", "No physical controller vibrator found, falling back to device vibration.");
-        Vibrator phoneVibrator = (Vibrator) activity.getSystemService(Context.VIBRATOR_SERVICE);
-        if (phoneVibrator != null && phoneVibrator.hasVibrator()) {
-            // --- HAPTIC CURVE LOGIC to make phone vibration feel better ---
-            float normalizedAmplitude = (float) amplitude / 255.0f;
-            float curvedAmplitude = (float) Math.pow(normalizedAmplitude, 0.6f);
-            int finalPhoneAmplitude = (int) (curvedAmplitude * 255);
-            if (finalPhoneAmplitude > 255) finalPhoneAmplitude = 255;
-            if (finalPhoneAmplitude <= 1) finalPhoneAmplitude = 0;
-            if (finalPhoneAmplitude > 0) {
-                phoneVibrator.vibrate(VibrationEffect.createOneShot(50, finalPhoneAmplitude));
+        
+        // --- Step 3: Vibrate phone (if preferred or as fallback) ---
+        if (usePhone || !controllerVibrated) {
+            if (!controllerVibrated) {
+                Log.w("WinHandler", "No physical controller vibrator found, falling back to device vibration.");
+            }
+            Vibrator phoneVibrator = (Vibrator) activity.getSystemService(Context.VIBRATOR_SERVICE);
+            if (phoneVibrator != null && phoneVibrator.hasVibrator()) {
+                // --- HAPTIC CURVE LOGIC to make phone vibration feel better ---
+                float normalizedAmplitude = (float) amplitude / 255.0f;
+                float curvedAmplitude = (float) Math.pow(normalizedAmplitude, 0.6f);
+                int finalPhoneAmplitude = (int) (curvedAmplitude * 255);
+                if (finalPhoneAmplitude > 255) finalPhoneAmplitude = 255;
+                if (finalPhoneAmplitude <= 1) finalPhoneAmplitude = 0;
+                if (finalPhoneAmplitude > 0) {
+                    // Use continuous waveform for phone vibration too
+                    long[] timings = {0, 1000};
+                    int[] amplitudes = {0, finalPhoneAmplitude};
+                    phoneVibrator.vibrate(VibrationEffect.createWaveform(timings, amplitudes, 1));
+                }
             }
         }
     }
