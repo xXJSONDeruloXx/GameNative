@@ -180,7 +180,7 @@ Amazon PR branch shows mature parity patterns across source filter chips, instal
 
 #### I-008: OAuth flow is internally inconsistent (three variants)
 - Severity: P1
-- Status: Open
+- Status: Closed (2026-02-22)
 - Finding: codebase currently mixes conflicting assumptions:
 - `ItchConstants` says auth-code/PKCE in comments but builds `response_type=token` and `scope=profile:me` URL.
 - `app.gamenative.ui.ItchOAuthActivity` uses OOB + `response_type=code` + PKCE and manual code entry.
@@ -192,8 +192,13 @@ Amazon PR branch shows mature parity patterns across source filter chips, instal
 - Both `response_type=token` and `response_type=code` are accepted at `/user/oauth` entrypoint.
 - Refresh-token behavior is currently ambiguous in direct probes (server validated authorization-code fields even when `grant_type=refresh_token` was sent).
 - Impact: Fragile auth behavior, maintenance confusion, unclear security model.
-- Evidence: [L-11] [L-23] [L-24] [L-25] [L-18] [E-18] [E-19] [E-20] [E-21] [E-22] [E-23] [E-24]
-- Proposal: Pick one canonical flow and delete/deprecate the others; align constants, manifest, activity, and service comments.
+- Evidence: [L-11] [L-23] [L-24] [L-25] [L-18] [E-18] [E-19] [E-20] [E-21] [E-22] [E-23] [E-24] [L-39] [L-40] [L-41] [L-42] [L-43]
+- Resolution (2026-02-22):
+- Canonical flow set to auth-code + PKCE + app callback (`gamenative://itch/callback`).
+- `ItchConstants` aligned to callback redirect and scopes `profile:me profile:owned`.
+- `ui/ItchOAuthActivity` rewritten for callback handling + state validation + code exchange.
+- Duplicate implicit activity (`ui/screen/auth/ItchOAuthActivity`) removed.
+- Settings OAuth entry now launches one activity-for-result path and starts itch service sync on success.
 
 #### I-009: Itch imagery parity gap in game cards
 - Severity: P1
@@ -246,7 +251,7 @@ Amazon PR branch shows mature parity patterns across source filter chips, instal
 - [x] Container source extraction recognizes `ITCH_`.
 - [x] Card install/status behavior has explicit itch branch.
 - [x] Download state plumbing is coherent across base + itch screens.
-- [ ] OAuth/auth strategy is unified and documented in code.
+- [x] OAuth/auth strategy is unified and documented in code.
 - [x] Card media handling is store-specific for itch.
 - [ ] Basic itch integration tests exist.
 
@@ -263,7 +268,7 @@ Amazon PR branch shows mature parity patterns across source filter chips, instal
 | Container source extraction | Yes | Yes | Yes | Yes | Yes | `ITCH_` mapping is now explicit. [L-35] [A-04] |
 | App screen download info plumbing | Yes | Yes | Yes | Yes | Yes | Base app screen now requests itch download info. [L-37] [L-10] [A-06] |
 | Card install/status logic | Yes | Yes | Yes | Partial | Yes | Itch now has explicit install/status branches. [L-36] |
-| Auth flow coherence | Stable | Stable | Stable | In progress | Inconsistent | Three conflicting itch auth paths. [L-11] [L-23] [L-24] [L-25] |
+| Auth flow coherence | Stable | Stable | Stable | In progress | Stable | Canonical itch OAuth path is now code+PKCE+callback with one activity path. [L-39] [L-40] [L-41] |
 | Tests in branch | Existing | Existing | Existing | Added (Amazon manifest test) | None seen | Itch adds no obvious tests. [A-09] [L-01] |
 
 ## 9) itch.io Ecosystem Analysis
@@ -278,7 +283,7 @@ Amazon PR branch shows mature parity patterns across source filter chips, instal
 ### 9.2 How Current Itch Branch Differs
 - Current branch uses direct REST + custom downloader/extractor, not butlerd semantics.
 - Download path is simplified and assumes zip extraction for selected upload.
-- Auth path is unsettled compared to upstream's coherent callback-based flow model.
+- Auth path is now consolidated for Phase 1 (single code+PKCE+callback activity), but still diverges from first-party tooling details.
 - Upload compatibility and installer-type planning are not yet represented.
 
 ### 9.3 Comparison With Other Store Tooling
@@ -309,22 +314,22 @@ Exit criteria:
 **Entry criteria:** Phase 0 complete, build passing.
 
 **Task list:**
-- [ ] Audit all auth touchpoints (run: `grep -rn 'OAuth\|oauth\|apiKey\|api_key\|PKCE\|code_verifier\|response_type' app/src/main/java/app/gamenative/service/itch/ --include='*.kt'`)
-- [ ] Select one canonical auth flow (recommended: standards-based auth-code + PKCE + callback).
-- [ ] Remove or deprecate duplicate/unused itch auth activity.
-- [ ] Align `ItchConstants`, manifest redirect URI, and activity handling.
-- [ ] Update service/auth comments to match reality.
-- [ ] Run `grep -rn 'ItchOAuthActivity' app/src/main/ --include='*.kt' --include='*.xml'` to confirm only one activity remains.
+- [x] Audit all auth touchpoints (run: `rg -n 'OAuth|oauth|apiKey|api_key|PKCE|code_verifier|response_type' app/src/main/java/app/gamenative/service/itch/ -g '*.kt'`).
+- [x] Select one canonical auth flow (recommended: standards-based auth-code + PKCE + callback).
+- [x] Remove or deprecate duplicate/unused itch auth activity.
+- [x] Align `ItchConstants`, manifest redirect URI, and activity handling.
+- [x] Update service/auth comments to match reality.
+- [x] Run `rg -n 'ItchOAuthActivity' app/src/main -g '*.kt' -g '*.xml'` to confirm only one activity remains.
 
 **Known code locations to touch:**
 | File | What to change |
 |---|---|
-| `ItchConstants.kt:37-58` | Fix `ITCH_SCOPES` (currently `profile:me`, needs `profile:owned`), clarify `response_type` |
-| `ItchConstants.kt:23-24` | Replace placeholder `OAUTH_CLIENT_ID` (TODO in code) |
-| `ItchAuthManager.kt:164-281` | `exchangeOAuthCode()` — validate or remove PKCE flow |
-| `ui/ItchOAuthActivity.kt` | Primary OOB + code + PKCE activity — keep or replace |
-| `ui/screen/auth/ItchOAuthActivity.kt` | Implicit token extraction — likely delete |
-| `AndroidManifest.xml:81-82` | `gamenative://itch/callback` deep link — wire or remove |
+| `ItchConstants.kt` | Set callback redirect + scope + code+PKCE auth URL builder |
+| `ui/ItchOAuthActivity.kt` | Canonical callback handler, state validation, PKCE exchange |
+| `ui/screen/auth/ItchOAuthActivity.kt` | Removed duplicate implicit token extraction path |
+| `SettingsGroupInterface.kt` | Launch canonical OAuth activity and trigger sync post-auth |
+| `ItchAuthManager.kt`, `ItchService.kt` | Align auth comments to actual flow |
+| `AndroidManifest.xml:82` | Keep deep link callback registration for canonical activity |
 
 **Verification script:**
 ```bash
@@ -332,7 +337,7 @@ Exit criteria:
 ./gradlew :app:compileDebugKotlin --no-daemon 2>&1 | tail -5
 
 # Verify single auth activity
-grep -rn 'ItchOAuthActivity' app/src/main/ --include='*.kt' --include='*.xml' | wc -l
+rg -n 'ItchOAuthActivity' app/src/main -g '*.kt' -g '*.xml' | wc -l
 # Expected: references from exactly 1 activity + manifest entry
 
 # Verify scope is correct
@@ -341,9 +346,9 @@ grep -n 'ITCH_SCOPES' app/src/main/java/app/gamenative/service/itch/ItchConstant
 ```
 
 **Exit criteria:**
-- [ ] One flow in code, one flow in UI, one flow in docs/comments.
-- [ ] Build passes.
-- [ ] Manual QA confirms login/logout/restart/session restore behavior.
+- [x] One flow in code, one flow in UI, one flow in docs/comments.
+- [x] Build passes.
+- [x] Manual QA confirms login/logout/restart/session restore behavior.
 - [ ] All self-assessment gates pass (Section 16).
 
 ### Phase 2: UI/UX Parity Hardening
@@ -490,7 +495,7 @@ ls -la app/build/reports/tests/testDebugUnitTest/
 | I-005 | P1 | Closed | Unassigned | Container source extraction missing `ITCH_` mapping |
 | I-006 | P1 | Closed | Unassigned | Card install/status logic does not model itch explicitly |
 | I-007 | P1 | Closed | Unassigned | Base app-screen download info contradicts itch download support |
-| I-008 | P1 | Open | Unassigned | Auth flow inconsistency across constants/activities/manifest |
+| I-008 | P1 | Closed | Unassigned | Auth flow inconsistency across constants/activities/manifest |
 | I-009 | P1 | Closed | Unassigned | Itch card media path unsuitable for pane variants |
 | I-010 | P1 | Open | Unassigned | Contradictory assumptions about itch install/container model |
 | I-011 | P2 | Open | Unassigned | Download pipeline is zip-only and lacks robust planning |
@@ -522,6 +527,21 @@ ls -la app/build/reports/tests/testDebugUnitTest/
 - Outcome: compile now passes and Phase 0 checklist is mostly complete.
 - Evidence refs: [L-32] [L-33] [L-34] [L-35] [L-36] [L-37] [L-38]
 - Next action: manual QA for source toggles/counts + itch launch path behavior, then move to auth consolidation (Phase 1).
+
+### 2026-02-22: Phase 1 auth QA (adb/logcat)
+- Symptom: Initial OAuth browser launch showed `invalid redirect URI`.
+- Root cause: OAuth app redirect URI registration did not include `gamenative://itch/callback`.
+- Steps tried:
+- Added callback URI in itch OAuth app settings.
+- Re-ran OAuth login flow on device with adb/logcat capture.
+- Validated logout path and post-relaunch session restore.
+- Outcome:
+- OAuth callback/exchange succeeds and credentials are stored.
+- Itch service sync completes and owned library entries appear.
+- Logout clears credentials and itch library entries.
+- Relaunch after re-login preserves session and library visibility.
+- Evidence refs: [L-44]
+- Next action: address separate download-scope failure (`game:view:uploads`) in later phase.
 
 ### Troubleshooting Entry Template
 ```md
@@ -581,6 +601,40 @@ ls -la app/build/reports/tests/testDebugUnitTest/
 - N/A (research/documentation step only).
 - Next handoff:
 - Implement canonical auth-code + PKCE + callback flow in code, keep API-key login as fallback.
+
+### Session 2026-02-22 (Codex, Phase 1 auth implementation)
+- Scope: Implement D-001 and close I-008 auth inconsistency.
+- Commands run:
+- `rg -n 'ItchOAuthActivity' app/src/main -g '*.kt' -g '*.xml'`
+- `./gradlew :app:compileDebugKotlin --no-daemon`
+- Findings added:
+- Auth flow coherence is now single-path in code and settings wiring.
+- Changes made:
+- Updated `ItchConstants` to callback redirect + `profile:me profile:owned` scopes and PKCE URL builder.
+- Replaced `ui/ItchOAuthActivity` with callback-based PKCE exchange flow (state validation + token exchange).
+- Removed `ui/screen/auth/ItchOAuthActivity` duplicate implicit-flow activity.
+- Updated settings OAuth launch flow to use activity result and trigger `ItchService` sync after successful auth.
+- Updated stale auth comments in `ItchAuthManager` and `ItchService`.
+- Validation:
+- `:app:compileDebugKotlin` passes after auth consolidation. [L-43]
+- Next handoff:
+- Run adb/manual QA for OAuth login/logout/session behavior.
+
+### Session 2026-02-22 (Codex, Phase 1 auth QA via adb/logcat)
+- Scope: Validate end-to-end auth behavior after consolidation.
+- Commands run:
+- `./gradlew :app:installDebug --no-daemon`
+- `adb devices -l`
+- `adb -s d234a848 logcat -c`
+- `adb -s d234a848 logcat -d -v time | rg -n 'Itch|OAuth|SettingsItch|owned-keys|logout'`
+- Findings added:
+- OAuth path is stable after redirect registration update; callback and code exchange complete.
+- Logout path clears state; relaunch retains session when logged in.
+- Separate out-of-scope download permission failure observed (`game:view:uploads`).
+- Validation:
+- Device QA passed for login/logout/restart/session-restore scope. [L-44]
+- Next handoff:
+- Keep download-scope issue for follow-up implementation.
 
 ## 14) Decision Register
 
@@ -1141,8 +1195,8 @@ override fun onUninstallClick(context: Context, libraryItem: LibraryItem) {
 | `profile:games` | Read games user has created (developer-only, not needed) |
 | `profile:collections` | Read user collections (not needed for v1) |
 
-**Current bug:** Only `profile:me` is configured ([L-11]). This means OAuth tokens cannot fetch owned keys; only API keys (which have all scopes) currently work.
-This mapping is explicitly documented by itch OAuth docs (`profile:owned` => `/profile/owned-keys`). [E-19]
+**Resolved (2026-02-22):** OAuth scope config now includes `profile:me profile:owned` for library sync endpoints. [L-39]
+Scope mapping is explicitly documented by itch OAuth docs (`profile:owned` => `/profile/owned-keys`). [E-19]
 
 ## 20) Architecture Quick Reference
 
@@ -1250,6 +1304,12 @@ Current schema version: **13** (matches Amazon PR).
 - [L-36] `app/src/main/java/app/gamenative/ui/screen/library/components/LibraryAppItem.kt:219`, `app/src/main/java/app/gamenative/ui/screen/library/components/LibraryAppItem.kt:351`, `app/src/main/java/app/gamenative/ui/screen/library/components/LibraryAppItem.kt:552`
 - [L-37] `app/src/main/java/app/gamenative/ui/screen/library/appscreen/BaseAppScreen.kt:638`
 - [L-38] `app/src/main/java/app/gamenative/utils/GameFeedbackUtils.kt:82`
+- [L-39] `app/src/main/java/app/gamenative/service/itch/ItchConstants.kt:27`, `app/src/main/java/app/gamenative/service/itch/ItchConstants.kt:42`, `app/src/main/java/app/gamenative/service/itch/ItchConstants.kt:54`
+- [L-40] `app/src/main/java/app/gamenative/ui/ItchOAuthActivity.kt:49`, `app/src/main/java/app/gamenative/ui/ItchOAuthActivity.kt:107`, `app/src/main/java/app/gamenative/ui/ItchOAuthActivity.kt:273`
+- [L-41] `app/src/main/java/app/gamenative/ui/screen/settings/SettingsGroupInterface.kt:411`, `app/src/main/java/app/gamenative/ui/screen/settings/SettingsGroupInterface.kt:625`
+- [L-42] `app/src/main/java/app/gamenative/service/itch/ItchAuthManager.kt:16`, `app/src/main/java/app/gamenative/service/itch/ItchService.kt:23`
+- [L-43] Local command output: `./gradlew :app:compileDebugKotlin --no-daemon` (2026-02-22, build success after Phase 1 auth consolidation).
+- [L-44] Local adb QA evidence (2026-02-22): logcat captures showing OAuth callback + exchange success, credentials saved, owned-library sync (`Fetched 3 owned games`), successful logout/library clear, and persistent session after relaunch. Command family: `adb -s d234a848 logcat -d -v time | rg -n 'Itch|OAuth|SettingsItch|owned-keys|logout'`.
 
 ### Amazon Branch Pattern Evidence
 - [A-01] `origin/feat/amazon-games-support:app/src/main/java/app/gamenative/ui/screen/library/components/LibraryBottomSheet.kt:43`

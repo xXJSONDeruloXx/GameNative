@@ -86,6 +86,7 @@ import kotlinx.coroutines.CoroutineScope
 import timber.log.Timber
 import app.gamenative.PluviaApp
 import app.gamenative.events.AndroidEvent
+import app.gamenative.ui.ItchOAuthActivity
 import app.gamenative.ui.screen.auth.EpicOAuthActivity
 import app.gamenative.ui.screen.auth.GOGOAuthActivity
 
@@ -407,7 +408,40 @@ fun SettingsGroupInterface(
         }
     }
 
-    // Removed Itch.io OAuth launcher - now using manual token entry with external browser
+    // Itch OAuth (external browser + deep-link callback + PKCE)
+    val itchOAuthLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != android.app.Activity.RESULT_OK) {
+            val message = result.data?.getStringExtra(ItchOAuthActivity.EXTRA_ERROR)
+                ?: context.getString(R.string.itch_login_cancel)
+            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+            return@rememberLauncherForActivityResult
+        }
+
+        lifecycleScope.launch {
+            try {
+                itchLoginLoading = true
+                Timber.d("[SettingsItch]: OAuth flow successful, starting service sync")
+                ItchService.start(context)
+                ItchService.triggerLibrarySync(context)
+                android.widget.Toast.makeText(
+                    context,
+                    context.getString(R.string.itch_login_success_title),
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            } catch (e: Exception) {
+                Timber.e(e, "[SettingsItch]: Failed to start post-auth sync")
+                android.widget.Toast.makeText(
+                    context,
+                    e.message ?: "Failed to start itch sync",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            } finally {
+                itchLoginLoading = false
+            }
+        }
+    }
 
     // Listen for GOG OAuth callback (e.g. from event)
     DisposableEffect(Unit) {
@@ -592,11 +626,10 @@ fun SettingsGroupInterface(
                 icon = { androidx.compose.material3.Icon(Icons.Default.Login, contentDescription = null) },
                 colors = settingsTileColorsAlt(),
                 title = { Text(text = "Login with OAuth") },
-                subtitle = { Text(text = "Browser-based authorization") },
+                subtitle = { Text(text = "Browser callback (PKCE)") },
                 onClick = {
-                    // Launch OAuth flow
-                    val intent = Intent(context, app.gamenative.ui.ItchOAuthActivity::class.java)
-                    context.startActivity(intent)
+                    val intent = Intent(context, ItchOAuthActivity::class.java)
+                    itchOAuthLauncher.launch(intent)
                 }
             )
         }
@@ -1248,5 +1281,4 @@ private fun Preview_SettingsScreen() {
         )
     }
 }
-
 

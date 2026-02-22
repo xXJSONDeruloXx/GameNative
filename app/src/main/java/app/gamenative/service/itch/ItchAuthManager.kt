@@ -13,10 +13,9 @@ import java.io.File
 /**
  * Manages itch.io authentication and credential storage.
  *
- * Uses OAuth authorization code flow with PKCE to obtain API keys with full scopes.
- * This matches the authentication used by the itch.io desktop app.
- * - API keys obtained via OAuth have full access to all scopes
- * - API keys do not expire
+ * Supports:
+ * - Static user-generated API key login.
+ * - OAuth authorization-code + PKCE exchange, yielding scoped API credentials.
  */
 object ItchAuthManager {
 

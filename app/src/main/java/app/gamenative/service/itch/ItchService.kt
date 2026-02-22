@@ -20,7 +20,7 @@ import timber.log.Timber
  *
  * Architecture follows the same pattern as GOGService / EpicService:
  * - ItchApiClient: API layer for interacting with itch.io's APIs
- * - ItchAuthManager: Authentication and credential management (OAuth Implicit Flow)
+ * - ItchAuthManager: Authentication and credential management (API key + OAuth code/PKCE exchange)
  * - ItchManager: Game library and database operations
  * - ItchConstants: Shared constants for itch.io integration
  */
@@ -91,7 +91,7 @@ class ItchService : Service() {
         // ==========================================================================
 
         /**
-         * Authenticate using access token from OAuth implicit flow.
+         * Authenticate using a user-provided itch.io API key.
          */
         suspend fun authenticateWithApiKey(context: Context, apiKey: String): Result<ItchCredentials> {
             return ItchAuthManager.authenticateWithApiKey(context, apiKey)
