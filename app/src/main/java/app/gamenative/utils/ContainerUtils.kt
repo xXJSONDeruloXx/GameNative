@@ -8,6 +8,7 @@ import app.gamenative.service.SteamService
 import app.gamenative.service.epic.EpicService
 import app.gamenative.service.gog.GOGConstants
 import app.gamenative.service.gog.GOGService
+import app.gamenative.service.itch.ItchService
 import app.gamenative.utils.BestConfigService
 import app.gamenative.utils.CustomGameScanner
 import com.winlator.container.Container
@@ -575,8 +576,19 @@ object ContainerUtils {
             }
 
             GameSource.ITCH -> {
-                // Itch.io games don't have local installation, use default drives
-                defaultDrives
+                // For itch.io games, map install path if available.
+                val gameId = extractGameIdFromContainerId(appId)
+                val game = ItchService.getItchGameOf(gameId.toString())
+                if (game?.isInstalled == true && game.installPath.isNotEmpty()) {
+                    val drive: Char = if (defaultDrives.contains("A:")) {
+                        Container.getNextAvailableDriveLetter(defaultDrives)
+                    } else {
+                        'A'
+                    }
+                    "$defaultDrives$drive:${game.installPath}"
+                } else {
+                    defaultDrives
+                }
             }
 
             GameSource.CUSTOM_GAME -> {
@@ -890,13 +902,14 @@ object ContainerUtils {
             }
 
             GameSource.ITCH -> {
-                null // Itch.io games don't have local installation tracking
+                val gameId = extractGameIdFromContainerId(appId)
+                val game = ItchService.getItchGameOf(gameId.toString())
+                if (game?.isInstalled == true && game.installPath.isNotEmpty()) game.installPath else null
             }
 
             GameSource.CUSTOM_GAME -> {
                 CustomGameScanner.getFolderPathFromAppId(appId)
             }
-            else -> null
         }
 
         if (gameFolderPath != null) {
@@ -1026,8 +1039,13 @@ object ContainerUtils {
             containerId.startsWith("CUSTOM_GAME_") -> GameSource.CUSTOM_GAME
             containerId.startsWith("GOG_") -> GameSource.GOG
             containerId.startsWith("EPIC_") -> GameSource.EPIC
+            containerId.startsWith("ITCH_") -> GameSource.ITCH
+            containerId.toIntOrNull() != null -> GameSource.STEAM // Legacy Steam container IDs
             // Add other platforms here..
-            else -> GameSource.STEAM // default fallback
+            else -> {
+                Timber.w("Unknown container ID prefix for '%s', defaulting to Steam", containerId)
+                GameSource.STEAM
+            }
         }
     }
 

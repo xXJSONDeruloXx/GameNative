@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.PhotoAlbum
 import androidx.compose.material.icons.filled.PhotoSizeSelectActual
 import androidx.compose.material3.Icon
@@ -47,6 +48,7 @@ fun LibraryBottomSheet(
     showCustomGames: Boolean,
     showGOG: Boolean,
     showEpic: Boolean,
+    showItch: Boolean,
     onSourceToggle: (app.gamenative.data.GameSource) -> Unit,
 ) {
     Column(
@@ -133,6 +135,18 @@ fun LibraryBottomSheet(
                     )
                 },
             )
+            FlowFilterChip(
+                onClick = { onSourceToggle(GameSource.ITCH) },
+                label = { Text(text = "itch.io") },
+                selected = showItch,
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Filled.Language,
+                        contentDescription = "itch.io",
+                        modifier = Modifier.size(24.dp),
+                    )
+                },
+            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -189,6 +203,7 @@ private fun Preview_LibraryBottomSheet() {
                 showCustomGames = true,
                 showGOG = true,
                 showEpic = true,
+                showItch = true,
                 onSourceToggle = { },
             )
         }

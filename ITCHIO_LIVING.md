@@ -14,27 +14,73 @@ This file is the long-term working memory for itch.io integration in GameNative.
 
 ## 2) Operating Protocol (Progressive Updates)
 Use this protocol every session so context compaction does not lose state.
+All commands are designed to be copy-pasted verbatim.
 
-### Session Start Checklist
-- [x] Confirm working branch and baseline SHAs
-- [x] Capture build status
-- [x] Record new diffs vs `origin/master`
-- [x] Add findings to issue tracker section before continuing deep work
+### Session Start Checklist (Deterministic)
+Run these commands **in order** at the start of every session:
 
-### Session End Checklist
-- [ ] Update status dashboard counts
+```bash
+# 1. Confirm branch, HEAD, and remote tracking
+cd /home/kurt/GameNative
+git branch --show-current           # expect: feat/itchio
+git rev-parse --short HEAD          # record in session log
+git log --oneline -1                # capture commit message
+
+# 2. Check for upstream changes
+git fetch origin
+git log --oneline HEAD..origin/master | head -5   # any new master commits?
+
+# 3. Capture build health (MUST pass before any code changes)
+./gradlew :app:compileDebugKotlin --no-daemon 2>&1 | tail -20
+
+# 4. Quick diff summary since last session
+git diff --stat HEAD~1              # what changed in last commit?
+git status --short                  # any uncommitted work?
+
+# 5. Scan for unresolved exhaustive-when issues (regression guard)
+grep -rn 'GameSource\.' app/src/main/java --include='*.kt' \
+  | grep -i 'when' | grep -v 'ITCH' | head -20
+```
+
+After these commands, update the Status Dashboard section with current values.
+
+### Session End Checklist (Deterministic)
+Run these **before** closing the session:
+
+```bash
+# 1. Build verification
+./gradlew :app:compileDebugKotlin --no-daemon 2>&1 | tail -5
+
+# 2. Run lint check (if available)
+./gradlew :app:lintDebug --no-daemon 2>&1 | tail -10
+
+# 3. Capture diff for session log
+git diff --stat
+git diff --name-only
+
+# 4. Stage, commit, and push (see Section 17 for commit message format)
+# Only if self-assessment gates pass (see Section 16)
+```
+
+Then update in this document:
+- [ ] Status dashboard counts
 - [ ] Move completed items across phase checklists
 - [ ] Append troubleshooting notes and outcomes
 - [ ] Add new citations to the citation index
+- [ ] Append session log entry
 
 ### Short Session Log Template
 ```md
 ### Session YYYY-MM-DD (owner)
+- Branch/HEAD: feat/itchio / <short-sha>
+- Build at start: PASSING | FAILING
 - Scope:
 - Commands run:
 - Findings added:
 - Changes made:
-- Validation:
+- Validation (build): PASSING | FAILING
+- Self-assessment gate: PASSED | BLOCKED (reason)
+- Commit SHA:
 - Next handoff:
 ```
 
@@ -49,19 +95,18 @@ Amazon PR branch shows mature parity patterns across source filter chips, instal
 ## 4) Status Dashboard
 
 ### Build Health
-- Status: FAILING
-- Blocking compile errors:
-- `PluviaMain.kt:1139` non-exhaustive `when` for `GameSource` (missing `ITCH`). [L-02] [L-30]
-- `GameFeedbackUtils.kt:66` non-exhaustive `when` for `GameSource` (missing `ITCH`). [L-03] [L-30]
+- Status: PASSING
+- Current compile check:
+- `./gradlew :app:compileDebugKotlin --no-daemon` passes. [L-32]
 
 ### Integration Surface Health
 - Database model + DAO + module wiring: present. [L-14] [L-15]
 - Service lifecycle + background sync: present. [L-17] [L-19]
 - Library ingest/filter state in VM: mostly present. [L-13] [L-21]
-- UI source filter parity: incomplete (itch toggle not exposed in bottom sheet). [L-04] [L-05] [L-06]
-- Launch/container source parity: incomplete (`extractGameSourceFromContainerId` missing ITCH prefix). [L-07]
-- App card status parity: incomplete (falls into generic `else`). [L-08]
-- App screen download plumbing: inconsistent (`ItchAppScreen` supports downloads, base screen suppresses download info). [L-09] [L-10]
+- UI source filter parity: present (itch toggle exposed in bottom sheet and wired to state). [L-33] [L-34]
+- Launch/container source parity: improved (`extractGameSourceFromContainerId` handles `ITCH_`; install-path mapping wired for itch containers). [L-35]
+- App card status parity: explicit itch install/status handling is present. [L-36]
+- App screen download plumbing: coherent (`BaseAppScreen` now queries itch download state). [L-37] [L-10]
 
 ## 5) What Is Good
 - `GameSource.ITCH` exists and library items can resolve itch cover URLs. [L-20]
@@ -78,61 +123,60 @@ Amazon PR branch shows mature parity patterns across source filter chips, instal
 
 #### I-001: Compile break in prelaunch flow
 - Severity: P0
-- Status: Open
-- Finding: `preLaunchApp` launch-executable switch is non-exhaustive; `ITCH` case is absent.
-- Impact: App does not compile.
-- Evidence: [L-02] [L-30]
-- Proposal: Add `GameSource.ITCH` case with explicit behavior (likely no-container or dedicated itch launch resolver), not `else`.
+- Status: Closed (2026-02-22)
+- Finding: `preLaunchApp` now includes explicit `GameSource.ITCH` handling and launch path.
+- Impact: Compile blocker removed.
+- Evidence: [L-33] [L-32]
+- Implementation note: Added explicit ITCH launch-executable branch and non-Steam launch path.
 
 #### I-002: Compile break in feedback flow
 - Severity: P0
-- Status: Open
-- Finding: `GameFeedbackUtils` game-name lookup switch is non-exhaustive; `ITCH` case is absent.
-- Impact: App does not compile.
-- Evidence: [L-03] [L-30]
-- Proposal: Add `GameSource.ITCH` branch using `ItchService.getItchGameOf(gameId)` title lookup.
+- Status: Closed (2026-02-22)
+- Finding: `GameFeedbackUtils` now includes explicit `GameSource.ITCH` title lookup.
+- Impact: Compile blocker removed.
+- Evidence: [L-38] [L-32]
 
 ### P1 (Parity Breaks / Behavioral Bugs)
 
 #### I-003: Source filtering UI omits itch
 - Severity: P1
-- Status: Open
+- Status: Closed (2026-02-22)
 - Finding: Bottom sheet accepts only Steam/Custom/GOG/Epic toggles; no itch chip and no `showItch` prop path.
 - Impact: Users cannot toggle itch source from filtering UI despite state support.
-- Evidence: [L-04] [L-05] [L-06]
-- Proposal: Mirror Amazon branch pattern by adding `showItch`, chip UI, preview wiring, and call-site plumb.
+- Evidence: [L-33] [L-34]
+- Resolution: Added `showItch` prop, itch chip UI, preview wiring, and list-pane call-site plumbing.
 
 #### I-004: Installed count excludes itch
 - Severity: P1
-- Status: Open
+- Status: Closed (2026-02-22)
 - Finding: `calculateInstalledCount` sums Steam+Custom+GOG+Epic only.
 - Impact: Installed count in main library header is wrong when itch games are installed.
-- Evidence: [L-05]
-- Proposal: Include `PrefManager.itchInstalledGamesCount` gated by `showItchInLibrary`.
+- Evidence: [L-34]
+- Resolution: Included `PrefManager.itchInstalledGamesCount` gated by `showItchInLibrary`.
 
 #### I-005: Container source extraction misclassifies itch IDs
 - Severity: P1
-- Status: Open
+- Status: Closed (2026-02-22)
 - Finding: `extractGameSourceFromContainerId` handles Steam/Custom/GOG/Epic only; fallback is Steam.
 - Impact: `ITCH_*` IDs are interpreted as Steam in downstream flows (launch, feedback, container operations).
-- Evidence: [L-07]
-- Proposal: Add `containerId.startsWith("ITCH_") -> GameSource.ITCH` and avoid Steam fallback for unknown prefixes.
+- Evidence: [L-35]
+- Resolution: Added `ITCH_` mapping in source extraction.
 
 #### I-006: Card install/status logic has no explicit itch path
 - Severity: P1
-- Status: Open
+- Status: Closed (2026-02-22)
 - Finding: install checks and status text switch do not implement itch and fall through to generic `else` behavior.
 - Impact: Incorrect install indicators and status rendering for itch cards.
-- Evidence: [L-08]
-- Proposal: Add explicit `GameSource.ITCH` logic backed by `ItchService.isGameInstalled` equivalent.
+- Evidence: [L-36]
+- Resolution: Added explicit itch install/status branches backed by `ItchService.getItchGameOf(...).isInstalled`.
 
 #### I-007: Download-state plumbing inconsistency
 - Severity: P1
-- Status: Open
+- Status: Closed (2026-02-22)
 - Finding: `ItchAppScreen` has download/cancel/progress paths, but `BaseAppScreen` hardcodes itch downloadInfo as `null` with comment "don't support downloads yet".
 - Impact: UI state divergence and potentially missing progress/controls in shared content.
-- Evidence: [L-09] [L-10]
-- Proposal: Wire itch `getDownloadInfo` into base switch or isolate fully in dedicated screen rendering.
+- Evidence: [L-37] [L-10]
+- Resolution: Wired itch `getDownloadInfo` into base app-screen download switch.
 
 #### I-008: OAuth flow is internally inconsistent (three variants)
 - Severity: P1
@@ -148,11 +192,11 @@ Amazon PR branch shows mature parity patterns across source filter chips, instal
 
 #### I-009: Itch imagery parity gap in game cards
 - Severity: P1
-- Status: Open
+- Status: Closed (2026-02-22)
 - Finding: itch entries set only `iconHash=coverUrl`, but card image selection for `ITCH` piggybacks on custom-game capsule/header logic.
 - Impact: grid/list image fallbacks are likely blank/low-quality for itch cards.
-- Evidence: [L-27] [L-28]
-- Proposal: For `ITCH`, use `iconHash` (cover URL) directly across pane types, with dedicated fit/crop policy.
+- Evidence: [L-36]
+- Resolution: `ITCH` now uses `iconHash` directly for non-list card media.
 
 #### I-010: Itch launch/container assumptions are contradictory
 - Severity: P1
@@ -191,29 +235,29 @@ Amazon PR branch shows mature parity patterns across source filter chips, instal
 ## 7) Missing for Store Parity
 
 ### Minimum Parity Items Not Yet Complete
-- [ ] Build must pass with exhaustive `GameSource` handling.
-- [ ] Library source chips include itch toggle.
-- [ ] Installed count includes itch.
-- [ ] Container source extraction recognizes `ITCH_`.
-- [ ] Card install/status behavior has explicit itch branch.
-- [ ] Download state plumbing is coherent across base + itch screens.
+- [x] Build must pass with exhaustive `GameSource` handling.
+- [x] Library source chips include itch toggle.
+- [x] Installed count includes itch.
+- [x] Container source extraction recognizes `ITCH_`.
+- [x] Card install/status behavior has explicit itch branch.
+- [x] Download state plumbing is coherent across base + itch screens.
 - [ ] OAuth/auth strategy is unified and documented in code.
-- [ ] Card media handling is store-specific for itch.
+- [x] Card media handling is store-specific for itch.
 - [ ] Basic itch integration tests exist.
 
 ## 8) Parity Matrix (Current)
 
 | Capability | Steam | GOG | Epic | Amazon PR branch | Itch branch | Notes |
 |---|---|---|---|---|---|---|
-| Source enum + library item | Yes | Yes | Yes | Yes | Partial | Itch enum exists, but downstream exhaustiveness is broken. [L-20] [L-02] [L-03] |
-| Source filter chip in UI | Yes | Yes | Yes | Yes | No | Amazon adds explicit chip path; itch missing equivalent. [A-01] [A-03] [L-04] [L-06] |
-| Installed count in header | Yes | Yes | Yes | Yes | No | Itch count persisted but not consumed in `calculateInstalledCount`. [L-14] [L-05] [A-02] |
+| Source enum + library item | Yes | Yes | Yes | Yes | Yes | Itch enum exists and compile-critical switch handling is now exhaustive. [L-20] [L-33] [L-38] [L-32] |
+| Source filter chip in UI | Yes | Yes | Yes | Yes | Yes | Itch toggle is now exposed and wired through list pane state. [L-33] [L-34] |
+| Installed count in header | Yes | Yes | Yes | Yes | Yes | Itch installed count is included in `calculateInstalledCount`. [L-34] |
 | Service lifecycle integration | Yes | Yes | Yes | Yes | Yes | Main activity restart hook + service start/sync exists. [L-19] [L-29] |
 | Library sync pipeline | Yes | Yes | Yes | Yes | Yes | Itch manager/api/dao flow exists. [L-15] [L-16] |
-| Launch executable resolver in prelaunch | Yes | Yes | Yes | Yes | No | Missing ITCH branch; compile break. [L-02] [A-05] |
-| Container source extraction | Yes | Yes | Yes | Yes | No | Missing `ITCH_` mapping. [L-07] [A-04] |
-| App screen download info plumbing | Yes | Yes | Yes | Yes | Inconsistent | Base says no itch download support; itch screen implements it. [L-09] [L-10] [A-06] |
-| Card install/status logic | Yes | Yes | Yes | Partial | Partial | Itch falls through generic `else`. [L-08] |
+| Launch executable resolver in prelaunch | Yes | Yes | Yes | Yes | Partial | ITCH branch now exists; launch behavior still depends on install-path/exe model hardening. [L-33] [L-35] |
+| Container source extraction | Yes | Yes | Yes | Yes | Yes | `ITCH_` mapping is now explicit. [L-35] [A-04] |
+| App screen download info plumbing | Yes | Yes | Yes | Yes | Yes | Base app screen now requests itch download info. [L-37] [L-10] [A-06] |
+| Card install/status logic | Yes | Yes | Yes | Partial | Yes | Itch now has explicit install/status branches. [L-36] |
 | Auth flow coherence | Stable | Stable | Stable | In progress | Inconsistent | Three conflicting itch auth paths. [L-11] [L-23] [L-24] [L-25] |
 | Tests in branch | Existing | Existing | Existing | Added (Amazon manifest test) | None seen | Itch adds no obvious tests. [A-09] [L-01] |
 
@@ -244,70 +288,205 @@ Amazon PR branch shows mature parity patterns across source filter chips, instal
 ## 10) Proposed Implementation Roadmap
 
 ### Phase 0: Build Green + Core Parity Surface
-- [ ] Fix `PluviaMain` exhaustive `when` with ITCH behavior.
-- [ ] Fix `GameFeedbackUtils` exhaustive `when` with ITCH lookup.
-- [ ] Add `ITCH_` mapping in `ContainerUtils.extractGameSourceFromContainerId`.
-- [ ] Add itch source chip and `showItch` prop in `LibraryBottomSheet` + call sites.
-- [ ] Include itch installed count in `calculateInstalledCount`.
-- [ ] Add explicit itch status/install branches in `LibraryAppItem`.
+- [x] Fix `PluviaMain` exhaustive `when` with ITCH behavior.
+- [x] Fix `GameFeedbackUtils` exhaustive `when` with ITCH lookup.
+- [x] Add `ITCH_` mapping in `ContainerUtils.extractGameSourceFromContainerId`.
+- [x] Add itch source chip and `showItch` prop in `LibraryBottomSheet` + call sites.
+- [x] Include itch installed count in `calculateInstalledCount`.
+- [x] Add explicit itch status/install branches in `LibraryAppItem`.
 
 Exit criteria:
-- [ ] `./gradlew :app:compileDebugKotlin --no-daemon` passes.
+- [x] `./gradlew :app:compileDebugKotlin --no-daemon` passes.
 - [ ] Library filter toggles itch visibility and installed count correctly.
 
 ### Phase 1: Auth Consolidation
+
+**Entry criteria:** Phase 0 complete, build passing.
+
+**Task list:**
+- [ ] Audit all auth touchpoints (run: `grep -rn 'OAuth\|oauth\|apiKey\|api_key\|PKCE\|code_verifier\|response_type' app/src/main/java/app/gamenative/service/itch/ --include='*.kt'`)
 - [ ] Select one canonical auth flow (recommended: standards-based auth-code + PKCE + callback).
 - [ ] Remove or deprecate duplicate/unused itch auth activity.
 - [ ] Align `ItchConstants`, manifest redirect URI, and activity handling.
 - [ ] Update service/auth comments to match reality.
+- [ ] Run `grep -rn 'ItchOAuthActivity' app/src/main/ --include='*.kt' --include='*.xml'` to confirm only one activity remains.
 
-Exit criteria:
+**Known code locations to touch:**
+| File | What to change |
+|---|---|
+| `ItchConstants.kt:37-58` | Fix `ITCH_SCOPES` (currently `profile:me`, needs `profile:owned`), clarify `response_type` |
+| `ItchConstants.kt:23-24` | Replace placeholder `OAUTH_CLIENT_ID` (TODO in code) |
+| `ItchAuthManager.kt:164-281` | `exchangeOAuthCode()` — validate or remove PKCE flow |
+| `ui/ItchOAuthActivity.kt` | Primary OOB + code + PKCE activity — keep or replace |
+| `ui/screen/auth/ItchOAuthActivity.kt` | Implicit token extraction — likely delete |
+| `AndroidManifest.xml:81-82` | `gamenative://itch/callback` deep link — wire or remove |
+
+**Verification script:**
+```bash
+# After auth consolidation, run:
+./gradlew :app:compileDebugKotlin --no-daemon 2>&1 | tail -5
+
+# Verify single auth activity
+grep -rn 'ItchOAuthActivity' app/src/main/ --include='*.kt' --include='*.xml' | wc -l
+# Expected: references from exactly 1 activity + manifest entry
+
+# Verify scope is correct
+grep -n 'ITCH_SCOPES' app/src/main/java/app/gamenative/service/itch/ItchConstants.kt
+# Expected: "profile:me profile:owned" or just use API key flow
+```
+
+**Exit criteria:**
 - [ ] One flow in code, one flow in UI, one flow in docs/comments.
+- [ ] Build passes.
 - [ ] Manual QA confirms login/logout/restart/session restore behavior.
+- [ ] All self-assessment gates pass (Section 16).
 
 ### Phase 2: UI/UX Parity Hardening
+
+**Entry criteria:** Phase 1 complete, auth flow unified, build passing.
+
+**Task list:**
 - [ ] Dedicated itch icon asset and source icon usage parity.
-- [ ] Fix itch image selection strategy for list/capsule/hero cards.
+- [x] Fix itch image selection strategy for list/capsule/hero cards.
 - [ ] Localize new itch strings across maintained locale files.
 - [ ] Ensure app-screen download controls render consistently.
+- [ ] Add uninstall support (`ItchAppScreen` currently has no delete/uninstall path for installed games).
 
-Exit criteria:
+**Known code locations to touch:**
+| File | What to change |
+|---|---|
+| `res/drawable/` | Add itch.io icon asset |
+| `LibraryAppItem.kt:219` | Itch icon rendering in cards |
+| `ItchAppScreen.kt:193-200` | `onDeleteDownloadClick()` only cancels active downloads; no uninstall |
+| `res/values/strings.xml:1016+` | Itch strings present but not propagated to locale variants |
+
+**Verification script:**
+```bash
+# Check for missing itch icon
+find app/src/main/res -name '*itch*' -type f
+
+# Check localizations
+for f in app/src/main/res/values-*/strings.xml; do
+    echo "=== $f ==="
+    grep -c 'itch' "$f" || echo "(no itch strings)"
+done
+
+# Build verification
+./gradlew :app:compileDebugKotlin --no-daemon 2>&1 | tail -5
+```
+
+**Exit criteria:**
 - [ ] Itch cards look correct in all three library layouts.
 - [ ] Non-English locales do not show missing keys for itch flows.
+- [ ] Uninstall removes game files and resets `isInstalled` in DB.
+- [ ] All self-assessment gates pass (Section 16).
 
 ### Phase 3: Install/Update Architecture Upgrade
+
+**Entry criteria:** Phase 2 complete, UI parity validated, build passing.
+
+**Task list:**
 - [ ] Introduce upload compatibility selection comparable to `Install.GetUploads` semantics.
 - [ ] Add installer-type awareness (zip/exe/other) instead of zip-only extraction.
-- [ ] Replace query-string API key transport where possible with safer auth handling.
+- [ ] **Fix Zip Slip vulnerability** in `ItchDownloadManager.kt:271` (see Code-Level Fix Catalog, F-001).
+- [ ] **Reuse shared OkHttpClient** instead of creating `new OkHttpClient()` at `ItchDownloadManager.kt:218` (see F-002).
+- [ ] **Move API key from URL to header** in `ItchDownloadManager.kt:191-192` (see F-003).
+- [ ] **Fix `gameId = 0` hardcode** in `ItchService.kt:244` (see F-004).
+- [ ] **Replace `runBlocking`** in `ItchService.kt:175` with suspend or coroutine-safe call (see F-005).
 - [ ] Define update/repair strategy (incremental patching where feasible, fallback full download).
 - [ ] Add error mapping for incompatible uploads and user-facing messaging.
+- [ ] Add pause/resume download support (`ItchAppScreen.kt:189-191` is currently a no-op).
 
-Exit criteria:
+**Known code locations to touch:**
+| File | Line(s) | What to change |
+|---|---|---|
+| `ItchDownloadManager.kt:271` | `File(destDir, entry.name)` | Add canonical path validation (Zip Slip) |
+| `ItchDownloadManager.kt:218` | `val client = OkHttpClient()` | Replace with `Net.http` singleton |
+| `ItchDownloadManager.kt:191-192` | `api_key=$apiKey` in URL | Move to `Authorization: Bearer` header |
+| `ItchService.kt:242-246` | `gameId = 0` in DownloadInfo | Use actual `gameId.toIntOrNull()` |
+| `ItchService.kt:174-178` | `runBlocking(Dispatchers.IO)` | Refactor to `suspend fun` or `withContext` |
+| `ItchDownloadManager.kt:257-312` | `extractZip()` | Add format detection for non-zip uploads |
+| `ItchAppScreen.kt:189-191` | `onPauseResumeClick()` | Implement pause/resume with OkHttp streaming |
+
+**Verification script:**
+```bash
+# After security fixes, verify no raw File(dir, entry) without validation
+grep -n 'File(destDir, entry' app/src/main/java/app/gamenative/service/itch/ItchDownloadManager.kt
+# Expected: should see canonicalPath check or extractInto helper
+
+# Verify no new OkHttpClient instantiation
+grep -n 'OkHttpClient()' app/src/main/java/app/gamenative/service/itch/ItchDownloadManager.kt
+# Expected: 0 matches
+
+# Verify API key not in URL
+grep -n 'api_key=' app/src/main/java/app/gamenative/service/itch/ItchDownloadManager.kt
+# Expected: 0 matches
+
+# Verify no runBlocking
+grep -n 'runBlocking' app/src/main/java/app/gamenative/service/itch/ItchService.kt
+# Expected: 0 matches
+
+# Build verification
+./gradlew :app:compileDebugKotlin --no-daemon 2>&1 | tail -5
+```
+
+**Exit criteria:**
 - [ ] Download/install handles at least top expected upload formats.
+- [ ] Zip Slip vulnerability is patched.
+- [ ] No API key in URL query strings.
+- [ ] No `runBlocking` in service companion object.
 - [ ] Update path is deterministic and tested on repeat installs.
+- [ ] All self-assessment gates pass (Section 16).
 
 ### Phase 4: Test + Observability
+
+**Entry criteria:** Phase 3 complete, build passing, manual QA on download/install/uninstall.
+
+**Task list:**
 - [ ] Unit tests for library filtering/source toggles/counting.
 - [ ] Unit tests for auth URL parsing/state checks.
 - [ ] Service tests for sync/download transitions.
 - [ ] Telemetry or structured logs for auth/download/install failure classes.
+- [ ] Integration test: mock API → sync → filter → card render cycle.
 
-Exit criteria:
+**Test file locations (create if absent):**
+| Test file | Tests |
+|---|---|
+| `app/src/test/java/app/gamenative/service/itch/ItchApiClientTest.kt` | Pagination, parse errors, empty library |
+| `app/src/test/java/app/gamenative/service/itch/ItchAuthManagerTest.kt` | Key validation, credential save/load, OAuth exchange |
+| `app/src/test/java/app/gamenative/service/itch/ItchDownloadManagerTest.kt` | Zip extraction, Zip Slip guard, format detection |
+| `app/src/test/java/app/gamenative/ui/model/LibraryViewModelItchTest.kt` | Filter toggling, installed count, itch visibility |
+
+**Verification script:**
+```bash
+# Run itch-specific tests
+./gradlew :app:testDebugUnitTest --tests '*Itch*' --no-daemon 2>&1 | tail -20
+
+# Run all tests
+./gradlew :app:testDebugUnitTest --no-daemon 2>&1 | tail -20
+
+# Check test report
+ls -la app/build/reports/tests/testDebugUnitTest/
+```
+
+**Exit criteria:**
 - [ ] CI catches regressions in key itch flows.
+- [ ] Test report shows ≥80% pass rate for new itch test suite.
+- [ ] All self-assessment gates pass (Section 16).
 
 ## 11) Active Issue Tracker
 
 | ID | Severity | Status | Owner | Summary |
 |---|---|---|---|---|
-| I-001 | P0 | Open | Unassigned | `PluviaMain` missing ITCH branch in launch executable switch |
-| I-002 | P0 | Open | Unassigned | `GameFeedbackUtils` missing ITCH branch |
-| I-003 | P1 | Open | Unassigned | Bottom-sheet source filtering UI lacks itch toggle |
-| I-004 | P1 | Open | Unassigned | Installed-count logic omits itch |
-| I-005 | P1 | Open | Unassigned | Container source extraction missing `ITCH_` mapping |
-| I-006 | P1 | Open | Unassigned | Card install/status logic does not model itch explicitly |
-| I-007 | P1 | Open | Unassigned | Base app-screen download info contradicts itch download support |
+| I-001 | P0 | Closed | Unassigned | `PluviaMain` missing ITCH branch in launch executable switch |
+| I-002 | P0 | Closed | Unassigned | `GameFeedbackUtils` missing ITCH branch |
+| I-003 | P1 | Closed | Unassigned | Bottom-sheet source filtering UI lacks itch toggle |
+| I-004 | P1 | Closed | Unassigned | Installed-count logic omits itch |
+| I-005 | P1 | Closed | Unassigned | Container source extraction missing `ITCH_` mapping |
+| I-006 | P1 | Closed | Unassigned | Card install/status logic does not model itch explicitly |
+| I-007 | P1 | Closed | Unassigned | Base app-screen download info contradicts itch download support |
 | I-008 | P1 | Open | Unassigned | Auth flow inconsistency across constants/activities/manifest |
-| I-009 | P1 | Open | Unassigned | Itch card media path unsuitable for pane variants |
+| I-009 | P1 | Closed | Unassigned | Itch card media path unsuitable for pane variants |
 | I-010 | P1 | Open | Unassigned | Contradictory assumptions about itch install/container model |
 | I-011 | P2 | Open | Unassigned | Download pipeline is zip-only and lacks robust planning |
 | I-012 | P2 | Open | Unassigned | Localization/icon parity incomplete |
@@ -329,7 +508,15 @@ Exit criteria:
 - Symptom: `:app:compileDebugKotlin` failed.
 - Root cause: newly introduced `GameSource.ITCH` not handled in all exhaustive switches.
 - Evidence: compiler diagnostics for `PluviaMain.kt:1139` and `GameFeedbackUtils.kt:66`. [L-30]
-- Resolution status: Open.
+- Resolution status: Resolved (2026-02-22). [L-32]
+
+### 2026-02-22: Phase 0 core parity patch
+- Symptom: Core itch parity items were still open across filters/counts/source extraction/card status and base download plumbing.
+- Root cause: initial itch branch landed with partial UI/service wiring but missing parity touchpoints.
+- Steps tried: patched Phase 0 files (`PluviaMain`, `GameFeedbackUtils`, `ContainerUtils`, `LibraryBottomSheet`, `LibraryListPane`, `LibraryAppItem`, `BaseAppScreen`) and recompiled.
+- Outcome: compile now passes and Phase 0 checklist is mostly complete.
+- Evidence refs: [L-32] [L-33] [L-34] [L-35] [L-36] [L-37] [L-38]
+- Next action: manual QA for source toggles/counts + itch launch path behavior, then move to auth consolidation (Phase 1).
 
 ### Troubleshooting Entry Template
 ```md
@@ -355,6 +542,23 @@ Exit criteria:
 - Output: this initial living doc scaffold with actionable roadmap.
 - Next handoff:
 - Begin Phase 0 implementation in small verifiable patches.
+
+### Session 2026-02-22 (Codex, Phase 0 pass)
+- Scope: Implement and validate Phase 0 core parity patches.
+- Commands run:
+- `./gradlew :app:compileDebugKotlin --no-daemon` (before and after patch set)
+- Findings added:
+- Closed P0 compile blockers (I-001, I-002).
+- Closed core P1 parity gaps for source chip/count/source extraction/card status/download plumbing/media handling (I-003, I-004, I-005, I-006, I-007, I-009).
+- Changes made:
+- Added explicit ITCH branches in launch + feedback flows.
+- Added `ITCH_` container source extraction and itch install-path mapping hooks in container wiring.
+- Added itch source chip plumbing and itch installed-count inclusion.
+- Added explicit itch install/status/card-media logic and base-screen downloadInfo wiring.
+- Validation:
+- `:app:compileDebugKotlin` passes. [L-32]
+- Next handoff:
+- Run manual UI QA for source toggles/count rendering and itch launch behavior, then start Phase 1 auth consolidation.
 
 ## 14) Decision Register
 
@@ -428,6 +632,13 @@ Exit criteria:
 - [L-29] `app/src/main/java/app/gamenative/ui/screen/settings/SettingsGroupInterface.kt:206`
 - [L-30] Local command output: `./gradlew :app:compileDebugKotlin --no-daemon` (2026-02-22)
 - [L-31] `app/src/main/res/values/strings.xml:1016`
+- [L-32] Local command output: `./gradlew :app:compileDebugKotlin --no-daemon` (2026-02-22, build success after Phase 0 patch set).
+- [L-33] `app/src/main/java/app/gamenative/ui/PluviaMain.kt:235`, `app/src/main/java/app/gamenative/ui/PluviaMain.kt:1144`, `app/src/main/java/app/gamenative/ui/PluviaMain.kt:1306`
+- [L-34] `app/src/main/java/app/gamenative/ui/screen/library/components/LibraryBottomSheet.kt:51`, `app/src/main/java/app/gamenative/ui/screen/library/components/LibraryBottomSheet.kt:139`, `app/src/main/java/app/gamenative/ui/screen/library/components/LibraryListPane.kt:121`, `app/src/main/java/app/gamenative/ui/screen/library/components/LibraryListPane.kt:469`
+- [L-35] `app/src/main/java/app/gamenative/utils/ContainerUtils.kt:578`, `app/src/main/java/app/gamenative/utils/ContainerUtils.kt:904`, `app/src/main/java/app/gamenative/utils/ContainerUtils.kt:1042`
+- [L-36] `app/src/main/java/app/gamenative/ui/screen/library/components/LibraryAppItem.kt:219`, `app/src/main/java/app/gamenative/ui/screen/library/components/LibraryAppItem.kt:351`, `app/src/main/java/app/gamenative/ui/screen/library/components/LibraryAppItem.kt:552`
+- [L-37] `app/src/main/java/app/gamenative/ui/screen/library/appscreen/BaseAppScreen.kt:638`
+- [L-38] `app/src/main/java/app/gamenative/utils/GameFeedbackUtils.kt:82`
 
 ### Amazon Branch Pattern Evidence
 - [A-01] `origin/feat/amazon-games-support:app/src/main/java/app/gamenative/ui/screen/library/components/LibraryBottomSheet.kt:43`

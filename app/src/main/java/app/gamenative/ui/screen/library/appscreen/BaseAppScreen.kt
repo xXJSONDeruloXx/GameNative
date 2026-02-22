@@ -635,7 +635,7 @@ abstract class BaseAppScreen {
             app.gamenative.data.GameSource.STEAM -> app.gamenative.service.SteamService.getAppDownloadInfo(displayInfo.gameId)
             app.gamenative.data.GameSource.EPIC -> app.gamenative.service.epic.EpicService.getDownloadInfo(displayInfo.gameId)
             app.gamenative.data.GameSource.GOG -> app.gamenative.service.gog.GOGService.getDownloadInfo(displayInfo.gameId.toString())
-            app.gamenative.data.GameSource.ITCH -> null // Itch.io games don't support downloads yet
+            app.gamenative.data.GameSource.ITCH -> app.gamenative.service.itch.ItchService.getDownloadInfo(displayInfo.gameId.toString())
             app.gamenative.data.GameSource.CUSTOM_GAME -> null // Custom games don't support downloads yet
         }
 

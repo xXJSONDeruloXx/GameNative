@@ -53,6 +53,7 @@ import app.gamenative.events.AndroidEvent
 import app.gamenative.service.SteamService
 import app.gamenative.service.epic.EpicService
 import app.gamenative.service.gog.GOGService
+import app.gamenative.service.itch.ItchService
 import app.gamenative.ui.component.ConnectingServersScreen
 import app.gamenative.ui.component.dialog.ContainerConfigDialog
 import app.gamenative.ui.component.dialog.GameFeedbackDialog
@@ -232,7 +233,7 @@ fun PluviaMain(
                                         }
 
                                         GameSource.ITCH -> {
-                                            false // Itch.io games don't have local installation tracking yet
+                                            ItchService.getItchGameOf(gameId.toString())?.isInstalled == true
                                         }
 
                                         GameSource.CUSTOM_GAME -> {
@@ -1140,6 +1141,7 @@ fun preLaunchApp(
                 GameSource.STEAM -> SteamService.getLaunchExecutable(appId, container)
                 GameSource.GOG -> GOGService.getLaunchExecutable(appId, container)
                 GameSource.EPIC -> EpicService.getLaunchExecutable(appId)
+                GameSource.ITCH -> CustomGameScanner.getLaunchExecutable(container)
                 GameSource.CUSTOM_GAME -> CustomGameScanner.getLaunchExecutable(container)
             }
             if (effectiveExe.isBlank()) {
@@ -1162,6 +1164,7 @@ fun preLaunchApp(
         // Check if this is a Custom Game and validate executable selection before installing components
         // Skip the check if booting to container (Open Container menu option)
         val isCustomGame = gameSource == GameSource.CUSTOM_GAME
+        val isItchGame = gameSource == GameSource.ITCH
 
         // set up Ubuntu file system
         SplitCompat.install(context)
@@ -1294,6 +1297,14 @@ fun preLaunchApp(
         // For Custom Games, bypass Steam Cloud operations entirely and proceed to launch
         if (isCustomGame) {
             Timber.tag("preLaunchApp").i("Custom Game detected for $appId — skipping Steam Cloud sync and launching container")
+            setLoadingDialogVisible(false)
+            onSuccess(context, appId)
+            return@launch
+        }
+
+        // For itch.io games, bypass Steam Cloud operations and launch directly.
+        if (isItchGame) {
+            Timber.tag("preLaunchApp").i("Itch game detected for $appId — launching without Steam Cloud sync")
             setLoadingDialogVisible(false)
             onSuccess(context, appId)
             return@launch

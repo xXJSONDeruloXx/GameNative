@@ -7,6 +7,7 @@ import app.gamenative.data.GameSource
 import app.gamenative.service.SteamService
 import app.gamenative.service.epic.EpicService
 import app.gamenative.service.gog.GOGService
+import app.gamenative.service.itch.ItchService
 import com.winlator.container.Container
 import com.winlator.core.FileUtils
 import com.winlator.core.GPUInformation
@@ -76,6 +77,10 @@ object GameFeedbackUtils {
                 }
                 GameSource.EPIC -> {
                     val game = EpicService.getEpicGameOf(gameId)
+                    game?.title ?: ""
+                }
+                GameSource.ITCH -> {
+                    val game = ItchService.getItchGameOf(gameId.toString())
                     game?.title ?: ""
                 }
                 GameSource.GOG -> {

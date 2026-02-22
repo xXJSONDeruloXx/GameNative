@@ -70,6 +70,7 @@ import app.gamenative.service.DownloadService
 import app.gamenative.service.SteamService
 import app.gamenative.service.epic.EpicService
 import app.gamenative.service.gog.GOGService
+import app.gamenative.service.itch.ItchService
 import app.gamenative.ui.enums.PaneType
 import app.gamenative.ui.icons.Steam
 import app.gamenative.ui.internal.fakeAppInfo
@@ -215,7 +216,10 @@ internal fun AppItem(
 
                     val imageUrl = remember(appInfo.appId, paneType, imageRefreshCounter) {
                         val url = when (appInfo.gameSource) {
-                            GameSource.ITCH,
+                            GameSource.ITCH -> {
+                                appInfo.iconHash
+                            }
+
                             GameSource.CUSTOM_GAME -> {
                                 // For Custom Games, use SteamGridDB images
                                 when (paneType) {
@@ -344,8 +348,8 @@ internal fun AppItem(
                                 GameSource.STEAM -> SteamService.isAppInstalled(appInfo.gameId)
                                 GameSource.GOG -> GOGService.isGameInstalled(appInfo.gameId.toString())
                                 GameSource.EPIC -> EpicService.isGameInstalled(appInfo.gameId)
+                                GameSource.ITCH -> ItchService.getItchGameOf(appInfo.gameId.toString())?.isInstalled == true
                                 GameSource.CUSTOM_GAME -> true
-                                else -> false
                             }
                         }
 
@@ -357,8 +361,8 @@ internal fun AppItem(
                                     GameSource.STEAM -> SteamService.isAppInstalled(appInfo.gameId)
                                     GameSource.GOG -> GOGService.isGameInstalled(appInfo.gameId.toString())
                                     GameSource.EPIC -> EpicService.isGameInstalled(appInfo.gameId)
+                                    GameSource.ITCH -> ItchService.getItchGameOf(appInfo.gameId.toString())?.isInstalled == true
                                     GameSource.CUSTOM_GAME -> true
-                                    else -> false
                                 }
                             }
                         }
@@ -545,11 +549,12 @@ internal fun GameInfoBlock(
                     text to color
                 }
 
-                GameSource.GOG, GameSource.EPIC -> {
-                    // GOG and Epic games - check installation status from their respective services
+                GameSource.GOG, GameSource.EPIC, GameSource.ITCH -> {
+                    // GOG, Epic, and itch.io games - check installation status from their respective services
                     val isInstalled = when (appInfo.gameSource) {
                         GameSource.GOG -> GOGService.isGameInstalled(appInfo.gameId.toString())
                         GameSource.EPIC -> EpicService.isGameInstalled(appInfo.gameId)
+                        GameSource.ITCH -> ItchService.getItchGameOf(appInfo.gameId.toString())?.isInstalled == true
                         else -> false
                     }
                     val text = if (isInstalled) {
@@ -568,10 +573,6 @@ internal fun GameInfoBlock(
                 GameSource.CUSTOM_GAME -> {
                     // Custom Games are considered ready (no install tracking)
                     stringResource(R.string.library_status_ready) to MaterialTheme.colorScheme.tertiary
-                }
-
-                else -> {
-                    stringResource(R.string.library_not_installed) to MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                 }
             }
 
