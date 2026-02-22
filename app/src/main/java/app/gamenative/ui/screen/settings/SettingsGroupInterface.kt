@@ -263,6 +263,7 @@ fun SettingsGroupInterface(
     paletteStyle: PaletteStyle,
     onAppTheme: (AppTheme) -> Unit,
     onPaletteStyle: (PaletteStyle) -> Unit,
+    openItchApiDialogOnStart: Boolean = false,
 ) {
     val context = LocalContext.current
 
@@ -423,6 +424,18 @@ fun SettingsGroupInterface(
 
     // Itch OAuth login is intentionally hidden for now.
     // Third-party OAuth scopes are currently insufficient for download endpoints.
+
+    // If settings route was opened with "resume itch API key flow", open dialog immediately.
+    LaunchedEffect(openItchApiDialogOnStart) {
+        if (openItchApiDialogOnStart) {
+            Timber.d("[SettingsItch]: Opening API-key dialog from navigation arg")
+            showItchTokenDialog = true
+        }
+        // Safety clear in case stale flag survives process pause.
+        if (PrefManager.itchReturnToApiKeyDialog) {
+            PrefManager.itchReturnToApiKeyDialog = false
+        }
+    }
 
     // Listen for GOG OAuth callback (e.g. from event)
     DisposableEffect(Unit) {
@@ -599,6 +612,7 @@ fun SettingsGroupInterface(
                 title = { Text(text = "Connect itch.io") },
                 subtitle = { Text(text = "Sign in with API key (library + downloads)") },
                 onClick = {
+                    PrefManager.itchReturnToApiKeyDialog = false
                     showItchTokenDialog = true
                 }
             )
@@ -611,6 +625,7 @@ fun SettingsGroupInterface(
                 title = { Text(text = "Manage API key") },
                 subtitle = { Text(text = "Replace key or switch itch account") },
                 onClick = {
+                    PrefManager.itchReturnToApiKeyDialog = false
                     itchTokenInput = ""
                     itchTokenError = null
                     showItchTokenDialog = true
@@ -1097,6 +1112,7 @@ fun SettingsGroupInterface(
     if (showItchTokenDialog) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { 
+                PrefManager.itchReturnToApiKeyDialog = false
                 showItchTokenDialog = false
                 itchTokenInput = ""
                 itchTokenError = null
@@ -1111,9 +1127,20 @@ fun SettingsGroupInterface(
                     Spacer(modifier = Modifier.height(16.dp))
                     androidx.compose.material3.OutlinedButton(
                         onClick = {
-                            val url = ItchConstants.ITCH_API_KEYS_URL
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                            context.startActivity(intent)
+                            try {
+                                PrefManager.itchReturnToApiKeyDialog = true
+                                val url = ItchConstants.ITCH_API_KEYS_URL
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                PrefManager.itchReturnToApiKeyDialog = false
+                                Timber.e(e, "[SettingsItch]: Failed to open API keys page")
+                                android.widget.Toast.makeText(
+                                    context,
+                                    e.message ?: "Unable to open browser",
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
+                            }
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -1198,6 +1225,7 @@ fun SettingsGroupInterface(
                                     ).show()
                                 },
                                 onDialogClose = {
+                                    PrefManager.itchReturnToApiKeyDialog = false
                                     showItchTokenDialog = false
                                     itchTokenInput = ""
                                     itchTokenError = null
@@ -1220,6 +1248,7 @@ fun SettingsGroupInterface(
             dismissButton = {
                 androidx.compose.material3.TextButton(
                     onClick = {
+                        PrefManager.itchReturnToApiKeyDialog = false
                         showItchTokenDialog = false
                         itchTokenInput = ""
                         itchTokenError = null

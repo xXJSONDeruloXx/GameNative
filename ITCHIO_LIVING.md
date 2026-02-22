@@ -97,7 +97,7 @@ Amazon PR branch shows mature parity patterns across source filter chips, instal
 ### Build Health
 - Status: PASSING
 - Current compile check:
-- `./gradlew :app:compileDebugKotlin --no-daemon` passes. [L-50]
+- `./gradlew :app:compileDebugKotlin --no-daemon` passes. [L-52]
 
 ### Integration Surface Health
 - Database model + DAO + module wiring: present. [L-14] [L-15]
@@ -108,6 +108,7 @@ Amazon PR branch shows mature parity patterns across source filter chips, instal
 - App card status parity: explicit itch install/status handling is present. [L-36]
 - App screen download plumbing: coherent (`BaseAppScreen` now queries itch download state). [L-37] [L-10]
 - Auth UX strategy: API-key-first in settings; OAuth path retained but hidden pending broader scope access. [L-49] [L-50]
+- Browser return-flow hardening for API-key creation is implemented (pending final QA closure). [L-51] [L-52]
 
 ## 5) What Is Good
 - `GameSource.ITCH` exists and library items can resolve itch cover URLs. [L-20]
@@ -212,6 +213,22 @@ Amazon PR branch shows mature parity patterns across source filter chips, instal
 - Evidence: [L-22] [L-10] [L-17]
 - Proposal: define one canonical install model for itch in this app and align all comments + branching.
 
+#### I-014: API-key browser bounce loses settings/modal context
+- Severity: P1
+- Status: Open
+- Finding:
+- User flow `Settings -> Connect itch.io -> Open API Keys Page -> return to app` can land on Home; API-key dialog may only flash briefly and dismiss.
+- Impact:
+- Breaks one-task auth flow and increases drop-off during sign-in.
+- Evidence: [L-53]
+- Mitigation in progress (2026-02-22):
+- Added one-shot return flag + settings-route argument path to reopen API-key dialog on return from browser.
+- `PluviaMain` now routes to `settings?openItchApiDialog=true` when the return flag is set.
+- Settings screen/group now accept and consume `openItchApiDialogOnStart` for deterministic dialog re-open.
+- Evidence: [L-51] [L-52]
+- Remaining risk:
+- Needs on-device re-validation after latest patch to confirm no brief-dismiss regression.
+
 ### P2 (Design / Hardening Gaps)
 
 #### I-011: Download pipeline is zip-only and bypasses itch install planning semantics
@@ -249,6 +266,7 @@ Amazon PR branch shows mature parity patterns across source filter chips, instal
 - [x] Download state plumbing is coherent across base + itch screens.
 - [x] Auth strategy is unified in UI/docs (API-key-first; OAuth hidden).
 - [x] Card media handling is store-specific for itch.
+- [ ] External browser bounce reliably returns to API-key dialog.
 - [ ] Basic itch integration tests exist.
 
 ## 8) Parity Matrix (Current)
@@ -498,6 +516,7 @@ ls -la app/build/reports/tests/testDebugUnitTest/
 | I-011 | P2 | Open | Unassigned | Download pipeline is zip-only and lacks robust planning |
 | I-012 | P2 | Open | Unassigned | Localization/icon parity incomplete |
 | I-013 | P2 | Open | Unassigned | Missing itch tests |
+| I-014 | P1 | Open | Unassigned | Returning from API-key browser page can lose/dismiss auth modal context |
 
 ### Issue Update Template
 ```md
@@ -558,6 +577,23 @@ ls -la app/build/reports/tests/testDebugUnitTest/
 - Evidence refs: [L-45] [L-46] [L-47] [L-49] [L-50] [E-18] [E-13]
 - Next action:
 - Continue download hardening on API-key route; revisit OAuth only if partnership scopes become available.
+
+### 2026-02-22: API-key browser return loses modal context
+- Symptom:
+- After opening itch API key page in browser from the sign-in dialog, returning to app landed on Home and dialog dismissed.
+- Hypothesis:
+- External browser bounce was not treated as resumable one-task auth flow; navigation state and dialog state diverged on resume.
+- Steps tried:
+- Captured user repro with screenshot/report and adb logcat around settings/auth transitions.
+- Added persisted one-shot return flag (`PrefManager.itchReturnToApiKeyDialog`).
+- Updated settings route to accept `openItchApiDialog` nav arg and reopened dialog from route arg.
+- Updated resume logic in `PluviaMain` to route to `settings?openItchApiDialog=true` when return flag is set.
+- Outcome:
+- Fix is implemented and build/install succeed.
+- Re-validation still required on device to confirm the brief-dismiss symptom is resolved.
+- Evidence refs: [L-51] [L-52] [L-53]
+- Next action:
+- Run focused adb QA for the exact bounce path and close I-014 only after verified stable.
 
 ### Troubleshooting Entry Template
 ```md
@@ -671,6 +707,24 @@ ls -la app/build/reports/tests/testDebugUnitTest/
 - `:app:compileDebugKotlin` passes after UX/doc-alignment changes. [L-50]
 - Next handoff:
 - Keep OAuth code dormant; continue integration work on API-key path.
+
+### Session 2026-02-22 (Codex, API-key return-flow hardening)
+- Scope: Fix API-key dialog context loss when returning from external browser.
+- Commands run:
+- `./gradlew :app:compileDebugKotlin --no-daemon`
+- `./gradlew :app:installDebug --no-daemon`
+- `adb -s d234a848 logcat -d -v time | rg -n 'SettingsItch|Itch|onDestinationChanged|ActivityTaskManager'`
+- Findings added:
+- User observed return-flow bug: app resumed on Home and API-key dialog dismissed after brief flash.
+- Changes made:
+- Added `PrefManager.itchReturnToApiKeyDialog` one-shot state.
+- Added `PluviaScreen.Settings` route arg (`openItchApiDialog`) and route helper.
+- Routed browser-return flow to `settings?openItchApiDialog=true` in `PluviaMain`.
+- Threaded `openItchApiDialogOnStart` through `SettingsScreen` into `SettingsGroupInterface` to reopen dialog deterministically.
+- Validation:
+- Build passes and debug install succeeds on device. [L-52]
+- Next handoff:
+- Execute targeted adb/manual QA of browser bounce and close I-014 if stable.
 
 ## 14) Decision Register
 
@@ -1356,6 +1410,9 @@ Current schema version: **13** (matches Amazon PR).
 - [L-47] Session probe evidence (2026-02-22): `GET /games/:id/uploads?download_key_id=...` returned `403` with `api key does not permit \`game:view:uploads\``.
 - [L-49] `app/src/main/java/app/gamenative/ui/screen/settings/SettingsGroupInterface.kt:424`, `app/src/main/java/app/gamenative/ui/screen/settings/SettingsGroupInterface.kt:599`, `app/src/main/java/app/gamenative/ui/screen/settings/SettingsGroupInterface.kt:611`, `app/src/main/java/app/gamenative/ui/screen/settings/SettingsGroupInterface.kt:1126`, `app/src/main/java/app/gamenative/service/itch/ItchConstants.kt:12`, `app/src/main/java/app/gamenative/service/itch/ItchAuthManager.kt:17`, `app/src/main/java/app/gamenative/service/itch/ItchService.kt:23`
 - [L-50] Local command output: `./gradlew :app:compileDebugKotlin --no-daemon` (2026-02-22, build success after API-key UX + doc alignment changes).
+- [L-51] `app/src/main/java/app/gamenative/PrefManager.kt:718`, `app/src/main/java/app/gamenative/ui/screen/PluviaScreen.kt:10`, `app/src/main/java/app/gamenative/ui/PluviaMain.kt:441`, `app/src/main/java/app/gamenative/ui/PluviaMain.kt:1102`, `app/src/main/java/app/gamenative/ui/screen/settings/SettingsScreen.kt:33`, `app/src/main/java/app/gamenative/ui/screen/settings/SettingsGroupInterface.kt:428`
+- [L-52] Local command output: `./gradlew :app:compileDebugKotlin --no-daemon` and `./gradlew :app:installDebug --no-daemon` (2026-02-22, build success and install success after API-key browser-return hardening patch).
+- [L-53] User QA evidence (2026-02-22): after returning from browser API-key page, app resumed on Home and API-key modal briefly appeared then dismissed.
 
 ### Amazon Branch Pattern Evidence
 - [A-01] `origin/feat/amazon-games-support:app/src/main/java/app/gamenative/ui/screen/library/components/LibraryBottomSheet.kt:43`

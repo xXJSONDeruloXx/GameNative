@@ -435,6 +435,21 @@ fun PluviaMain(
                 app.gamenative.service.itch.ItchService.start(context)
             }
 
+            val currentRoute = navController.currentDestination?.route.orEmpty()
+
+            // If user left settings to open itch API-key page in browser, route them back to settings.
+            if (PrefManager.itchReturnToApiKeyDialog &&
+                currentRoute != PluviaScreen.Settings.route &&
+                currentRoute != PluviaScreen.XServer.route
+            ) {
+                Timber.d("[PluviaMain]: Returning to settings to resume itch API-key flow")
+                // Consume this one-shot flag before navigating so we don't loop on repeated resumes.
+                PrefManager.itchReturnToApiKeyDialog = false
+                navController.navigate(PluviaScreen.Settings.withItchApiDialog(open = true)) {
+                    launchSingleTop = true
+                }
+            }
+
             if (SteamService.isLoggedIn && !SteamService.keepAlive && navController.currentDestination?.route == PluviaScreen.LoginUser.route) {
                 navController.navigate(PluviaScreen.Home.route)
             }
@@ -1084,12 +1099,24 @@ fun PluviaMain(
             /** Settings **/
 
             /** Settings **/
-            composable(route = PluviaScreen.Settings.route) {
+            composable(
+                route = PluviaScreen.Settings.routeWithArgs,
+                arguments = listOf(
+                    navArgument(PluviaScreen.Settings.ARG_OPEN_ITCH_API_DIALOG) {
+                        type = NavType.BoolType
+                        defaultValue = false
+                    },
+                ),
+            ) { backStackEntry ->
+                val openItchApiDialogOnStart =
+                    backStackEntry.arguments?.getBoolean(PluviaScreen.Settings.ARG_OPEN_ITCH_API_DIALOG)
+                        ?: false
                 SettingsScreen(
                     appTheme = state.appTheme,
                     paletteStyle = state.paletteStyle,
                     onAppTheme = viewModel::setTheme,
                     onPaletteStyle = viewModel::setPalette,
+                    openItchApiDialogOnStart = openItchApiDialogOnStart,
                     onBack = { navController.navigateUp() },
                 )
             }

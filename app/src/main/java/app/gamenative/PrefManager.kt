@@ -715,6 +715,14 @@ object PrefManager {
             setPref(OPEN_WEB_LINKS_EXTERNALLY, value)
         }
 
+    // When true, app should return user to itch API-key dialog after bouncing to browser.
+    private val ITCH_RETURN_TO_API_KEY_DIALOG = booleanPreferencesKey("itch_return_to_api_key_dialog")
+    var itchReturnToApiKeyDialog: Boolean
+        get() = getPref(ITCH_RETURN_TO_API_KEY_DIALOG, false)
+        set(value) {
+            setPref(ITCH_RETURN_TO_API_KEY_DIALOG, value)
+        }
+
     // Whether to hide the Android status bar when not in a game (in game list, settings, etc.)
     private val HIDE_STATUS_BAR_WHEN_NOT_IN_GAME = booleanPreferencesKey("hide_status_bar_when_not_in_game")
     var hideStatusBarWhenNotInGame: Boolean

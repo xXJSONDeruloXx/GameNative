@@ -35,6 +35,7 @@ fun SettingsScreen(
     paletteStyle: PaletteStyle,
     onAppTheme: (AppTheme) -> Unit,
     onPaletteStyle: (PaletteStyle) -> Unit,
+    openItchApiDialogOnStart: Boolean = false,
     onBack: () -> Unit,
 ) {
     SettingsScreenContent(
@@ -42,6 +43,7 @@ fun SettingsScreen(
         paletteStyle = paletteStyle,
         onAppTheme = onAppTheme,
         onPaletteStyle = onPaletteStyle,
+        openItchApiDialogOnStart = openItchApiDialogOnStart,
         onBack = onBack,
     )
 }
@@ -53,6 +55,7 @@ private fun SettingsScreenContent(
     paletteStyle: PaletteStyle,
     onAppTheme: (AppTheme) -> Unit,
     onPaletteStyle: (PaletteStyle) -> Unit,
+    openItchApiDialogOnStart: Boolean = false,
     onBack: () -> Unit,
 ) {
     val snackBarHostState = remember { SnackbarHostState() }
@@ -82,6 +85,7 @@ private fun SettingsScreenContent(
                 paletteStyle = paletteStyle,
                 onAppTheme = onAppTheme,
                 onPaletteStyle = onPaletteStyle,
+                openItchApiDialogOnStart = openItchApiDialogOnStart,
             )
             SettingsGroupInfo()
             SettingsGroupDebug()
