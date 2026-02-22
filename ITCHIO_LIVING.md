@@ -598,7 +598,581 @@ ls -la app/build/reports/tests/testDebugUnitTest/
 - Follow-up actions:
 ```
 
-## 15) Citation Index
+## 15) Agent Workflow Automation
+
+### 15.1 Common Agent Operations (Copy-Paste Ready)
+
+#### Full Build + Lint Loop
+```bash
+cd /home/kurt/GameNative
+
+# Compile check (primary gate)
+./gradlew :app:compileDebugKotlin --no-daemon 2>&1 | tail -20
+
+# Lint check (secondary gate, slower)
+./gradlew :app:lintDebug --no-daemon 2>&1 | tail -30
+
+# Unit tests (itch-only)
+./gradlew :app:testDebugUnitTest --tests '*Itch*' --no-daemon 2>&1 | tail -20
+```
+
+#### GameSource Exhaustiveness Scanner
+Run after any enum change or new `when(gameSource)` block:
+```bash
+# Find all when blocks on GameSource that might be non-exhaustive
+grep -rn 'when.*gameSource\|when.*GameSource' app/src/main/java --include='*.kt' | head -30
+
+# Cross-check: every when on GameSource must include ITCH
+for f in $(grep -rl 'when.*gameSource\|when.*GameSource' app/src/main/java --include='*.kt'); do
+    if ! grep -q 'GameSource.ITCH\|\.ITCH' "$f"; then
+        echo "MISSING ITCH: $f"
+    fi
+done
+```
+
+#### Itch File Inventory
+```bash
+# All itch-related source files
+find app/src/main/java -path '*itch*' -name '*.kt' | sort
+
+# All itch-related test files
+find app/src/test -path '*itch*' -name '*.kt' 2>/dev/null | sort
+
+# All itch-related resources
+find app/src/main/res -iname '*itch*' -type f | sort
+```
+
+#### Credential/Security Audit Scan
+```bash
+# Check for API keys in URL query strings
+grep -rn 'api_key=' app/src/main/java --include='*.kt'
+
+# Check for plaintext credential writes
+grep -rn 'writeText\|writeBytes' app/src/main/java/app/gamenative/service/itch/ --include='*.kt'
+
+# Check for new OkHttpClient instantiations (should use Net.http)
+grep -rn 'OkHttpClient()' app/src/main/java/app/gamenative/service/itch/ --include='*.kt'
+
+# Check for runBlocking usage (should be avoided)
+grep -rn 'runBlocking' app/src/main/java/app/gamenative/service/itch/ --include='*.kt'
+```
+
+#### Diff Review Before Commit
+```bash
+# Summary of changes
+git diff --stat
+
+# Detailed diff showing only itch-related changes
+git diff -- '**/itch/**' '**/*itch*' '**/*Itch*'
+
+# Check for debug/TODO artifacts
+git diff | grep -i 'TODO\|FIXME\|HACK\|XXX\|TEMP\|DEBUG' | head -20
+```
+
+### 15.2 Search Patterns for Discovery
+
+| Task | Command |
+|---|---|
+| Find all itch imports | `grep -rn 'import.*itch' app/src/main/java --include='*.kt' \| sort -u` |
+| Find itch usages in non-itch files | `grep -rn 'Itch\|itch' app/src/main/java --include='*.kt' \| grep -v '/itch/' \| head -30` |
+| Find itch Room/DAO queries | `grep -rn '@Query\|@Insert\|@Update\|@Delete' app/src/main/java/app/gamenative/db/dao/ItchGameDao.kt` |
+| Find itch preferences | `grep -rn 'itch' app/src/main/java/app/gamenative/PrefManager.kt` |
+| Find Amazon PR patterns to mirror | `git diff origin/master..origin/feat/amazon-games-support --stat` |
+
+### 15.3 Agent Decision Framework
+
+When an agent encounters ambiguity during implementation:
+
+1. **Check this document first** — search for the topic in the issue tracker, decision register, or roadmap.
+2. **Check Amazon PR patterns** — `git show origin/feat/amazon-games-support:<path>` for reference.
+3. **Check existing store implementations** — look at GOG/Epic equivalents in the same file.
+4. **If still ambiguous** — document the decision in Section 14 (Decision Register) and choose the most conservative option.
+5. **Never guess at API behavior** — check the itch.io API reference in Section 19.
+
+## 16) Self-Assessment Gates
+
+Before committing, every change set must pass ALL of the following gates.
+Run the full gate check with this single script:
+
+### 16.1 Gate Check Script
+```bash
+#!/bin/bash
+# Save as: /home/kurt/GameNative/tools/gate-check.sh
+# Usage: bash tools/gate-check.sh
+
+set -e
+cd /home/kurt/GameNative
+
+echo "=== GATE 1: Compile ==="
+if ./gradlew :app:compileDebugKotlin --no-daemon 2>&1 | tail -5 | grep -q 'BUILD SUCCESSFUL'; then
+    echo "✓ PASS: Compile"
+else
+    echo "✗ FAIL: Compile"
+    exit 1
+fi
+
+echo "=== GATE 2: GameSource exhaustiveness ==="
+MISSING=$(for f in $(grep -rl 'when.*gameSource\|when.*GameSource' app/src/main/java --include='*.kt' 2>/dev/null); do
+    if ! grep -q 'GameSource.ITCH\|\.ITCH' "$f"; then echo "$f"; fi
+done)
+if [ -z "$MISSING" ]; then
+    echo "✓ PASS: All GameSource when-blocks include ITCH"
+else
+    echo "✗ FAIL: Missing ITCH in: $MISSING"
+    exit 1
+fi
+
+echo "=== GATE 3: Security (API key not in URL) ==="
+if grep -rn 'api_key=' app/src/main/java/app/gamenative/service/itch/ --include='*.kt' 2>/dev/null | grep -v '^\s*//' | grep -q .; then
+    echo "✗ FAIL: API key found in URL query string"
+    grep -rn 'api_key=' app/src/main/java/app/gamenative/service/itch/ --include='*.kt' | grep -v '^\s*//'
+    exit 1
+else
+    echo "✓ PASS: No API key in URL"
+fi
+
+echo "=== GATE 4: No runBlocking in itch service ==="
+if grep -rn 'runBlocking' app/src/main/java/app/gamenative/service/itch/ --include='*.kt' 2>/dev/null | grep -q .; then
+    echo "⚠ WARN: runBlocking found (acceptable pre-Phase 3, blocking post-Phase 3)"
+    grep -rn 'runBlocking' app/src/main/java/app/gamenative/service/itch/ --include='*.kt'
+else
+    echo "✓ PASS: No runBlocking"
+fi
+
+echo "=== GATE 5: No new OkHttpClient instantiation ==="
+if grep -rn 'OkHttpClient()' app/src/main/java/app/gamenative/service/itch/ --include='*.kt' 2>/dev/null | grep -q .; then
+    echo "⚠ WARN: New OkHttpClient() found (acceptable pre-Phase 3, blocking post-Phase 3)"
+    grep -rn 'OkHttpClient()' app/src/main/java/app/gamenative/service/itch/ --include='*.kt'
+else
+    echo "✓ PASS: No new OkHttpClient()"
+fi
+
+echo "=== GATE 6: No debug/temp artifacts ==="
+if git diff --cached 2>/dev/null | grep -iE 'TODO.*TEMP|HACK|println\(|System\.out' | grep -q .; then
+    echo "⚠ WARN: Debug artifacts in staged changes"
+else
+    echo "✓ PASS: No debug artifacts"
+fi
+
+echo ""
+echo "=== ALL GATES EVALUATED ==="
+```
+
+### 16.2 Gate Severity Levels
+
+| Gate | Phase 0-1 | Phase 2 | Phase 3+ | Notes |
+|---|---|---|---|---|
+| G1: Compile | BLOCKING | BLOCKING | BLOCKING | Must always pass |
+| G2: GameSource exhaustive | BLOCKING | BLOCKING | BLOCKING | Prevents compile regression |
+| G3: API key not in URL | WARN | WARN | BLOCKING | Security fix in Phase 3 |
+| G4: No runBlocking | WARN | WARN | BLOCKING | Architecture fix in Phase 3 |
+| G5: No new OkHttpClient | WARN | WARN | BLOCKING | Resource fix in Phase 3 |
+| G6: No debug artifacts | WARN | WARN | BLOCKING | Clean code for merge |
+
+### 16.3 Post-Commit Verification
+After each commit, verify the commit is sound:
+```bash
+# Verify HEAD compiles
+./gradlew :app:compileDebugKotlin --no-daemon 2>&1 | tail -5
+
+# Verify commit message format
+git log --oneline -1
+
+# Verify no unintended files
+git diff --stat HEAD~1
+```
+
+## 17) Commit & Push Automation
+
+### 17.1 Commit Message Convention
+Follow [Conventional Commits](https://www.conventionalcommits.org/) scoped to itch:
+
+```
+<type>(itch): <description>
+
+[optional body with issue refs]
+```
+
+**Types:**
+| Type | When |
+|---|---|
+| `feat(itch):` | New functionality (filter chip, download support, etc.) |
+| `fix(itch):` | Bug fix (Zip Slip, exhaustive when, etc.) |
+| `refactor(itch):` | Code restructuring without behavior change |
+| `security(itch):` | Security fix (API key transport, path traversal) |
+| `test(itch):` | Adding/fixing tests |
+| `docs(itch):` | Documentation-only changes |
+| `chore(itch):` | Build/config changes |
+
+**Examples:**
+```
+feat(itch): add source filter chip to library bottom sheet
+
+Closes I-003. Adds FlowFilterChip for itch.io toggle with state
+propagation through LibraryListPane to LibraryViewModel.
+
+fix(itch): patch Zip Slip vulnerability in download extraction
+
+Closes I-011 (partial). Validates canonical path of extracted entries
+against destination directory before writing.
+
+security(itch): move API key from URL query to Authorization header
+
+Closes I-011 (partial). Download URLs no longer contain plaintext
+API key. Uses Bearer token header instead.
+```
+
+### 17.2 Commit Workflow (Per-Session)
+```bash
+cd /home/kurt/GameNative
+
+# 1. Run gate check
+bash tools/gate-check.sh
+
+# 2. Review changes
+git diff --stat
+git diff  # full review
+
+# 3. Stage selectively (prefer atomic commits per phase task)
+git add -p  # interactive staging
+
+# 4. Commit with conventional message
+git commit -m "feat(itch): <description>"
+
+# 5. Push
+git push origin feat/itchio
+
+# 6. Update this document's HEAD SHA
+# (edit line 3 of ITCHIO_LIVING.md with new SHA)
+```
+
+### 17.3 Atomic Commit Strategy
+Each commit should correspond to **one logical unit** from the phase checklist:
+- **Good:** "fix(itch): add ITCH branch to GameFeedbackUtils when block" — single exhaustive-when fix
+- **Bad:** "feat(itch): fix everything" — multiple unrelated changes
+- **Exception:** Phase 0 bulk fixes may be batched if they are all compile-fix type
+
+### 17.4 Branch Hygiene
+```bash
+# Rebase on master before opening PR
+git fetch origin
+git rebase origin/master
+
+# If rebase conflicts, resolve and continue
+git rebase --continue
+
+# Force-push after rebase (only on feature branch)
+git push origin feat/itchio --force-with-lease
+
+# Verify after rebase
+./gradlew :app:compileDebugKotlin --no-daemon 2>&1 | tail -5
+```
+
+## 18) Code-Level Fix Catalog
+
+Concrete before/after code blocks for known issues. Each fix has an ID (F-XXX) cross-referenced to Issues (I-XXX).
+
+### F-001: Zip Slip Vulnerability Fix
+**Issue:** I-011 | **Phase:** 3 | **File:** `ItchDownloadManager.kt:271`
+
+**Before (vulnerable):**
+```kotlin
+while (entry != null) {
+    val file = File(destDir, entry.name)
+    
+    if (entry.isDirectory) {
+        file.mkdirs()
+```
+
+**After (safe):**
+```kotlin
+while (entry != null) {
+    val file = File(destDir, entry.name)
+    
+    // Zip Slip guard: ensure extracted path stays within destDir
+    val canonicalDest = destDir.canonicalPath
+    val canonicalFile = file.canonicalPath
+    if (!canonicalFile.startsWith(canonicalDest + File.separator) && canonicalFile != canonicalDest) {
+        throw SecurityException("Zip entry would escape target dir: ${entry.name}")
+    }
+    
+    if (entry.isDirectory) {
+        file.mkdirs()
+```
+
+### F-002: Reuse Shared OkHttpClient
+**Issue:** I-011 | **Phase:** 3 | **File:** `ItchDownloadManager.kt:218`
+
+**Before (leaks):**
+```kotlin
+val client = okhttp3.OkHttpClient()
+val response = client.newCall(request).execute()
+```
+
+**After (shared):**
+```kotlin
+val client = app.gamenative.utils.Net.http
+val response = client.newCall(request).execute()
+```
+
+### F-003: API Key in URL → Authorization Header
+**Issue:** I-011 | **Phase:** 3 | **File:** `ItchDownloadManager.kt:191-192`
+
+**Before (key in URL):**
+```kotlin
+val downloadUrl = "${ItchConstants.ITCH_API_BASE_URL}/uploads/$uploadId/download" +
+    "?download_key_id=$downloadKeyId&api_key=$apiKey"
+```
+
+**After (key in header):**
+```kotlin
+// Store URL without API key
+val downloadUrl = "${ItchConstants.ITCH_API_BASE_URL}/uploads/$uploadId/download" +
+    "?download_key_id=$downloadKeyId"
+// Then in downloadFile(), add to the Request.Builder:
+//   .header("Authorization", "Bearer $apiKey")
+```
+Note: This requires threading `apiKey` through to `downloadFile()` as a parameter.
+
+### F-004: Fix Hardcoded `gameId = 0`
+**Issue:** N/A (new) | **Phase:** 3 | **File:** `ItchService.kt:242-246`
+
+**Before:**
+```kotlin
+val downloadInfo = app.gamenative.data.DownloadInfo(
+    jobCount = 1,
+    gameId = 0,
+    downloadingAppIds = java.util.concurrent.CopyOnWriteArrayList<Int>()
+)
+```
+
+**After:**
+```kotlin
+val downloadInfo = app.gamenative.data.DownloadInfo(
+    jobCount = 1,
+    gameId = gameId.toIntOrNull() ?: 0,
+    downloadingAppIds = java.util.concurrent.CopyOnWriteArrayList<Int>()
+)
+```
+
+### F-005: Replace `runBlocking` with Suspend
+**Issue:** N/A (new) | **Phase:** 3 | **File:** `ItchService.kt:174-178`
+
+**Before:**
+```kotlin
+fun getItchGameOf(gameId: String): ItchGame? {
+    return runBlocking(Dispatchers.IO) {
+        getInstance()?.itchManager?.getGameFromDbById(gameId.toIntOrNull() ?: 0)
+    }
+}
+```
+
+**After:**
+```kotlin
+suspend fun getItchGameOf(gameId: String): ItchGame? {
+    return withContext(Dispatchers.IO) {
+        getInstance()?.itchManager?.getGameFromDbById(gameId.toIntOrNull() ?: 0)
+    }
+}
+```
+Note: All call sites must be updated to call from a coroutine context. Audit with:
+```bash
+grep -rn 'getItchGameOf' app/src/main/java --include='*.kt'
+```
+
+### F-006: Fix OAuth Scope
+**Issue:** I-008 | **Phase:** 1 | **File:** `ItchConstants.kt:48`
+
+**Before:**
+```kotlin
+const val ITCH_SCOPES = "profile:me"
+```
+
+**After (if using OAuth):**
+```kotlin
+const val ITCH_SCOPES = "profile:me profile:owned"
+```
+Note: If the decision is to use API key only (no OAuth), this constant can be removed entirely.
+
+### F-007: Add Uninstall Support
+**Issue:** N/A (new) | **Phase:** 2 | **File:** `ItchAppScreen.kt` (new override)
+
+**Implementation sketch:**
+```kotlin
+override fun onUninstallClick(context: Context, libraryItem: LibraryItem) {
+    val game = itchGame.value ?: return
+    if (!game.isInstalled || game.installPath.isEmpty()) return
+    
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            val installDir = File(game.installPath)
+            if (installDir.exists()) {
+                installDir.deleteRecursively()
+            }
+            
+            // Update database
+            val updatedGame = game.copy(
+                isInstalled = false,
+                installPath = "",
+                installSize = 0L
+            )
+            ItchService.getInstance()?.itchManager?.updateGame(updatedGame)
+            itchGame.value = updatedGame
+            
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, "${game.title} uninstalled", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            Timber.tag("ItchAppScreen").e(e, "Failed to uninstall ${game.title}")
+        }
+    }
+}
+```
+
+## 19) itch.io API Quick Reference
+
+### 19.1 Authentication
+| Method | Endpoint | Notes |
+|---|---|---|
+| API Key | https://itch.io/user/settings/api-keys | Manual user-generated key; full access; never expires |
+| OAuth (implicit) | `https://itch.io/user/oauth?client_id=X&scope=Y&response_type=token&redirect_uri=Z` | Returns token in URL fragment |
+| OAuth (code+PKCE) | Same URL with `response_type=code&code_challenge=X&code_challenge_method=S256` | Exchange at `/api/1/oauth/token` |
+| Profile validation | `GET /api/1/profile` w/ `Authorization: Bearer <key>` | Returns `{user: {id, username, ...}}` |
+
+### 19.2 Library Endpoints
+| Endpoint | Method | Auth | Returns |
+|---|---|---|---|
+| `/api/1/profile/owned-keys?page=N` | GET | Bearer | Paginated list of `{owned_keys: [{id, game: {...}}]}` |
+| `/api/1/games/:id` | GET | Optional | `{game: {id, title, cover_url, p_windows, ...}}` |
+| `/api/1/:game_id/uploads` | GET | Bearer + `download_key_id` | `{uploads: [{id, filename, size, ...}]}` |
+| `/api/1/uploads/:id/download` | GET | Bearer + `download_key_id` | Redirect to signed download URL |
+
+### 19.3 Key Response Shapes
+
+**Owned Keys Response:**
+```json
+{
+  "owned_keys": [
+    {
+      "id": 12345,
+      "game": {
+        "id": 67890,
+        "title": "Example Game",
+        "url": "https://developer.itch.io/example",
+        "cover_url": "https://img.itch.zone/...",
+        "short_text": "Description",
+        "p_windows": true,
+        "p_linux": false,
+        "p_osx": false,
+        "p_android": false,
+        "classification": "game",
+        "created_at": "2024-01-15T10:30:00Z",
+        "min_price": 0,
+        "user": { "username": "developer" }
+      }
+    }
+  ],
+  "per_page": 50
+}
+```
+
+**Uploads Response:**
+```json
+{
+  "uploads": [
+    {
+      "id": 11111,
+      "filename": "game-windows.zip",
+      "size": 104857600,
+      "p_windows": true
+    }
+  ]
+}
+```
+
+### 19.4 Rate Limits & Error Handling
+- itch.io API does not document explicit rate limits, but aggressive polling will get throttled.
+- Current sync throttle: `SYNC_THROTTLE_MILLIS = 5 * 60 * 1000` (5 minutes) in `ItchService.kt:18`.
+- Error responses: `{"errors": ["message"]}` — always check `json.has("errors")`.
+- HTTP 401: invalid/revoked API key — trigger re-auth flow.
+- HTTP 403: scope insufficient — check `ITCH_SCOPES` constant.
+
+### 19.5 OAuth Scopes
+| Scope | Grants |
+|---|---|
+| `profile:me` | Read user profile (id, username, display_name, cover_url) |
+| `profile:owned` | Read owned game keys (required for library sync) |
+| `profile:games` | Read games user has created (developer-only, not needed) |
+| `profile:collections` | Read user collections (not needed for v1) |
+
+**Current bug:** Only `profile:me` is configured ([L-11]). This means OAuth tokens cannot fetch owned keys; only API keys (which have all scopes) currently work.
+
+## 20) Architecture Quick Reference
+
+### 20.1 Store Layer Pattern
+Every store follows this layered architecture. When implementing an itch feature, find the equivalent in GOG or Epic:
+
+```
+XxxConstants.kt     ← Config, URLs, paths, OAuth params
+    ↓
+XxxAuthManager.kt   ← Credential lifecycle (login, store, refresh, logout)
+    ↓
+XxxApiClient.kt     ← HTTP calls to store API (library fetch, game details)
+    ↓
+XxxManager.kt       ← Business logic bridge (sync API → DB, update state)
+    ↓
+XxxDownloadManager.kt ← Download, extract, install, verify
+    ↓
+XxxService.kt       ← Android foreground service (lifecycle, notifications, coordination)
+    ↓
+XxxAppScreen.kt     ← UI (extends BaseAppScreen, Compose)
+    ↓
+XxxGame.kt          ← Room entity
+XxxGameDao.kt       ← Room DAO
+```
+
+### 20.2 Key Integration Points (Non-Itch Files to Update)
+When adding itch support, these non-itch files almost always need a new branch:
+
+| File | Pattern | What to add |
+|---|---|---|
+| `PluviaMain.kt` | `when(gameSource)` blocks | ITCH branch for launch, install-check, prelaunch |
+| `GameFeedbackUtils.kt` | `when(gameSource)` block | ITCH branch for gameName lookup |
+| `ContainerUtils.kt` | `when(gameSource)` blocks ×2 | ITCH branch for drive mapping + install path |
+| `LibraryBottomSheet.kt` | FlowFilterChip list | ITCH toggle chip |
+| `LibraryListPane.kt` | `showItch` prop threading | Prop declaration + call-site pass |
+| `LibraryAppItem.kt` | `when(gameSource)` blocks ×3 | ITCH branch for install status, icon, status text |
+| `BaseAppScreen.kt` | `when(gameSource)` block | ITCH branch for downloadInfo lookup |
+| `LibraryViewModel.kt` | DAO flow collection + count | Itch game flow, filter toggle, count |
+| `PrefManager.kt` | Preference declarations | `showItchInLibrary`, `itchGamesCount`, `itchInstalledGamesCount` |
+| `AndroidManifest.xml` | Service + Activity declarations | ItchService, ItchOAuthActivity, deep link |
+
+### 20.3 Database Schema
+Current schema version: **13** (matches Amazon PR).
+
+**ItchGame entity** (table: `itch_games`):
+| Column | Type | Notes |
+|---|---|---|
+| id | Int (PK) | itch.io game ID |
+| title | String | Game title |
+| url | String | Game page URL |
+| coverUrl | String | Cover image URL |
+| shortText | String | Short description |
+| developer | String | Developer username |
+| pWindows | Boolean | Windows platform flag |
+| pLinux | Boolean | Linux platform flag |
+| pOsx | Boolean | macOS platform flag |
+| pAndroid | Boolean | Android platform flag |
+| minPrice | Int | Minimum price in cents (0 = free/pay-what-you-want) |
+| classification | String | "game", "tool", etc. |
+| createdAt | String | ISO 8601 date |
+| type | AppType | Enum: game, tool |
+| downloadKeyId | Int | Download key ID for authenticated downloads |
+| isInstalled | Boolean | Local install tracking |
+| installPath | String | Local install directory |
+| installSize | Long | Installed size in bytes |
+
+## 21) Citation Index
 
 ### Local GameNative Evidence
 - [L-01] `git diff --name-status origin/master..HEAD` and `git diff --stat origin/master..HEAD` (27 files, +3954/-7).
