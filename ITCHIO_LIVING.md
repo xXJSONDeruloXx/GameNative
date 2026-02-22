@@ -186,8 +186,13 @@ Amazon PR branch shows mature parity patterns across source filter chips, instal
 - `app.gamenative.ui.ItchOAuthActivity` uses OOB + `response_type=code` + PKCE and manual code entry.
 - `ui/screen/auth/ItchOAuthActivity` implements implicit token extraction from fragment but appears unused.
 - Manifest registers custom-scheme callback (`gamenative://itch/callback`) that is not used by current OOB flow.
+- Research update (2026-02-22):
+- Official OAuth docs still describe implicit flow and map `/profile/owned-keys` to `profile:owned`.
+- Live endpoint probes confirm `/oauth/token` is active and accepts `authorization_code` + PKCE parameters.
+- Both `response_type=token` and `response_type=code` are accepted at `/user/oauth` entrypoint.
+- Refresh-token behavior is currently ambiguous in direct probes (server validated authorization-code fields even when `grant_type=refresh_token` was sent).
 - Impact: Fragile auth behavior, maintenance confusion, unclear security model.
-- Evidence: [L-11] [L-23] [L-24] [L-25] [L-18]
+- Evidence: [L-11] [L-23] [L-24] [L-25] [L-18] [E-18] [E-19] [E-20] [E-21] [E-22] [E-23] [E-24]
 - Proposal: Pick one canonical flow and delete/deprecate the others; align constants, manifest, activity, and service comments.
 
 #### I-009: Itch imagery parity gap in game cards
@@ -560,17 +565,48 @@ ls -la app/build/reports/tests/testDebugUnitTest/
 - Next handoff:
 - Run manual UI QA for source toggles/count rendering and itch launch behavior, then start Phase 1 auth consolidation.
 
+### Session 2026-02-22 (Codex, Phase 1 auth research)
+- Scope: Resolve D-001 with fresh itch OAuth evidence and define implementation path.
+- Commands run:
+- Local auth touchpoint audit (`rg` + file reads across constants/auth activities/settings/manifest/service).
+- Upstream docs/source pull + inspection (`itch OAuth docs`, `itch app reactors`, `go-itchio`, `butler` auth path).
+- Live endpoint probes for `/user/oauth`, `/oauth/token`, and `/credentials/info`.
+- Findings added:
+- Confirmed current codebase has three conflicting auth assumptions (implicit, code+PKCE OOB, deep-link callback path).
+- Confirmed scope mismatch for owned library access (`profile:owned` required for `/profile/owned-keys`).
+- Confirmed `/oauth/token` endpoint is active and enforces PKCE-style auth-code parameters.
+- Changes made:
+- Decision register updated to choose one canonical Phase 1 auth path.
+- Validation:
+- N/A (research/documentation step only).
+- Next handoff:
+- Implement canonical auth-code + PKCE + callback flow in code, keep API-key login as fallback.
+
 ## 14) Decision Register
 
 ### Open Product/Architecture Decisions
 
 #### D-001: Canonical itch auth flow
-- Status: Open
-- Options:
-- Use OOB manual code flow (current `app.gamenative.ui.ItchOAuthActivity` shape).
-- Use callback flow with app deep link (`gamenative://itch/callback`) and PKCE.
-- Use static API key only (no OAuth in-app), keep OAuth optional for future.
-- Why this matters: code currently mixes all three assumptions and will keep regressing until one is selected. [L-11] [L-18] [L-23] [L-24] [L-25]
+- Status: Decided (2026-02-22)
+- Decision:
+- Use one canonical OAuth flow for Phase 1: `authorization_code` + PKCE + app callback (`gamenative://itch/callback`) with state validation.
+- Keep static API key login as explicit fallback path while download/access scope behavior is validated in real sessions.
+- Rationale:
+- Existing implementation is internally inconsistent and fragile when maintaining constants/manifest/UI.
+- Upstream itch app and go-itchio implementations use code+PKCE and callback handling.
+- Live probes confirm `/oauth/token` is active for authorization-code exchange with PKCE parameters.
+- OAuth docs scope mapping requires `profile:owned` for `/profile/owned-keys`, which aligns with current library-sync endpoint usage.
+- Alternatives considered:
+- OOB manual code copy/paste only: workable but poorer UX and does not use existing callback manifest wiring.
+- API key only: lowest complexity but weakens parity with other store auth flows and leaves existing OAuth surface inconsistent.
+- Expected impact:
+- Removes duplicate auth behavior and clarifies security model around one canonical flow.
+- Enables Phase 1 completion criteria for auth coherence with minimal UX churn.
+- Follow-up actions:
+- Update constants to code+PKCE settings and correct scopes (`profile:me profile:owned`).
+- Remove/deprecate implicit-token activity path and align settings launch path.
+- Update stale auth comments in constants/service/auth manager to match actual behavior.
+- Why this matters: code currently mixes all three assumptions and will keep regressing until one is selected. [L-11] [L-18] [L-23] [L-24] [L-25] [E-18] [E-19] [E-21] [E-22] [E-23] [E-24]
 
 #### D-002: Near-term download/update ambition
 - Status: Open
@@ -1106,6 +1142,7 @@ override fun onUninstallClick(context: Context, libraryItem: LibraryItem) {
 | `profile:collections` | Read user collections (not needed for v1) |
 
 **Current bug:** Only `profile:me` is configured ([L-11]). This means OAuth tokens cannot fetch owned keys; only API keys (which have all scopes) currently work.
+This mapping is explicitly documented by itch OAuth docs (`profile:owned` => `/profile/owned-keys`). [E-19]
 
 ## 20) Architecture Quick Reference
 
@@ -1260,3 +1297,16 @@ Current schema version: **13** (matches Amazon PR).
   Link: <https://github.com/Magnitus-/gogcli/blob/e960c6f18697654cbf98861ca37422e4b579269b/architecture-documentation/README.md#L13>
 - [E-17] Heroic multi-store backend strategy and feature surface: `/tmp/gamenative-research/heroic/README.md:13` and `/tmp/gamenative-research/heroic/README.md:56`  
   Link: <https://github.com/Heroic-Games-Launcher/HeroicGamesLauncher/blob/d22b1a1507d478c572991011b0cfe0f05ae463bf/README.md#L13>
+- [E-18] itch OAuth docs: implicit-flow intro + `response_type=token` requirement: `/tmp/itch-auth-research/oauth.pretty.html:148` and `/tmp/itch-auth-research/oauth.pretty.html:201`  
+  Link: <https://itch.io/docs/api/oauth>
+- [E-19] itch OAuth docs scope mapping (`profile:owned` grants `/profile/owned-keys`): `/tmp/itch-auth-research/oauth.pretty.html:225`  
+  Link: <https://itch.io/docs/api/oauth>
+- [E-20] itch OAuth docs token permission introspection endpoint (`/credentials/info`): `/tmp/itch-auth-research/oauth.pretty.html:341`  
+  Link: <https://itch.io/docs/api/oauth>
+- [E-21] Live probes (2026-02-22): `/user/oauth` accepts both `response_type=token` and `response_type=code`, `/oauth/token` enforces auth-code + PKCE fields: `/tmp/itch-auth-research/live-oauth-response-types.txt:1` and `/tmp/itch-auth-research/live-oauth-token-pkce.txt:1`
+- [E-22] itch app PKCE login flow (`response_type=code`, `code_challenge`, `state`): `/tmp/itch-auth-research/itch-login.ts:104`  
+  Link: <https://github.com/itchio/itch/blob/master/src/main/reactors/login.ts>
+- [E-23] itch app callback handling (`itch://oauth-callback?code=...&state=...`): `/tmp/itch-auth-research/itch-url.ts:38`  
+  Link: <https://github.com/itchio/itch/blob/master/src/main/reactors/url.ts>
+- [E-24] go-itchio OAuth code exchange endpoint and parameters (`/oauth/token`, `grant_type=authorization_code`, `code_verifier`): `/tmp/itch-auth-research/go-itchio-repo/endpoints_login.go:106`  
+  Link: <https://github.com/itchio/go-itchio/blob/master/endpoints_login.go>
