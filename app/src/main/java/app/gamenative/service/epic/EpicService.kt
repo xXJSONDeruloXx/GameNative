@@ -127,9 +127,9 @@ class EpicService : Service() {
                     // Get instance to clean up service-specific data
                     val instance = getInstance()
                     if (instance != null) {
-                        // Clear all Epic games from database
-                        instance.epicManager.deleteAllGames()
-                        Timber.tag("Epic").i("All Epic games removed from database")
+                        // Clear all nonInstalled Epic games from database
+                        instance.epicManager.deleteAllNonInstalledGames()
+                        Timber.tag("Epic").i("All Non-installed Epic games removed from database")
 
                         // Stop the service
                         stop()
@@ -296,6 +296,21 @@ class EpicService : Service() {
             return getInstance()?.epicManager?.getInstalledExe(appId) ?: ""
         }
 
+        /**
+         * Resolves the effective launch executable for an Epic game.
+         * Container id is expected to be "EPIC_&lt;numericId&gt;" (from library). Returns empty if
+         * game is not installed, no executable can be found, or containerId cannot be parsed.
+         */
+        suspend fun getLaunchExecutable(containerId: String): String {
+            val gameId = try {
+                ContainerUtils.extractGameIdFromContainerId(containerId)
+            } catch (e: Exception) {
+                Timber.tag("Epic").e(e, "Failed to parse Epic containerId: $containerId")
+                return ""
+            }
+            return getInstance()?.epicManager?.getLaunchExecutable(gameId) ?: ""
+        }
+
         suspend fun refreshLibrary(context: Context): Result<Int> {
             return getInstance()?.epicManager?.refreshLibrary(context)
                 ?: Result.failure(Exception("Service not available"))
@@ -455,8 +470,6 @@ class EpicService : Service() {
                 null
             }
         }
-
-
     }
 
     private lateinit var notificationHelper: NotificationHelper
