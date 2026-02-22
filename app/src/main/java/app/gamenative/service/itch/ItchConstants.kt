@@ -9,13 +9,14 @@ import java.security.SecureRandom
 /**
  * Constants for itch.io integration.
  *
- * Phase 1 canonical auth flow:
- * - OAuth 2.0 authorization code + PKCE
- * - App callback via custom scheme (gamenative://itch/callback)
- * - Requested scopes: profile read + owned library sync
+ * Current auth strategy:
+ * - Primary: user-generated API key (full access for library + downloads)
+ * - Secondary (hidden in UI): OAuth 2.0 authorization code + PKCE callback
+ *   kept for future partnership/scope changes.
  *
- * NOTE: You must register an OAuth application on itch.io and fill in your
- * client ID below. The redirect URI must match your OAuth app settings.
+ * NOTE: OAuth constants remain for the retained (hidden) OAuth path.
+ * You must register an OAuth application on itch.io and fill in your
+ * client ID below if OAuth is re-enabled in UI.
  */
 object ItchConstants {
     // itch.io OAuth Configuration
@@ -67,7 +68,7 @@ object ItchConstants {
 
     /**
      * URL to itch.io API keys page where users can generate static API keys.
-     * These keys are kept as a fallback login path during OAuth rollout.
+     * This is the primary end-user login path in current builds.
      */
     const val ITCH_API_KEYS_URL = "https://itch.io/user/settings/api-keys"
 

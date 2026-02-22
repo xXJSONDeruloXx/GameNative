@@ -86,7 +86,6 @@ import kotlinx.coroutines.CoroutineScope
 import timber.log.Timber
 import app.gamenative.PluviaApp
 import app.gamenative.events.AndroidEvent
-import app.gamenative.ui.ItchOAuthActivity
 import app.gamenative.ui.screen.auth.EpicOAuthActivity
 import app.gamenative.ui.screen.auth.GOGOAuthActivity
 
@@ -232,7 +231,7 @@ private suspend fun handleItchAuthentication(
             onLoadingChange(false)
             onDialogClose()
         } else {
-            val error = result.exceptionOrNull()?.message ?: "Authentication failed"
+            val error = formatItchAuthError(result.exceptionOrNull()?.message)
             Timber.e("[SettingsItch]: Authentication failed: $error")
             onLoadingChange(false)
             onError(error)
@@ -240,8 +239,22 @@ private suspend fun handleItchAuthentication(
     } catch (e: Exception) {
         Timber.e(e, "[SettingsItch]: Authentication exception: ${e.message}")
         onLoadingChange(false)
-        onError(e.message ?: "Authentication failed")
+        onError(formatItchAuthError(e.message))
     }
+}
+
+private fun formatItchAuthError(rawMessage: String?): String {
+    val message = rawMessage?.trim().orEmpty()
+    if (message.contains("HTTP 401", ignoreCase = true) ||
+        message.contains("HTTP 403", ignoreCase = true) ||
+        message.contains("invalid key", ignoreCase = true)
+    ) {
+        return "That API key is invalid or revoked. Generate a new API key and try again."
+    }
+    if (message.contains("empty", ignoreCase = true)) {
+        return "Please paste an API key."
+    }
+    return if (message.isBlank()) "Authentication failed." else message
 }
 
 @Composable
@@ -408,40 +421,8 @@ fun SettingsGroupInterface(
         }
     }
 
-    // Itch OAuth (external browser + deep-link callback + PKCE)
-    val itchOAuthLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode != android.app.Activity.RESULT_OK) {
-            val message = result.data?.getStringExtra(ItchOAuthActivity.EXTRA_ERROR)
-                ?: context.getString(R.string.itch_login_cancel)
-            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
-            return@rememberLauncherForActivityResult
-        }
-
-        lifecycleScope.launch {
-            try {
-                itchLoginLoading = true
-                Timber.d("[SettingsItch]: OAuth flow successful, starting service sync")
-                ItchService.start(context)
-                ItchService.triggerLibrarySync(context)
-                android.widget.Toast.makeText(
-                    context,
-                    context.getString(R.string.itch_login_success_title),
-                    android.widget.Toast.LENGTH_SHORT
-                ).show()
-            } catch (e: Exception) {
-                Timber.e(e, "[SettingsItch]: Failed to start post-auth sync")
-                android.widget.Toast.makeText(
-                    context,
-                    e.message ?: "Failed to start itch sync",
-                    android.widget.Toast.LENGTH_LONG
-                ).show()
-            } finally {
-                itchLoginLoading = false
-            }
-        }
-    }
+    // Itch OAuth login is intentionally hidden for now.
+    // Third-party OAuth scopes are currently insufficient for download endpoints.
 
     // Listen for GOG OAuth callback (e.g. from event)
     DisposableEffect(Unit) {
@@ -611,30 +592,30 @@ fun SettingsGroupInterface(
     // Itch.io Integration
     SettingsGroup(title = { Text(text = stringResource(R.string.itch_integration_title)) }) {
         if (!ItchAuthManager.hasStoredCredentials(context)) {
-            // Manual API Key Entry (RECOMMENDED - has all scopes)
+            // API key is the primary auth route for full itch functionality.
             SettingsMenuLink(
                 icon = { androidx.compose.material3.Icon(Icons.Default.Key, contentDescription = null) },
                 colors = settingsTileColorsAlt(),
-                title = { Text(text = "Login with API Key") },
-                subtitle = { Text(text = "Recommended: Full download access") },
+                title = { Text(text = "Connect itch.io") },
+                subtitle = { Text(text = "Sign in with API key (library + downloads)") },
                 onClick = {
                     showItchTokenDialog = true
-                }
-            )
-            // OAuth Flow (May have limited scopes)
-            SettingsMenuLink(
-                icon = { androidx.compose.material3.Icon(Icons.Default.Login, contentDescription = null) },
-                colors = settingsTileColorsAlt(),
-                title = { Text(text = "Login with OAuth") },
-                subtitle = { Text(text = "Browser callback (PKCE)") },
-                onClick = {
-                    val intent = Intent(context, ItchOAuthActivity::class.java)
-                    itchOAuthLauncher.launch(intent)
                 }
             )
         }
         // Logout button - only show if credentials exist
         if (ItchAuthManager.hasStoredCredentials(context)) {
+            SettingsMenuLink(
+                icon = { androidx.compose.material3.Icon(Icons.Default.Key, contentDescription = null) },
+                colors = settingsTileColorsAlt(),
+                title = { Text(text = "Manage API key") },
+                subtitle = { Text(text = "Replace key or switch itch account") },
+                onClick = {
+                    itchTokenInput = ""
+                    itchTokenError = null
+                    showItchTokenDialog = true
+                }
+            )
             SettingsMenuLink(
                 icon = { androidx.compose.material3.Icon(Icons.Default.Logout, contentDescription = null) },
                 colors = settingsTileColorsAlt(),
@@ -1124,7 +1105,7 @@ fun SettingsGroupInterface(
             text = {
                 Column {
                     Text(
-                        text = "Generate an API key at itch.io/user/settings/api-keys, then paste it here. API keys have full access to your library and downloads.",
+                        text = "Use your itch.io API key to connect GameNative.\n\n1) Tap Open API Keys Page\n2) Create a key on itch.io\n3) Paste it here and connect\n\nThis is currently the only sign-in path that supports both library sync and downloads in GameNative.",
                         style = androidx.compose.material3.MaterialTheme.typography.bodyMedium
                     )
                     Spacer(modifier = Modifier.height(16.dp))
@@ -1143,6 +1124,32 @@ fun SettingsGroupInterface(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Open API Keys Page")
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = {
+                            val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
+                            val clipText = clipboard?.primaryClip
+                                ?.takeIf { it.itemCount > 0 }
+                                ?.getItemAt(0)
+                                ?.coerceToText(context)
+                                ?.toString()
+                                ?.trim()
+                                .orEmpty()
+                            if (clipText.isNotEmpty()) {
+                                itchTokenInput = clipText
+                                itchTokenError = null
+                            } else {
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "Clipboard is empty",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Paste from Clipboard")
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                     androidx.compose.material3.OutlinedTextField(
@@ -1281,4 +1288,3 @@ private fun Preview_SettingsScreen() {
         )
     }
 }
-

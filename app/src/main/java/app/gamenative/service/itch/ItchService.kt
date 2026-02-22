@@ -20,7 +20,7 @@ import timber.log.Timber
  *
  * Architecture follows the same pattern as GOGService / EpicService:
  * - ItchApiClient: API layer for interacting with itch.io's APIs
- * - ItchAuthManager: Authentication and credential management (API key + OAuth code/PKCE exchange)
+ * - ItchAuthManager: Authentication and credential management (API key primary; OAuth code/PKCE retained)
  * - ItchManager: Game library and database operations
  * - ItchConstants: Shared constants for itch.io integration
  */

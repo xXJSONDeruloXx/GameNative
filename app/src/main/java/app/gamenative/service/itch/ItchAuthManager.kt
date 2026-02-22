@@ -14,8 +14,8 @@ import java.io.File
  * Manages itch.io authentication and credential storage.
  *
  * Supports:
- * - Static user-generated API key login.
- * - OAuth authorization-code + PKCE exchange, yielding scoped API credentials.
+ * - Static user-generated API key login (current primary UX path).
+ * - OAuth authorization-code + PKCE exchange (retained for future use).
  */
 object ItchAuthManager {
 
