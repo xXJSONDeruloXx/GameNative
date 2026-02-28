@@ -7,7 +7,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -39,28 +38,6 @@ class GOGAppScreen : BaseAppScreen() {
     companion object {
         private const val TAG = "GOGAppScreen"
 
-        // Shared state for uninstall dialog - list of appIds that should show the dialog
-        private val uninstallDialogAppIds = mutableStateListOf<String>()
-
-        fun showUninstallDialog(appId: String) {
-            Timber.tag(TAG).d("showUninstallDialog: appId=$appId")
-            if (!uninstallDialogAppIds.contains(appId)) {
-                uninstallDialogAppIds.add(appId)
-                Timber.tag(TAG).d("Added to uninstall dialog list: $appId")
-            }
-        }
-
-        fun hideUninstallDialog(appId: String) {
-            Timber.tag(TAG).d("hideUninstallDialog: appId=$appId")
-            uninstallDialogAppIds.remove(appId)
-        }
-
-        fun shouldShowUninstallDialog(appId: String): Boolean {
-            val result = uninstallDialogAppIds.contains(appId)
-            Timber.tag(TAG).d("shouldShowUninstallDialog: appId=$appId, result=$result")
-            return result
-        }
-
         /**
          * Formats bytes into a human-readable string (KB, MB, GB).
          * Uses binary units (1024 base).
@@ -91,7 +68,7 @@ class GOGAppScreen : BaseAppScreen() {
         var refreshTrigger by remember { mutableStateOf(0) }
 
         // Listen for install status changes to refresh game data
-        LaunchedEffect(gameId) {
+        androidx.compose.runtime.DisposableEffect(gameId) {
             val installListener: (app.gamenative.events.AndroidEvent.LibraryInstallStatusChanged) -> Unit = { event ->
                 if (event.appId == libraryItem.gameId) {
                     Timber.tag(TAG).d("Install status changed, refreshing game data for $gameId")
@@ -99,6 +76,9 @@ class GOGAppScreen : BaseAppScreen() {
                 }
             }
             app.gamenative.PluviaApp.events.on<app.gamenative.events.AndroidEvent.LibraryInstallStatusChanged, Unit>(installListener)
+            onDispose {
+                app.gamenative.PluviaApp.events.off<app.gamenative.events.AndroidEvent.LibraryInstallStatusChanged, Unit>(installListener)
+            }
         }
 
         var gogGame by remember(gameId, refreshTrigger) { mutableStateOf<GOGGame?>(null) }
@@ -477,70 +457,16 @@ class GOGAppScreen : BaseAppScreen() {
         onHasPartialDownloadChanged: ((Boolean) -> Unit)?,
     ): (() -> Unit)? {
         Timber.tag(TAG).d("[OBSERVE] Setting up observeGameState for appId=${libraryItem.appId}, gameId=${libraryItem.gameId}")
-        val disposables = mutableListOf<() -> Unit>()
-        var currentProgressListener: ((Float) -> Unit)? = null
 
-        // Listen for download status changes
-        val downloadStatusListener: (app.gamenative.events.AndroidEvent.DownloadStatusChanged) -> Unit = { event ->
-            Timber.tag(TAG).d("[OBSERVE] DownloadStatusChanged event received: event.appId=${event.appId}, libraryItem.gameId=${libraryItem.gameId}, match=${event.appId == libraryItem.gameId}")
-            if (event.appId == libraryItem.gameId) {
-                Timber.tag(TAG).d("[OBSERVE] Download status changed for ${libraryItem.appId}, isDownloading=${event.isDownloading}")
-                if (event.isDownloading) {
-                    // Download started - attach progress listener
-                    // GOGService expects numeric gameId
-                    val downloadInfo = GOGService.getDownloadInfo(libraryItem.gameId.toString())
-                    if (downloadInfo != null) {
-                        // Remove previous listener if exists
-                        currentProgressListener?.let { listener ->
-                            downloadInfo.removeProgressListener(listener)
-                        }
-                        // Add new listener and track it
-                        val progressListener: (Float) -> Unit = { progress ->
-                            onProgressChanged(progress)
-                        }
-                        downloadInfo.addProgressListener(progressListener)
-                        currentProgressListener = progressListener
-
-                        // Add cleanup for this listener
-                        disposables += {
-                            currentProgressListener?.let { listener ->
-                                downloadInfo.removeProgressListener(listener)
-                                currentProgressListener = null
-                            }
-                        }
-                    }
-                } else {
-                    // Download stopped/completed - clean up listener
-                    currentProgressListener?.let { listener ->
-                        val downloadInfo = GOGService.getDownloadInfo(libraryItem.gameId.toString())
-                        downloadInfo?.removeProgressListener(listener)
-                        currentProgressListener = null
-                    }
-                    onHasPartialDownloadChanged?.invoke(false)
-                }
-                onStateChanged()
-            }
-        }
-        app.gamenative.PluviaApp.events.on<app.gamenative.events.AndroidEvent.DownloadStatusChanged, Unit>(downloadStatusListener)
-        disposables +=
-            { app.gamenative.PluviaApp.events.off<app.gamenative.events.AndroidEvent.DownloadStatusChanged, Unit>(downloadStatusListener) }
-
-        // Listen for install status changes
-        val installListener: (app.gamenative.events.AndroidEvent.LibraryInstallStatusChanged) -> Unit = { event ->
-            Timber.tag(TAG).d("[OBSERVE] LibraryInstallStatusChanged event received: event.appId=${event.appId}, libraryItem.gameId=${libraryItem.gameId}, match=${event.appId == libraryItem.gameId}")
-            if (event.appId == libraryItem.gameId) {
-                Timber.tag(TAG).d("[OBSERVE] Install status changed for ${libraryItem.appId}, calling onStateChanged()")
-                onStateChanged()
-            }
-        }
-        app.gamenative.PluviaApp.events.on<app.gamenative.events.AndroidEvent.LibraryInstallStatusChanged, Unit>(installListener)
-        disposables +=
-            { app.gamenative.PluviaApp.events.off<app.gamenative.events.AndroidEvent.LibraryInstallStatusChanged, Unit>(installListener) }
-
-        // Return cleanup function
-        return {
-            disposables.forEach { it() }
-        }
+        return observeDownloadAndInstallState(
+            libraryItem = libraryItem,
+            onStateChanged = onStateChanged,
+            onProgressChanged = onProgressChanged,
+            getDownloadInfo = { GOGService.getDownloadInfo(libraryItem.gameId.toString()) },
+            onDownloadStopped = {
+                onHasPartialDownloadChanged?.invoke(false)
+            },
+        )
     }
 
     /**

@@ -50,27 +50,6 @@ class EpicAppScreen : BaseAppScreen() {
     companion object {
         private const val TAG = "EpicAppScreen"
 
-        private val uninstallDialogAppIds = mutableStateListOf<String>()
-
-        fun showUninstallDialog(appId: String) {
-            Timber.tag(TAG).d("showUninstallDialog: appId=$appId")
-            if (!uninstallDialogAppIds.contains(appId)) {
-                uninstallDialogAppIds.add(appId)
-                Timber.tag(TAG).d("Added to uninstall dialog list: $appId")
-            }
-        }
-
-        fun hideUninstallDialog(appId: String) {
-            Timber.tag(TAG).d("hideUninstallDialog: appId=$appId")
-            uninstallDialogAppIds.remove(appId)
-        }
-
-        fun shouldShowUninstallDialog(appId: String): Boolean {
-            val result = uninstallDialogAppIds.contains(appId)
-            Timber.tag(TAG).d("shouldShowUninstallDialog: appId=$appId, result=$result")
-            return result
-        }
-
         // Shared state for install dialog - list of appIds that should show the dialog
         private val installDialogAppIds = mutableStateListOf<String>()
 
@@ -641,95 +620,16 @@ class EpicAppScreen : BaseAppScreen() {
         onHasPartialDownloadChanged: ((Boolean) -> Unit)?,
     ): (() -> Unit)? {
         Timber.tag(TAG).d("[OBSERVE] Setting up observeGameState for appId=${libraryItem.appId}, gameId=${libraryItem.gameId}")
-        val disposables = mutableListOf<() -> Unit>()
-        var currentProgressListener: ((Float) -> Unit)? = null
 
-        // Check if download is already in progress and attach listener immediately
-        val existingDownloadInfo = EpicService.getDownloadInfo(libraryItem.gameId)
-        if (existingDownloadInfo != null && (existingDownloadInfo.getProgress() ?: 0f) < 1f) {
-            Timber.tag(TAG).d("[OBSERVE] Download already in progress for ${libraryItem.gameId}, attaching progress listener immediately")
-            val progressListener: (Float) -> Unit = { progress ->
-                onProgressChanged(progress)
-            }
-            existingDownloadInfo.addProgressListener(progressListener)
-            currentProgressListener = progressListener
-
-            // Add cleanup for this listener
-            disposables += {
-                currentProgressListener?.let { listener ->
-                    existingDownloadInfo.removeProgressListener(listener)
-                    currentProgressListener = null
-                }
-            }
-            // Report current progress immediately
-            existingDownloadInfo.getProgress()?.let { currentProgress ->
-                onProgressChanged(currentProgress)
-            }
-        }
-
-        // Listen for download status changes
-        val downloadStatusListener: (app.gamenative.events.AndroidEvent.DownloadStatusChanged) -> Unit = { event ->
-            Timber.tag(TAG).d("[OBSERVE] DownloadStatusChanged event received: event.appId=${event.appId}, libraryItem.gameId=${libraryItem.gameId}, match=${event.appId == libraryItem.gameId}")
-            if (event.appId == libraryItem.gameId) {
-                Timber.tag(TAG).d("[OBSERVE] Download status changed for ${libraryItem.gameId}, isDownloading=${event.isDownloading}")
-                if (event.isDownloading) {
-                    // Download started - attach progress listener
-                    val downloadInfo = EpicService.getDownloadInfo(libraryItem.gameId)
-                    if (downloadInfo != null) {
-                        // Remove previous listener if exists
-                        currentProgressListener?.let { listener ->
-                            downloadInfo.removeProgressListener(listener)
-                        }
-                        // Add new listener and track it
-                        val progressListener: (Float) -> Unit = { progress ->
-                            Timber.tag(TAG).v("[OBSERVE] Progress update received for ${libraryItem.gameId}: $progress")
-                            onProgressChanged(progress)
-                        }
-                        downloadInfo.addProgressListener(progressListener)
-                        currentProgressListener = progressListener
-
-                        // Add cleanup for this listener
-                        disposables += {
-                            currentProgressListener?.let { listener ->
-                                downloadInfo.removeProgressListener(listener)
-                                currentProgressListener = null
-                            }
-                        }
-                        Timber.tag(TAG).d("[OBSERVE] Progress listener attached for ${libraryItem.gameId}")
-                    }
-                } else {
-                    // Download stopped/completed - clean up listener
-                    currentProgressListener?.let { listener ->
-                        val downloadInfo = EpicService.getDownloadInfo(libraryItem.gameId)
-                        downloadInfo?.removeProgressListener(listener)
-                        currentProgressListener = null
-                    }
-                    onHasPartialDownloadChanged?.invoke(false)
-                    Timber.tag(TAG).d("[OBSERVE] Download stopped/completed, listener cleaned up")
-                }
-                onStateChanged()
-            }
-        }
-        app.gamenative.PluviaApp.events.on<app.gamenative.events.AndroidEvent.DownloadStatusChanged, Unit>(downloadStatusListener)
-        disposables +=
-            { app.gamenative.PluviaApp.events.off<app.gamenative.events.AndroidEvent.DownloadStatusChanged, Unit>(downloadStatusListener) }
-
-        // Listen for install status changes
-        val installListener: (app.gamenative.events.AndroidEvent.LibraryInstallStatusChanged) -> Unit = { event ->
-            Timber.tag(TAG).d("[OBSERVE] LibraryInstallStatusChanged event received: event.appId=${event.appId}, libraryItem.appId=${libraryItem.appId}, match=${event.appId == libraryItem.gameId}")
-            if (event.appId == libraryItem.gameId) {
-                Timber.tag(TAG).d("[OBSERVE] Install status changed for ${libraryItem.appId}, calling onStateChanged()")
-                onStateChanged()
-            }
-        }
-        app.gamenative.PluviaApp.events.on<app.gamenative.events.AndroidEvent.LibraryInstallStatusChanged, Unit>(installListener)
-        disposables +=
-            { app.gamenative.PluviaApp.events.off<app.gamenative.events.AndroidEvent.LibraryInstallStatusChanged, Unit>(installListener) }
-
-        // Return cleanup function
-        return {
-            disposables.forEach { it() }
-        }
+        return observeDownloadAndInstallState(
+            libraryItem = libraryItem,
+            onStateChanged = onStateChanged,
+            onProgressChanged = onProgressChanged,
+            getDownloadInfo = { EpicService.getDownloadInfo(libraryItem.gameId) },
+            onDownloadStopped = {
+                onHasPartialDownloadChanged?.invoke(false)
+            },
+        )
     }
 
     /**

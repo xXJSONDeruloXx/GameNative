@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.net.toUri
 import app.gamenative.PluviaApp
 import app.gamenative.R
+import app.gamenative.data.DownloadInfo
 import app.gamenative.data.GameSource
 import app.gamenative.data.LibraryItem
 import app.gamenative.events.AndroidEvent
@@ -51,6 +52,7 @@ abstract class BaseAppScreen {
     // Shared state for install dialog - map of appId (String) to MessageDialogState
     companion object {
         private val installDialogStates = mutableStateMapOf<String, app.gamenative.ui.component.dialog.state.MessageDialogState>()
+        private val uninstallDialogStates = mutableStateMapOf<String, Boolean>()
 
         fun showInstallDialog(appId: String, state: app.gamenative.ui.component.dialog.state.MessageDialogState) {
             installDialogStates[appId] = state
@@ -62,6 +64,18 @@ abstract class BaseAppScreen {
 
         fun getInstallDialogState(appId: String): app.gamenative.ui.component.dialog.state.MessageDialogState? {
             return installDialogStates[appId]
+        }
+
+        fun showUninstallDialogState(appId: String) {
+            uninstallDialogStates[appId] = true
+        }
+
+        fun hideUninstallDialogState(appId: String) {
+            uninstallDialogStates.remove(appId)
+        }
+
+        fun shouldShowUninstallDialogState(appId: String): Boolean {
+            return uninstallDialogStates[appId] == true
         }
     }
 
@@ -140,6 +154,18 @@ abstract class BaseAppScreen {
      * Handle update click
      */
     abstract fun onUpdateClick(context: Context, libraryItem: LibraryItem)
+
+    protected fun showUninstallDialog(appId: String) {
+        showUninstallDialogState(appId)
+    }
+
+    protected fun hideUninstallDialog(appId: String) {
+        hideUninstallDialogState(appId)
+    }
+
+    protected fun shouldShowUninstallDialog(appId: String): Boolean {
+        return shouldShowUninstallDialogState(appId)
+    }
 
     /**
      * Get the game name for shortcuts and dialogs
@@ -716,6 +742,77 @@ abstract class BaseAppScreen {
      * Check if container configuration editing is supported
      */
     abstract fun supportsContainerConfig(): Boolean
+
+    protected fun observeDownloadAndInstallState(
+        libraryItem: LibraryItem,
+        onStateChanged: () -> Unit,
+        onProgressChanged: (Float) -> Unit,
+        getDownloadInfo: () -> DownloadInfo?,
+        matchesDownloadEvent: (AndroidEvent.DownloadStatusChanged) -> Boolean = { event ->
+            event.appId == libraryItem.gameId
+        },
+        matchesInstallEvent: (AndroidEvent.LibraryInstallStatusChanged) -> Boolean = { event ->
+            event.appId == libraryItem.gameId
+        },
+        onDownloadStarted: (() -> Unit)? = null,
+        onDownloadStopped: (() -> Unit)? = null,
+    ): (() -> Unit) {
+        val disposables = mutableListOf<() -> Unit>()
+        var currentProgressListener: ((Float) -> Unit)? = null
+        var currentDownloadInfo: DownloadInfo? = null
+
+        val detachProgressListener = {
+            currentProgressListener?.let { listener ->
+                currentDownloadInfo?.removeProgressListener(listener)
+            }
+            currentProgressListener = null
+            currentDownloadInfo = null
+        }
+
+        val attachProgressListener: (DownloadInfo?) -> Unit = { downloadInfo ->
+            if (downloadInfo != null && (downloadInfo.getProgress() ?: 0f) < 1f) {
+                detachProgressListener()
+
+                val progressListener: (Float) -> Unit = { progress ->
+                    onProgressChanged(progress)
+                }
+                downloadInfo.addProgressListener(progressListener)
+                currentDownloadInfo = downloadInfo
+                currentProgressListener = progressListener
+                downloadInfo.getProgress()?.let(onProgressChanged)
+            }
+        }
+
+        attachProgressListener(getDownloadInfo())
+
+        val downloadStatusListener: (AndroidEvent.DownloadStatusChanged) -> Unit = { event ->
+            if (matchesDownloadEvent(event)) {
+                if (event.isDownloading) {
+                    attachProgressListener(getDownloadInfo())
+                    onDownloadStarted?.invoke()
+                } else {
+                    detachProgressListener()
+                    onDownloadStopped?.invoke()
+                }
+                onStateChanged()
+            }
+        }
+        PluviaApp.events.on<AndroidEvent.DownloadStatusChanged, Unit>(downloadStatusListener)
+        disposables += { PluviaApp.events.off<AndroidEvent.DownloadStatusChanged, Unit>(downloadStatusListener) }
+
+        val installListener: (AndroidEvent.LibraryInstallStatusChanged) -> Unit = { event ->
+            if (matchesInstallEvent(event)) {
+                onStateChanged()
+            }
+        }
+        PluviaApp.events.on<AndroidEvent.LibraryInstallStatusChanged, Unit>(installListener)
+        disposables += { PluviaApp.events.off<AndroidEvent.LibraryInstallStatusChanged, Unit>(installListener) }
+
+        return {
+            detachProgressListener()
+            disposables.forEach { it() }
+        }
+    }
 
     /**
      * Observe download/install state changes for this app.

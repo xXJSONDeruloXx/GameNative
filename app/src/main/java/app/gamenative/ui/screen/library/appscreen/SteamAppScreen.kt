@@ -254,23 +254,6 @@ private fun buildNotEnoughSpaceState(context: Context, info: InstallSizeInfo): M
  */
 class SteamAppScreen : BaseAppScreen() {
     companion object {
-        // Shared state for uninstall dialog - list of appIds that should show the dialog
-        private val uninstallDialogAppIds = mutableStateListOf<String>()
-
-        fun showUninstallDialog(appId: String) {
-            if (!uninstallDialogAppIds.contains(appId)) {
-                uninstallDialogAppIds.add(appId)
-            }
-        }
-
-        fun hideUninstallDialog(appId: String) {
-            uninstallDialogAppIds.remove(appId)
-        }
-
-        fun shouldShowUninstallDialog(appId: String): Boolean {
-            return uninstallDialogAppIds.contains(appId)
-        }
-
         // Shared state for install dialog - map of gameId to MessageDialogState
         private val installDialogStates = mutableStateMapOf<Int, MessageDialogState>()
 
