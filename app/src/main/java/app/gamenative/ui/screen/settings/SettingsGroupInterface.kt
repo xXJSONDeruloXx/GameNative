@@ -64,8 +64,6 @@ import app.gamenative.ui.component.dialog.LoadingDialog
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -159,10 +157,6 @@ fun SettingsGroupInterface(
     var epicLogoutLoading by rememberSaveable { mutableStateOf(false) }
 
     val coroutineScope = rememberCoroutineScope()
-    // Use Activity lifecycle scope for the OAuth result callback so it stays valid after
-    // returning from GOGOAuthActivity (composition may have been left → rememberCoroutineScope cancelled).
-    val lifecycleScope = LocalLifecycleOwner.current.lifecycleScope
-
     // OAuth launchers are now provided by a parent composable so they can be
     // reused from both Settings and the System Menu. Settings continues to
     // derive its own loading state and toasts via callbacks in that parent.
@@ -177,7 +171,6 @@ fun SettingsGroupInterface(
                 PlatformOAuthHandlers.handleGogAuthentication(
                     context = context,
                     authCode = event.authCode,
-                    coroutineScope = coroutineScope,
                     onLoadingChange = { gogLoginLoading = it },
                     onError = { msg ->
                         if (msg != null) {

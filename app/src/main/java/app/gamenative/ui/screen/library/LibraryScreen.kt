@@ -185,7 +185,6 @@ private fun LibraryScreenContent(
             PlatformOAuthHandlers.handleGogAuthentication(
                 context = context,
                 authCode = code,
-                coroutineScope = lifecycleScope,
                 onLoadingChange = { },
                 onError = { msg ->
                     if (msg != null) {
@@ -224,7 +223,6 @@ private fun LibraryScreenContent(
             PlatformOAuthHandlers.handleEpicAuthentication(
                 context = context,
                 authCode = code,
-                coroutineScope = lifecycleScope,
                 onLoadingChange = { },
                 onError = { msg ->
                     if (msg != null) {
@@ -263,7 +261,6 @@ private fun LibraryScreenContent(
             PlatformOAuthHandlers.handleAmazonAuthentication(
                 context = context,
                 authCode = code,
-                coroutineScope = lifecycleScope,
                 onLoadingChange = { },
                 onError = { msg ->
                     if (msg != null) {

@@ -30,7 +30,19 @@ class GOGApiClient @Inject constructor(
 
     private val httpClient = Net.http
 
-    // TODO: Compose any functions to reduce DRYNESS.
+    private suspend fun getAccessTokenOrFailure(): Result<String> {
+        val credentials = GOGAuthManager.getStoredCredentials(context).getOrNull()
+        val token = credentials?.accessToken?.takeIf { it.isNotBlank() }
+            ?: return Result.failure(Exception("Not authenticated"))
+        return Result.success(token)
+    }
+
+    private fun authorizedRequest(url: String, accessToken: String): Request {
+        return Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer $accessToken")
+            .build()
+    }
 
     /**
      * Get available builds for a game.
@@ -46,19 +58,15 @@ class GOGApiClient @Inject constructor(
     ): Result<BuildsResponse> =
         withContext(Dispatchers.IO) {
             try {
-                val credentials = GOGAuthManager.getStoredCredentials(context).getOrNull()
-                if (credentials == null) {
-                    return@withContext Result.failure(Exception("Not authenticated"))
+                val accessToken = getAccessTokenOrFailure().getOrElse {
+                    return@withContext Result.failure(it)
                 }
 
                 val url = "$GOG_CONTENT_SYSTEM/products/$gameId/os/$platform/builds?generation=$generation"
 
                 Timber.tag("GOG").d("Fetching builds from: $url")
 
-                val request = Request.Builder()
-                    .url(url)
-                    .header("Authorization", "Bearer ${credentials.accessToken}")
-                    .build()
+                val request = authorizedRequest(url, accessToken)
 
                 val response = httpClient.newCall(request).execute()
 
@@ -84,15 +92,10 @@ class GOGApiClient @Inject constructor(
 
     suspend fun fetchDependencyRepository(url: String): Result<DependencyRepository> = withContext(Dispatchers.IO){
         try {
-            val credentials = GOGAuthManager.getStoredCredentials(context).getOrNull()
-
-            if (credentials == null) {
-                return@withContext Result.failure(Exception("Not authenticated"))
+            val accessToken = getAccessTokenOrFailure().getOrElse {
+                return@withContext Result.failure(it)
             }
-            val request = Request.Builder()
-                .url(url)
-                .header("Authorization", "Bearer ${credentials.accessToken}")
-                .build()
+            val request = authorizedRequest(url, accessToken)
 
             val response = httpClient.newCall(request).execute()
 
@@ -122,19 +125,15 @@ class GOGApiClient @Inject constructor(
      */
     suspend fun getDependencyOpenLink(): Result<List<String>> = withContext(Dispatchers.IO) {
         try {
-            val credentials = GOGAuthManager.getStoredCredentials(context).getOrNull()
-            if (credentials == null) {
-                return@withContext Result.failure(Exception("Not authenticated"))
+            val accessToken = getAccessTokenOrFailure().getOrElse {
+                return@withContext Result.failure(it)
             }
 
             val url = "$GOG_CONTENT_SYSTEM/open_link?generation=2&_version=2&path=/dependencies/store/"
 
             Timber.tag("GOG").d("Getting dependency open link")
 
-            val request = Request.Builder()
-                .url(url)
-                .header("Authorization", "Bearer ${credentials.accessToken}")
-                .build()
+            val request = authorizedRequest(url, accessToken)
 
             val response = httpClient.newCall(request).execute()
 
@@ -185,15 +184,11 @@ class GOGApiClient @Inject constructor(
 
     suspend fun fetchDependencyManifest(manifestUrl: String): Result<GOGDependencyManifestMeta> = withContext(Dispatchers.IO) {
         try {
-                val credentials = GOGAuthManager.getStoredCredentials(context).getOrNull()
-                if (credentials == null) {
-                    return@withContext Result.failure(Exception("Not authenticated"))
+                val accessToken = getAccessTokenOrFailure().getOrElse {
+                    return@withContext Result.failure(it)
                 }
 
-                val request = Request.Builder()
-                    .url(manifestUrl)
-                    .header("Authorization", "Bearer ${credentials.accessToken}")
-                    .build()
+                val request = authorizedRequest(manifestUrl, accessToken)
 
                 val response = httpClient.newCall(request).execute()
 
@@ -229,17 +224,13 @@ class GOGApiClient @Inject constructor(
     suspend fun fetchManifest(manifestUrl: String): Result<GOGManifestMeta> =
         withContext(Dispatchers.IO) {
             try {
-                val credentials = GOGAuthManager.getStoredCredentials(context).getOrNull()
-                if (credentials == null) {
-                    return@withContext Result.failure(Exception("Not authenticated"))
+                val accessToken = getAccessTokenOrFailure().getOrElse {
+                    return@withContext Result.failure(it)
                 }
 
                 Timber.tag("GOG").d("Fetching manifest from: $manifestUrl")
 
-                val request = Request.Builder()
-                    .url(manifestUrl)
-                    .header("Authorization", "Bearer ${credentials.accessToken}")
-                    .build()
+                val request = authorizedRequest(manifestUrl, accessToken)
 
                 val response = httpClient.newCall(request).execute()
 
@@ -281,16 +272,12 @@ class GOGApiClient @Inject constructor(
         manifestHash: String,
     ): Result<String> = withContext(Dispatchers.IO) {
         try {
-            val credentials = GOGAuthManager.getStoredCredentials(context).getOrNull()
-            if (credentials == null) {
-                return@withContext Result.failure(Exception("Not authenticated"))
+            val accessToken = getAccessTokenOrFailure().getOrElse {
+                return@withContext Result.failure(it)
             }
             val url = "$GOG_CDN/content-system/v1/manifests/$productId/$platform/$timestamp/$manifestHash"
             Timber.tag("GOG").d("Fetching Gen 1 depot manifest: $url")
-            val request = Request.Builder()
-                .url(url)
-                .header("Authorization", "Bearer ${credentials.accessToken}")
-                .build()
+            val request = authorizedRequest(url, accessToken)
             val response = httpClient.newCall(request).execute()
             if (!response.isSuccessful) {
                 return@withContext Result.failure(Exception("Failed to fetch Gen 1 depot manifest: HTTP ${response.code}"))
@@ -312,9 +299,8 @@ class GOGApiClient @Inject constructor(
     suspend fun fetchDepotManifest(manifestHash: String): Result<DepotManifest> =
         withContext(Dispatchers.IO) {
             try {
-                val credentials = GOGAuthManager.getStoredCredentials(context).getOrNull()
-                if (credentials == null) {
-                    return@withContext Result.failure(Exception("Not authenticated"))
+                val accessToken = getAccessTokenOrFailure().getOrElse {
+                    return@withContext Result.failure(it)
                 }
 
                 // Build depot manifest URL
@@ -323,10 +309,7 @@ class GOGApiClient @Inject constructor(
 
                 Timber.tag("GOG").d("Fetching depot manifest: $url")
 
-                val request = Request.Builder()
-                    .url(url)
-                    .header("Authorization", "Bearer ${credentials.accessToken}")
-                    .build()
+                val request = authorizedRequest(url, accessToken)
 
                 val response = httpClient.newCall(request).execute()
 
@@ -428,9 +411,8 @@ class GOGApiClient @Inject constructor(
         root: String? = null,
     ): Result<SecureLinksResponse> = withContext(Dispatchers.IO) {
         try {
-            val credentials = GOGAuthManager.getStoredCredentials(context).getOrNull()
-            if (credentials == null) {
-                return@withContext Result.failure(Exception("Not authenticated"))
+            val accessToken = getAccessTokenOrFailure().getOrElse {
+                return@withContext Result.failure(it)
             }
 
             // Build secure link URL based on generation
@@ -447,10 +429,7 @@ class GOGApiClient @Inject constructor(
 
             Timber.tag("GOG").d("Getting secure link for product $productId (gen $generation)")
 
-            val request = Request.Builder()
-                .url(url)
-                .header("Authorization", "Bearer ${credentials.accessToken}")
-                .build()
+            val request = authorizedRequest(url, accessToken)
 
             val response = httpClient.newCall(request).execute()
 

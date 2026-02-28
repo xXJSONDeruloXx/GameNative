@@ -133,7 +133,6 @@ fun UserLoginScreen(
             PlatformOAuthHandlers.handleGogAuthentication(
                 context = context,
                 authCode = code,
-                coroutineScope = lifecycleScope,
                 onLoadingChange = { },
                 onError = { msg ->
                     if (msg != null) {
@@ -173,7 +172,6 @@ fun UserLoginScreen(
             PlatformOAuthHandlers.handleEpicAuthentication(
                 context = context,
                 authCode = code,
-                coroutineScope = lifecycleScope,
                 onLoadingChange = { },
                 onError = { msg ->
                     if (msg != null) {
@@ -213,7 +211,6 @@ fun UserLoginScreen(
             PlatformOAuthHandlers.handleAmazonAuthentication(
                 context = context,
                 authCode = code,
-                coroutineScope = lifecycleScope,
                 onLoadingChange = { },
                 onError = { msg ->
                     if (msg != null) {

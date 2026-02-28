@@ -183,7 +183,7 @@ class GOGManager @Inject constructor(
 
             // Fetch games from GOG via GOGDL Python backend
 
-            var gameIdList = GOGApiClient.getGameIds(context)
+            var gameIdList = GOGLegacyApiClient.getGameIds(context)
 
             if (!gameIdList.isSuccess) {
                 val error = gameIdList.exceptionOrNull()
@@ -222,11 +222,11 @@ class GOGManager @Inject constructor(
 
             val games = mutableListOf<GOGGame>()
 
-            // Use direct HTTP calls via GOGApiClient
+            // Use direct HTTP calls via GOGLegacyApiClient
             for ((index, id) in newGameIds.withIndex()) {
                 try {
                     // Fetch game details using direct HTTP call
-                    val result = GOGApiClient.getGameById(context, id)
+                    val result = GOGLegacyApiClient.getGameById(context, id)
 
                     if (result.isSuccess) {
                         val gameDetails = result.getOrNull()
@@ -435,7 +435,7 @@ class GOGManager @Inject constructor(
                 return Result.failure(Exception("Not authenticated"))
             }
 
-            val result = GOGApiClient.getGameById(context, gameId)
+            val result = GOGLegacyApiClient.getGameById(context, gameId)
 
             if (result.isFailure) {
                 return Result.failure(result.exceptionOrNull() ?: Exception("Failed to fetch game data"))
@@ -934,7 +934,7 @@ class GOGManager @Inject constructor(
             Timber.tag("GOG").d("[Cloud Saves] Client ID: $clientId")
 
             // Get clientSecret from build metadata
-            val clientSecret = GOGApiClient.getClientSecret(context, gameId.toString(), installPath) ?: ""
+            val clientSecret = GOGLegacyApiClient.getClientSecret(context, gameId.toString(), installPath) ?: ""
             if (clientSecret.isEmpty()) {
                 Timber.tag("GOG").w("[Cloud Saves] No clientSecret available for game $gameId")
             } else {

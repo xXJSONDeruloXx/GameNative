@@ -3,6 +3,7 @@ package app.gamenative.service.epic
 import android.content.Context
 import app.gamenative.data.EpicGame
 import app.gamenative.service.epic.manifest.EpicManifest
+import app.gamenative.service.sync.CloudSyncConflictResolver
 import app.gamenative.utils.Net
 import java.io.File
 import java.time.Instant
@@ -394,43 +395,14 @@ object EpicCloudSavesManager {
             Timber.tag("Epic").i("[Cloud Saves] Found ${cloudFiles.size} cloud files")
 
             // 4. Compare timestamps and decide what to upload/download
-            val toUpload = mutableListOf<String>()
-            val toDownload = mutableListOf<String>()
-
-            // Check files that exist in both locations
-            val commonPaths = localFiles.keys.intersect(cloudFiles.keys)
-            commonPaths.forEach { path ->
-                val localTime = localFiles[path]!!
-                val cloudTime = cloudFiles[path]!!
-
-                when {
-                    localTime > cloudTime -> {
-                        Timber.tag("Epic").i("[Cloud Saves] Local file is newer: $path (local: $localTime > cloud: $cloudTime)")
-                        toUpload.add(path)
-                    }
-
-                    cloudTime > localTime -> {
-                        Timber.tag("Epic").i("[Cloud Saves] Cloud file is newer: $path (cloud: $cloudTime > local: $localTime)")
-                        toDownload.add(path)
-                    }
-
-                    else -> {
-                        Timber.tag("Epic").d("[Cloud Saves] Files have same timestamp, skipping: $path")
-                    }
-                }
-            }
-
-            // Files that only exist locally should be uploaded
-            (localFiles.keys - commonPaths).forEach { path ->
-                Timber.tag("Epic").i("[Cloud Saves] File only exists locally: $path")
-                toUpload.add(path)
-            }
-
-            // Files that only exist in cloud should be downloaded
-            (cloudFiles.keys - commonPaths).forEach { path ->
-                Timber.tag("Epic").i("[Cloud Saves] File only exists in cloud: $path")
-                toDownload.add(path)
-            }
+            val conflictPlan = CloudSyncConflictResolver.buildPlan(
+                localEntries = localFiles,
+                remoteEntries = cloudFiles,
+                localTimestamp = { it },
+                remoteTimestamp = { it },
+            )
+            val toUpload = conflictPlan.uploadKeys.toMutableList()
+            val toDownload = conflictPlan.downloadKeys.toMutableList()
 
             // 5. Execute downloads first (so we have all cloud files locally before uploading)
             var downloadSuccess = true

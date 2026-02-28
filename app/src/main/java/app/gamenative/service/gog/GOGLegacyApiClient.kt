@@ -12,7 +12,7 @@ import timber.log.Timber
 import java.util.concurrent.TimeUnit
 
 /**
- * Parsed/Formartted details returned by GOGApiClient.
+ * Parsed/formatted details returned by GOGLegacyApiClient.
  */
 data class ParsedGogGame(
     val id: String,
@@ -82,7 +82,7 @@ data class RawGogApiResponse(
  * Direct HTTP client for GOG API operations.
  * Uses GOGAuthManager for authentication tokens.
  */
-object GOGApiClient {
+object GOGLegacyApiClient {
 
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)

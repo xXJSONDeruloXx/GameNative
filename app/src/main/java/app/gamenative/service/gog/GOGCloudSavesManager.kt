@@ -1,6 +1,7 @@
 package app.gamenative.service.gog
 
 import android.content.Context
+import app.gamenative.service.sync.CloudSyncConflictResolver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -252,52 +253,31 @@ class GOGCloudSavesManager(
                 SyncAction.CONFLICT -> {
                     Timber.tag("GOG-CloudSaves").w("Sync conflict detected - comparing timestamps")
 
-                    // Compare timestamps for matching files
                     val localMap = classifier.updatedLocal.associateBy { it.relativePath }
                     val cloudMap = classifier.updatedCloud.associateBy { it.relativePath }
+                    val conflictPlan = CloudSyncConflictResolver.buildPlan(
+                        localEntries = localMap,
+                        remoteEntries = cloudMap,
+                        localTimestamp = { file -> file.updateTimestamp ?: 0L },
+                        remoteTimestamp = { file -> file.updateTimestamp ?: 0L },
+                    )
 
-                    val toUpload = mutableListOf<SyncFile>()
-                    val toDownload = mutableListOf<CloudFile>()
+                    val toUpload = conflictPlan.uploadKeys.mapNotNull(localMap::get).toMutableList()
+                    val toDownload = conflictPlan.downloadKeys.mapNotNull(cloudMap::get).toMutableList()
 
-                    // Check files that exist in both and were both updated
-                    val commonPaths = localMap.keys.intersect(cloudMap.keys)
-                    commonPaths.forEach { path ->
-                        val localFile = localMap[path]!!
-                        val cloudFile = cloudMap[path]!!
-
-                        val localTime = localFile.updateTimestamp ?: 0L
-                        val cloudTime = cloudFile.updateTimestamp ?: 0L
-
-                        when {
-                            localTime > cloudTime -> {
-                                Timber.tag("GOG-CloudSaves").i("Local file is newer: $path (local: $localTime > cloud: $cloudTime)")
-                                toUpload.add(localFile)
-                            }
-                            cloudTime > localTime -> {
-                                Timber.tag("GOG-CloudSaves").i("Cloud file is newer: $path (cloud: $cloudTime > local: $localTime)")
-                                toDownload.add(cloudFile)
-                            }
-                            else -> {
-                                Timber.tag("GOG-CloudSaves").w("Files have same timestamp, skipping: $path")
-                            }
+                    classifier.notExistingRemotely.forEach { file ->
+                        if (toUpload.none { it.relativePath == file.relativePath }) {
+                            toUpload += file
                         }
                     }
+                    classifier.notExistingLocally
+                        .filter { !it.isDeleted }
+                        .forEach { file ->
+                            if (toDownload.none { it.relativePath == file.relativePath }) {
+                                toDownload += file
+                            }
+                        }
 
-                    // Upload files that only exist locally or are newer locally
-                    (localMap.keys - commonPaths).forEach { path ->
-                        toUpload.add(localMap[path]!!)
-                    }
-
-                    // Download files that only exist in cloud or are newer in cloud
-                    (cloudMap.keys - commonPaths).forEach { path ->
-                        toDownload.add(cloudMap[path]!!)
-                    }
-
-                    // Handle files not existing in either location
-                    toUpload.addAll(classifier.notExistingRemotely)
-                    toDownload.addAll(classifier.notExistingLocally.filter { !it.isDeleted })
-
-                    // Execute uploads
                     if (toUpload.isNotEmpty()) {
                         Timber.tag("GOG-CloudSaves").i("Uploading ${toUpload.size} file(s) based on timestamp comparison")
                         toUpload.forEach { file ->
@@ -305,7 +285,6 @@ class GOGCloudSavesManager(
                         }
                     }
 
-                    // Execute downloads
                     if (toDownload.isNotEmpty()) {
                         Timber.tag("GOG-CloudSaves").i("Downloading ${toDownload.size} file(s) based on timestamp comparison")
                         toDownload.forEach { file ->
