@@ -578,6 +578,36 @@ Recommendation: **maybe**.
 
 This is a plausible advanced compatibility/perf knob, but it needs validation per driver/runtime combination before landing.
 
+### 2026-03-09 15:55 — Ludashi / OpenXR / XR integration
+
+The fork README explicitly markets:
+
+- “80% Ludashi 2.9 Backend”
+- StevenMXZ integrations
+
+The code matches that claim in a very literal way. The fork carries:
+
+- a large vendored `app/src/main/cpp/OpenXR-SDK/` tree
+- a new `app/src/main/cpp/xr/*` native renderer/input stack
+- `app/src/main/cpp/CMakeLists.txt.ludashi`
+- a fully implemented `app/src/main/java/com/winlator/XrActivity.java`
+- renderer hooks in `GLRenderer` / `Texture` / related runtime code
+
+Current local `master` only has a stub `com.winlator.XrActivity`, so this is a real fork-only addition.
+
+Why this should **not** be adopted as-is:
+
+- it is an enormous product-direction change, not a normal feature patch
+- it is highly device-specific (`META` / `OCULUS` detection in `XrActivity`)
+- it couples vendor/runtime imports directly into the main native build
+- it makes the fork even less self-contained and harder to maintain upstream
+
+Extra practical warning: a clean local `:app:assembleDebug` of the fork currently fails before APK generation because `app/src/main/cpp/CMakeLists.txt` references `app/src/main/cpp/adrenotools`, but that directory in the fork clone is empty and has no `CMakeLists.txt`.
+
+Recommendation: **no**.
+
+If proper GameNative ever wants XR support, it should be pursued as a deliberate, separately-gated device/platform effort — not by importing this mixed Ludashi/OpenXR tree into the mainline app.
+
 ## What the performance fork lacks vs proper GameNative
 
 The fork is not just “customized”; it is also behind important mainline/upstream work.
@@ -635,6 +665,20 @@ The fork also misses newer GameNative work around:
 
 This last point is worth calling out because the fork README markets “optional login” as a feature, but proper GameNative already has that capability while the fork does not appear to carry the newer skip-login UI.
 
+## Emulator evidence snapshots
+
+I also sanity-checked the current local `master` build already installed on the Android emulator (`app.gamenative` version `0.8.0`) and captured screenshots showing that optional-login / skip-login already exists in proper GameNative.
+
+### Mainline login screen already exposes “Skip login”
+
+![Mainline login screen with Skip login option](assets/mainline-login-skip-option-emulator.png)
+
+### Mainline proceeds into the library after skipping login
+
+![Mainline library after choosing Skip login](assets/mainline-library-skip-login-home-emulator.png)
+
+Note: I did **not** attach equivalent fork runtime screenshots in this pass because a clean local fork build currently fails before APK generation due to missing native build inputs under `app/src/main/cpp/adrenotools/`, which is itself useful evidence about the fork's current integration quality.
+
 ## Recommendation summary
 
 ### Strongest adoption candidates
@@ -660,6 +704,7 @@ This last point is worth calling out because the fork README markets “optional
 - `PerformanceTuner`
 - internal production file explorer
 - ALSA reflector / simulated audio engine wholesale
+- Ludashi / OpenXR / XR tree imports
 
 ## Final recommendation table (working draft)
 
@@ -677,6 +722,7 @@ This last point is worth calling out because the fork README markets “optional
 | Custom artwork override | No | Yes, selective | Add clean metadata/storage-backed override flow |
 | Manual save import/export | No | Maybe | Add guarded utility flow with preview/confirm |
 | Internal file explorer | No | No | Debug-only at most |
+| XR / OpenXR / Ludashi integration | Stub only (`XrActivity`) | No | Separate, device-gated project if ever pursued |
 | Download folder picker helper | Partly (`CustomGameFolderPicker`) | Yes, selective | Generalize existing picker helper |
 | Surface format option | No | Maybe | Advanced graphics option after validation |
 
