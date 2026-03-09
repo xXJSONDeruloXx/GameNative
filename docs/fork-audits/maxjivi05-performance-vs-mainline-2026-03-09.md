@@ -62,6 +62,7 @@ Important early finding: the performance fork includes a lot of **repo pollution
 - logs and debug files in history
 - vendored `OpenXR-SDK` dump in-tree
 - bundled jars and other heavy artifacts
+- large engine/vendor customizations (e.g. Ludashi/OpenXR-oriented changes) mixed directly into app/runtime code
 
 This does **not** automatically make the runtime changes bad, but it is a strong signal that any adoption into proper GameNative must be done as **selective extraction**, never as a merge.
 
@@ -204,6 +205,23 @@ Current implementation-risk note on the fork's distinct features:
 - that means every candidate feature must be split into:
   - **portable concept worth upstreaming**, versus
   - **fork-specific implementation that should not be copied directly**
+
+## Useful fork commit anchors
+
+These are the fork commits that most directly map to the feature buckets below.
+
+- `4c0d0ea1` – global settings persistence + in-game menu restructure
+- `44122192` – per-game executable-path and master-container pollution fixes
+- `b23731ea` – dynamic game drive mounting for master containers / launcher refinements
+- `2285f224` – stricter DXVK/VKD3D variant filtering
+- `cd741f60` – nightly/gplasync filtering and version-sorting refinements
+- `9beb5601` – ImageFs install robustness / retry logic
+- `828c7669` – ALSA UnsatisfiedLinkError fix attempt + component UI feedback
+- `39ab6554` – ALSA reflector / “unbreakable audio engine” work
+- `e4ddb745` – dual DXVK/VKD3D selection / Proton-swap crash fixes
+- `4e4f690a` – “smart save import” and components-manager changes
+- `b8fdc8d4` – internal file explorer + robust save-management groundwork
+- `55e0e45b` – controller-friendly in-game/container menu redesign
 
 ## Detailed audit notes
 
@@ -656,6 +674,7 @@ Features that should not be imported as-is:
 - `PerformanceTuner`
 - ALSA reflector / simulated audio engine redesign
 - internal production file explorer
+- vendored engine / OpenXR / Ludashi-style tree imports
 
 ## Next analysis steps
 
