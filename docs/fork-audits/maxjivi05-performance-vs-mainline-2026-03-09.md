@@ -68,3 +68,117 @@ This does **not** automatically make the runtime changes bad, but it is a strong
 ## Provisional conclusion so far
 
 This fork should be treated as a **feature quarry**, not a merge target.
+
+## Current findings checkpoint
+
+### 2026-03-09 14:34
+
+A very important correction versus the fork README: a surprising amount of the fork's headline feature list is **already present in current GameNative master** in some form.
+
+Confirmed current mainline already contains code for things like:
+
+- master containers
+- app-specific container overrides
+- custom image management
+- save import/export tooling
+- download folder picker helpers
+- surface-format selection
+- global in-game HUD / native-rendering persistence
+- in-game navigation menu support
+- launch dependency abstractions
+- cloud-save platform abstractions
+
+So the fork README is **not a good novelty map** when comparing against today's proper GameNative.
+
+### 2026-03-09 14:38
+
+After deeper file-level comparison, the areas that still look meaningfully distinct are:
+
+1. **More aggressive master-container implementation**
+   - `PrefManager.masterContainers`
+   - `PrefManager.gameContainers`
+   - `PrefManager.appSpecificConfigs`
+   - dynamic per-game A: drive remounting
+   - `ManageContainersDialog`
+   - interception of container `saveData()` to prevent shared-container pollution
+
+2. **A more opinionated Components Manager**
+   - custom filtering / categorization for:
+     - stable
+     - nightly
+     - gplasync
+     - arm64ec
+     - nvapi
+     - sarek
+   - more custom install / uninstall flows
+   - heavier bespoke version parsing
+
+3. **ImageFs install hardening**
+   - retry loop on install
+   - more forceful directory clearing
+   - package redirection symlink setup
+
+4. **Device-specific performance tuning**
+   - root performance mode
+   - non-root Adreno clock forcing
+   - runtime launcher integration for those toggles
+
+5. **Controller-first / in-game menu redesign**
+   - substantial changes in `GameNavigationMenu`, `XServerScreen`, and `NavigationDialog`
+
+6. **ALSA / audio-layer changes**
+   - substantial native diff in `alsa_client.c`
+   - likely targeted at crash / unsatisfied-link resilience, but needs more scrutiny before recommending
+
+### 2026-03-09 14:42
+
+First-pass recommendation quality by area:
+
+- **Master-container ideas:** promising, but high-risk / invasive
+- **Components filtering logic:** probably worth selectively porting
+- **ImageFs retry / cleanup hardening:** promising and likely portable in pieces
+- **Performance tuner:** probably **not** suitable for proper upstream GameNative as-is
+- **ALSA native changes:** unclear / needs careful validation before any recommendation
+- **Menu redesign:** mostly UX taste unless it solves concrete usability bugs
+
+### 2026-03-09 14:45
+
+Another important finding: the fork is missing a lot of newer mainline/upstream work.
+
+Compared with current mainline, the fork still lacks many already-landed fixes and improvements, including recent upstream-side commits such as:
+
+- `cf29ca74` – listRunningWineProcesses stream close fix
+- `1f9018ca` – glibc VirGL library-path fix
+- `ce241623` – Vulkan extension enumeration / edit-container crash fix
+- `336653b9` – external launch while app is open fix
+- `c83c7e21` – Epic language support improvements
+- `8154f565` – gen1 GOG language support
+- `3ff6ec1d` – diacritic-insensitive search
+- `c7bac61e` – SOURCE_TOUCHPAD handling fix
+- `a376d3b4` – Steam download resume fix
+
+So even where the fork adds useful ideas, it is still a **worse overall base** than proper current GameNative.
+
+### 2026-03-09 14:48
+
+Current implementation-risk note on the fork's distinct features:
+
+- the fork has a pattern of mixing legitimate runtime ideas with:
+  - repo pollution
+  - device-specific assumptions
+  - bundled artifacts
+  - invasive low-level changes
+- that means every candidate feature must be split into:
+  - **portable concept worth upstreaming**, versus
+  - **fork-specific implementation that should not be copied directly**
+
+## Next analysis steps
+
+Still to finish in detail:
+
+1. separate **already-in-mainline** features from truly unique ones
+2. inspect the master-container implementation in more depth
+3. inspect unique components-manager logic for portable snippets
+4. inspect ImageFs hardening for cherry-pickable pieces
+5. inspect ALSA changes enough to say whether they are good, risky, or junk
+6. write final recommendation table with “good / maybe / no” for each feature area
