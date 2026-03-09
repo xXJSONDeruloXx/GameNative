@@ -400,6 +400,39 @@ Proper GameNative implementation should:
 - add only the actions that are actually useful and maintainable
 - keep persistence in current settings architecture, not bolt on unrelated dialog code
 
+### 2026-03-09 15:33 — frontend/store UX, setup wizard, and download queueing
+
+The fork also adds a broader frontend/product layer that is separate from the in-game menu work:
+
+- `DownloadQueueManager`
+- `PrefManager.maxConcurrentDownloads`
+- `PrefManager.aioStoreEnabled`
+- `SetupWizardScreen` + `PrefManager.setupCompleted`
+- a more console/TV-style storefront flow (`LibraryFrontendPane`, AIO Store tab model)
+
+What looks useful:
+
+- a cross-store download queue is a real feature
+- configurable concurrent-download count is potentially valuable
+- the fork already has a `DownloadService.getAllDownloads()` aggregator, so a queue layer is a natural extension rather than a total rewrite
+
+What is mostly product/UX taste:
+
+- the AIO Store tab structure
+- the full frontend pane experience
+- the first-run setup wizard
+
+Recommendation:
+
+- **download queue / max-concurrency control:** **maybe / partial yes**
+- **AIO store / frontend pane / setup wizard:** mostly **product-direction dependent**, not an obvious upstream must-have
+
+Proper GameNative implementation should:
+
+- add queue semantics at the service/backend layer first
+- define clear per-service pause/cancel/retry contracts
+- avoid coupling queue logic tightly to one large controller-first frontend UI
+
 ### 2026-03-09 15:35 — custom artwork support
 
 Important nuance: current mainline already supports **fetching SteamGridDB images**, but it does **not** provide a proper user-selected artwork override flow.
@@ -547,6 +580,9 @@ The fork also misses newer GameNative work around:
 - GOG partial-download / script-interpreter handling
 - more recent cloud-save / download manager fixes
 - diacritic-insensitive search
+- skip-login / optional-login support already present in proper GameNative (`login_skip_login` in current mainline resources/UI)
+
+This last point is worth calling out because the fork README markets “optional login” as a feature, but proper GameNative already has that capability while the fork does not appear to carry the newer skip-login UI.
 
 ## Recommendation summary
 
@@ -557,6 +593,7 @@ The fork also misses newer GameNative work around:
 - selective ImageFs installation hardening
 - custom artwork override feature (implemented cleanly)
 - reusable folder-picker refactor
+- maybe a backend download-queue/concurrency layer
 
 ### Plausible but needs design work
 
@@ -583,6 +620,7 @@ The fork also misses newer GameNative work around:
 | Performance tuner / aggressive clocks | No | No | Do not upstream without full restore/device gating |
 | ALSA reflector/audio rewrite | No | No | At most small crash-proofing fallback patches |
 | Expanded in-game menu actions | Partly (`QuickMenu`) | Partial yes | Extend current `QuickMenu` |
+| Frontend/store UX + download queue | Partly (downloads exist, queue/frontend layer does not) | Maybe / partial yes | Backend queue first, UI second |
 | Custom artwork override | No | Yes, selective | Add clean metadata/storage-backed override flow |
 | Manual save import/export | No | Maybe | Add guarded utility flow with preview/confirm |
 | Internal file explorer | No | No | Debug-only at most |
@@ -611,6 +649,7 @@ Features that are interesting but need a fresh design:
 - shared/master containers
 - manual save import/export
 - surface-format advanced graphics option
+- controller-first storefront/frontend UX if product direction wants it
 
 Features that should not be imported as-is:
 
