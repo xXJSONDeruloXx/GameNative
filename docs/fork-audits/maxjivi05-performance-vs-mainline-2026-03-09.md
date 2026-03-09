@@ -291,6 +291,7 @@ What is not good upstream shape:
   - `WineProtonManagerDialog`
 - it hardcodes naming heuristics tied to one release ecosystem
 - its `installWcpRobustly()` flow is simpler than current mainline's more careful validation / trust-review UX
+- some of the fork's marketing/commit framing around “dual DXVK/VKD3D selection” is no longer especially novel, because current local `master` already has substantial DXVK/VKD3D version-selection support in the container config flow
 
 Recommendation: **yes for the filtering/sorting concepts; no for the giant dialog as-is**.
 
