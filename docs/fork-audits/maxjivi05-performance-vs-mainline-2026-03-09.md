@@ -419,6 +419,35 @@ Proper GameNative implementation should:
 - add only the actions that are actually useful and maintainable
 - keep persistence in current settings architecture, not bolt on unrelated dialog code
 
+### 2026-03-09 15:32 — custom install paths
+
+This is a more important feature than the small `DownloadFolderPicker` helper by itself.
+
+What the fork adds:
+
+- persisted custom install-path support across multiple stores, with service-level helpers such as:
+  - `SteamService.setCustomInstallPath()`
+  - `EpicService.setCustomInstallPath()`
+  - `GOGService.setCustomInstallPath()`
+  - `AmazonService.setCustomInstallPath()`
+- UI flows that let the user choose either the parent folder or the final game folder
+- per-store path normalization/sanitization before persisting to DB
+
+Current local `master` does not appear to have equivalent `setCustomInstallPath(...)` flows yet.
+
+What is good:
+
+- this is a real end-user feature, not just a cosmetic change
+- the fork persists the chosen path in each platform's own data model instead of hiding it only in UI state
+
+What should be improved:
+
+- the logic is duplicated across store services
+- folder-name sanitization / “did the user pick the parent or the leaf folder?” logic should be centralized
+- picker UX and persistence should likely share one cross-platform install-path service
+
+Recommendation: **yes, worth adopting in a cleaner centralized form**.
+
 ### 2026-03-09 15:33 — frontend/store UX, setup wizard, and download queueing
 
 The fork also adds a broader frontend/product layer that is separate from the in-game menu work:
@@ -518,6 +547,8 @@ Reason:
 
 ### 2026-03-09 15:45 — download folder picker helper
 
+This is best viewed as an enabling utility for the fork's custom install-path feature, not as a major standalone feature.
+
 What the fork adds:
 
 - `DownloadFolderPicker` helper around `OpenDocumentTree`
@@ -533,6 +564,7 @@ Proper implementation:
 
 - generalize current picker helper into a reusable folder-picker utility
 - keep persistable URI permissions where appropriate
+- wire it into centralized custom-install-path support instead of scattering folder-picking logic across store UIs
 
 ### 2026-03-09 15:47 — surface format option
 
@@ -610,6 +642,7 @@ This last point is worth calling out because the fork README markets “optional
 - container-config / Wine-version-change hardening from `ContainerUtils`
 - selective component filtering/sorting improvements
 - selective ImageFs installation hardening
+- custom install-path support across stores
 - custom artwork override feature (implemented cleanly)
 - reusable folder-picker refactor
 - maybe a backend download-queue/concurrency layer
@@ -639,6 +672,7 @@ This last point is worth calling out because the fork README markets “optional
 | Performance tuner / aggressive clocks | No | No | Do not upstream without full restore/device gating |
 | ALSA reflector/audio rewrite | No | No | At most small crash-proofing fallback patches |
 | Expanded in-game menu actions | Partly (`QuickMenu`) | Partial yes | Extend current `QuickMenu` |
+| Custom install paths | No | Yes | Centralize cross-store install-path persistence |
 | Frontend/store UX + download queue | Partly (downloads exist, queue/frontend layer does not) | Maybe / partial yes | Backend queue first, UI second |
 | Custom artwork override | No | Yes, selective | Add clean metadata/storage-backed override flow |
 | Manual save import/export | No | Maybe | Add guarded utility flow with preview/confirm |
@@ -659,6 +693,7 @@ Best feature candidates to adopt in proper GameNative:
 - container-config / Wine-version-change hardening
 - component filtering/sorting improvements
 - parts of ImageFs install hardening
+- custom install-path support
 - custom artwork override support
 - a generalized download-folder picker helper
 - possibly some extra in-game quick-menu actions
