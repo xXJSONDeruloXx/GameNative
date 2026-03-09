@@ -73,79 +73,112 @@ This fork should be treated as a **feature quarry**, not a merge target.
 
 ### 2026-03-09 14:34
 
-A very important correction versus the fork README: a surprising amount of the fork's headline feature list is **already present in current GameNative master** in some form.
+Correction after verifying the **actual current GameNative tree** instead of just diff path names: my earlier overlap assumption was too generous.
 
-Confirmed current mainline already contains code for things like:
+Current local `master` **does not** currently contain fork-only files/features such as:
 
-- master containers
-- app-specific container overrides
-- custom image management
-- save import/export tooling
-- download folder picker helpers
-- surface-format selection
-- global in-game HUD / native-rendering persistence
-- in-game navigation menu support
-- launch dependency abstractions
+- `PrefManager.masterContainers` / `gameContainers` / `appSpecificConfigs`
+- `ManageContainersDialog`
+- `GameNavigationMenu`
+- `CustomImageDialog`
+- `SaveManager`
+- `FileExplorerDialog`
+- `DownloadFolderPicker`
+- `PerformanceTuner`
+- unified `ComponentsManagerDialog`
+- `surfaceFormat` handling in container graphics config
+- global HUD / native-rendering persistence fields in `PrefManager`
+
+What current mainline **does** already have are some adjacent foundations that the fork builds on or duplicates differently:
+
+- `ContainerData.executablePath`
+- general `ContainerUtils` launch/container plumbing
+- `QuickMenu` in the in-game overlay
+- `CustomGameFolderPicker`
+- `SteamGridDB` fetch support
+- `GameMetadataManager`
+- launch-dependency abstractions
 - cloud-save platform abstractions
+- separate component management dialogs (`ContentsManagerDialog`, `DriverManagerDialog`, `WineProtonManagerDialog`)
 
-So the fork README is **not a good novelty map** when comparing against today's proper GameNative.
+So the correct framing is:
+
+- several fork features are **genuinely absent** from current local `master`
+- but many of them should still be implemented by extending existing GameNative systems, **not** by copying the fork literally
 
 ### 2026-03-09 14:38
 
-After deeper file-level comparison, the areas that still look meaningfully distinct are:
+After corrected file-level comparison, the fork's meaningfully distinct additions cluster into these buckets:
 
-1. **More aggressive master-container implementation**
+1. **Master/shared container system**
    - `PrefManager.masterContainers`
    - `PrefManager.gameContainers`
    - `PrefManager.appSpecificConfigs`
-   - dynamic per-game A: drive remounting
+   - transient per-game A: drive remounting for shared containers
    - `ManageContainersDialog`
-   - interception of container `saveData()` to prevent shared-container pollution
+   - `Container.onSaveDataCallback` interception to avoid master-container pollution
 
-2. **A more opinionated Components Manager**
-   - custom filtering / categorization for:
-     - stable
-     - nightly
-     - gplasync
-     - arm64ec
-     - nvapi
-     - sarek
-   - more custom install / uninstall flows
-   - heavier bespoke version parsing
+2. **Unified / opinionated components manager**
+   - new `ComponentsManagerDialog`
+   - custom categorization for stable / nightly / gplasync / arm64ec / nvapi / sarek / bionic
+   - ad-hoc version parsing and filtering logic
 
 3. **ImageFs install hardening**
-   - retry loop on install
-   - more forceful directory clearing
+   - retry loop during imagefs extraction
+   - more forceful root-dir clearing
    - package redirection symlink setup
+   - recursive chmod after extraction
 
 4. **Device-specific performance tuning**
+   - `PerformanceTuner`
    - root performance mode
    - non-root Adreno clock forcing
-   - runtime launcher integration for those toggles
+   - launcher integration for those toggles
 
-5. **Controller-first / in-game menu redesign**
-   - substantial changes in `GameNavigationMenu`, `XServerScreen`, and `NavigationDialog`
+5. **Expanded in-game menu / controller UX**
+   - `GameNavigationMenu`
+   - expanded `NavigationDialog` actions
+   - `XServerScreen` support for pause, HUD toggle, native-rendering toggle, touch transparency, joystick visibility, task manager, etc.
 
-6. **ALSA / audio-layer changes**
-   - substantial native diff in `alsa_client.c`
-   - likely targeted at crash / unsatisfied-link resilience, but needs more scrutiny before recommending
+6. **ALSA / audio reflector changes**
+   - major `alsa_client.c` rewrite
+   - Java-side `ALSAClient` reflector mode and simulated stream path
+   - new audio-driver constants including `alsa-reflector`
+
+7. **Custom artwork + save-management UX**
+   - `CustomImageDialog`
+   - `SaveManager`
+   - `GameMetadataManager.customImagePath`
+   - artwork stored under `remote_games_metadata/<appId>`
+
+8. **Internal utility/debug UX**
+   - `FileExplorerDialog`
+   - `DownloadFolderPicker`
+   - `surfaceFormat` exposure in graphics/container config
 
 ### 2026-03-09 14:42
 
-First-pass recommendation quality by area:
+Updated first-pass recommendation quality by area:
 
-- **Master-container ideas:** promising, but high-risk / invasive
-- **Components filtering logic:** probably worth selectively porting
+- **Master-container ideas:** promising concept, but invasive and currently bug-prone in the fork
+- **Components filtering logic:** worth selectively porting into existing manager UX
 - **ImageFs retry / cleanup hardening:** promising and likely portable in pieces
-- **Performance tuner:** probably **not** suitable for proper upstream GameNative as-is
-- **ALSA native changes:** unclear / needs careful validation before any recommendation
-- **Menu redesign:** mostly UX taste unless it solves concrete usability bugs
+- **Performance tuner:** should **not** be upstreamed as-is
+- **ALSA/audio reflector changes:** do **not** adopt wholesale without strong validation
+- **Expanded in-game menu actions:** worth partial adoption into current `QuickMenu`, not as a fork import
+- **Custom artwork support:** likely worth adding, but with cleaner metadata/storage design
+- **Manual save import/export:** potentially worth adding as an optional utility feature
+- **Internal file explorer:** probably not suitable for production UI
+- **Download folder picker helper:** useful as a refactor/generalization of existing picker helpers
+- **Surface format option:** small, plausible feature candidate if validated per-driver
 
 ### 2026-03-09 14:45
 
 Another important finding: the fork is missing a lot of newer mainline/upstream work.
 
-Compared with current mainline, the fork still lacks many already-landed fixes and improvements, including recent upstream-side commits such as:
+Important nuance: most of the items below are present in `upstream/master`, not necessarily in the local `master` snapshot (`c37289a5`) because local `master` is 10 commits behind upstream.
+
+Compared with proper current upstream/mainline, the fork still lacks many already-landed fixes and improvements, including recent upstream-side commits such as:
 
 - `cf29ca74` – listRunningWineProcesses stream close fix
 - `1f9018ca` – glibc VirGL library-path fix
@@ -172,13 +205,367 @@ Current implementation-risk note on the fork's distinct features:
   - **portable concept worth upstreaming**, versus
   - **fork-specific implementation that should not be copied directly**
 
+## Detailed audit notes
+
+### 2026-03-09 15:02 — master/shared containers
+
+What the fork adds:
+
+- a shared-container assignment model via:
+  - `PrefManager.masterContainers`
+  - `PrefManager.gameContainers`
+  - `PrefManager.appSpecificConfigs`
+- dynamic A: drive remapping per app when a shared container is reused
+- a UI for deleting/inspecting container assignments (`ManageContainersDialog`)
+- a `Container.onSaveDataCallback` hook so game-specific edits do not overwrite the shared master container's on-disk `config.json`
+
+Why the idea is attractive:
+
+- fewer duplicated containers on disk
+- faster setup for large libraries
+- cleaner path toward “one Wine/runtime base, many app overlays”
+
+What is wrong with the fork implementation:
+
+- it introduces a **global persistence side-channel** (`onSaveDataCallback`) inside `Container.saveData()`; that is too implicit for upstream-quality code
+- it stores per-game overrides as opaque JSON strings in preferences, which is fragile for migration/debugging
+- the drive-remounting implementation is inconsistent:
+  - one code path correctly rebuilds drives with no separators
+  - another path in `getOrCreateContainer()` uses `joinToString(",")`, even though nearby comments explicitly say the drive string format is parsed as contiguous entries like `D:/pathE:/path`
+  - so there is a real bug/risk here, not just style disagreement
+- the model mixes persistent container state with transient per-launch state
+
+Recommendation: **partial yes, but only as a fresh implementation**.
+
+What proper GameNative should do instead:
+
+- introduce an explicit `ContainerAssignmentRepository` / `SharedContainerRepository`
+- treat shared-container state and per-app overlay state as separate persistence domains
+- build per-launch drive mappings in memory, without writing them back to the shared container unless explicitly requested
+- replace the callback hack with a deliberate save API, e.g. “save shared base” vs “save app overlay”
+
+### 2026-03-09 15:08 — components manager overhaul / filtering
+
+What the fork adds:
+
+- a single large `ComponentsManagerDialog`
+- DXVK/VKD3D/Box64/FEXCore/Wine filtering for:
+  - stable
+  - nightly
+  - gplasync
+  - arm64ec
+  - nvapi
+  - sarek
+  - bionic
+- custom version parsing / category sorting
+
+What looks genuinely useful:
+
+- the stricter DXVK/VKD3D filtering ideas are good
+- the category-aware version sorting is useful
+- a shared classification utility could reduce confusion in component selection
+
+What is not good upstream shape:
+
+- the dialog is ~1,100 lines and duplicates logic already spread across:
+  - `ContentsManagerDialog`
+  - `DriverManagerDialog`
+  - `WineProtonManagerDialog`
+- it hardcodes naming heuristics tied to one release ecosystem
+- its `installWcpRobustly()` flow is simpler than current mainline's more careful validation / trust-review UX
+
+Recommendation: **yes for the filtering/sorting concepts; no for the giant dialog as-is**.
+
+What proper GameNative should do instead:
+
+- extract a shared release-classification utility
+- reuse the existing dialogs, or first build a shared backend model before any UI merge
+- keep current trust / validation flows from mainline
+
+### 2026-03-09 15:14 — ImageFs installer hardening
+
+What the fork adds:
+
+- bounded retry loop during imagefs install
+- more aggressive directory clearing
+- recursive chmod after extraction
+- package redirection symlink repair for bionic installs
+
+What looks useful:
+
+- retries and better cleanup are reasonable responses to flaky installs
+- symlink repair likely addresses real package-name assumptions in redirected guest paths
+
+What is risky or sloppy:
+
+- hardcoded package aliases (`com.winlator.cmod`, `app.gamenative`)
+- recursive `0755` chmod across the extracted tree is broad and not obviously the right permission model
+- destructive clear-and-retry is not as good as extract-to-temp + verify + atomic swap
+
+Recommendation: **partial yes**.
+
+What proper GameNative should do instead:
+
+- extract to a temp directory first, validate, then swap into place
+- keep retries bounded and logged
+- derive redirect targets from `BuildConfig.APPLICATION_ID` / package metadata, with compatibility aliases centralized in one place
+
+### 2026-03-09 15:20 — performance tuner / aggressive clocks
+
+What the fork adds:
+
+- `PerformanceTuner.java`
+- root performance mode that loops and rewrites CPU/GPU governor/sysfs values every second
+- non-root Adreno mode via native helper
+- launcher integration that enables those modes on game start
+
+Why this is not acceptable upstream as-is:
+
+- it does **not restore prior CPU/GPU governor/frequency state** on shutdown; it mostly just stops reapplying
+- it assumes Adreno-specific and device-specific sysfs nodes
+- it keeps a persistent `su` shell and repeatedly writes to kernel nodes
+- failures are easy to hide and hard to support across device vendors
+
+Recommendation: **no**.
+
+If upstream ever wants a performance mode, it should be:
+
+- capability-detected
+- opt-in
+- fully restorable
+- heavily device-gated
+- accompanied by telemetry / user warnings
+
+### 2026-03-09 15:24 — ALSA / audio reflector work
+
+What the fork adds:
+
+- major native rewrite in `alsa_client.c`
+- Java-side `ALSAClient` reflector mode with simulated stream + mirror stream behavior
+- new `alsa-reflector` driver mode constants
+
+Why this is risky:
+
+- it is a large low-level audio redesign, not a narrow bugfix
+- “simulated” writes can mask correctness problems
+- it is difficult to reason about without device-level testing and regression coverage
+
+Small potentially-portable idea:
+
+- graceful fallback when native symbols / JNI methods are unavailable, instead of crashing
+
+Recommendation: **do not adopt wholesale**. At most, consider a much smaller defensive fallback patch after reproducing a real crash in mainline.
+
+### 2026-03-09 15:30 — in-game menu / controller-first UX
+
+Current mainline already has a Compose `QuickMenu` plus suspend/resume handling in `XServerScreen`.
+
+What the fork adds beyond that:
+
+- pause/resume game action
+- HUD toggle + global persistence
+- native-rendering toggle + global persistence
+- touch transparency dialog
+- joystick visibility toggle
+- task manager, controller manager, motion controls, screen effect shortcuts
+- nested controller/touch/tools/display menu structure
+
+Recommendation: **partial yes**.
+
+Proper GameNative implementation should:
+
+- extend the current `QuickMenu`, not replace it with fork `GameNavigationMenu` / old-style `NavigationDialog`
+- reuse current overlay pause/focus model
+- add only the actions that are actually useful and maintainable
+- keep persistence in current settings architecture, not bolt on unrelated dialog code
+
+### 2026-03-09 15:35 — custom artwork support
+
+Important nuance: current mainline already supports **fetching SteamGridDB images**, but it does **not** provide a proper user-selected artwork override flow.
+
+What the fork adds:
+
+- `CustomImageDialog`
+- artwork select / fetch / reset actions
+- `GameMetadataManager.customImagePath`
+- storage under `files/remote_games_metadata/<appId>/custom_artwork.jpg`
+
+What is good:
+
+- the user-facing feature is legitimate and useful
+- it fits well with GameNative's existing image-fetch story
+
+What should be cleaned up:
+
+- storing an **absolute path** in metadata is weaker than storing a stable relative asset key / convention
+- the override should plug into the existing image-resolution pipeline cleanly, rather than being scattered through UI code
+
+Recommendation: **yes, likely worth adding**, but with cleaner metadata and storage semantics.
+
+### 2026-03-09 15:39 — save import/export tooling
+
+What the fork adds:
+
+- `SaveManager.exportSave()`
+- `SaveManager.importSave()`
+- UI hooks for manual ZIP-based save backup/restore
+
+What is useful:
+
+- manual save backup/restore is a real quality-of-life feature
+- it complements cloud saves instead of replacing them
+
+What is risky:
+
+- export is heuristic/title-based and may miss or over-include folders
+- import does aggressive path guessing for “blind” ZIPs
+- overwrite/preview behavior is minimal
+
+Recommendation: **maybe / partial yes**.
+
+Proper implementation should include:
+
+- preview of detected save paths
+- overwrite confirmation
+- clearer per-platform path detection
+- possibly a “best-effort manual utility” label so users understand its limitations
+
+### 2026-03-09 15:42 — internal file explorer
+
+What the fork adds:
+
+- `FileExplorerDialog` with copy/cut/paste/delete over app-internal paths
+
+Recommendation: **no for production UI**.
+
+Reason:
+
+- too much destructive power for too little user value
+- better suited to debug builds or developer tools only
+
+### 2026-03-09 15:45 — download folder picker helper
+
+What the fork adds:
+
+- `DownloadFolderPicker` helper around `OpenDocumentTree`
+- persistable URI-permission attempt
+
+Current mainline already has an adjacent helper:
+
+- `CustomGameFolderPicker`
+
+Recommendation: **yes as a refactor target**, not as a separate parallel abstraction.
+
+Proper implementation:
+
+- generalize current picker helper into a reusable folder-picker utility
+- keep persistable URI permissions where appropriate
+
+### 2026-03-09 15:47 — surface format option
+
+What the fork adds:
+
+- `surfaceFormat=BGRA8` in default graphics driver config
+- graphics UI exposure for surface format
+- propagation into wrapper env / xserver configuration
+
+Recommendation: **maybe**.
+
+This is a plausible advanced compatibility/perf knob, but it needs validation per driver/runtime combination before landing.
+
+## What the performance fork lacks vs proper GameNative
+
+The fork is not just “customized”; it is also behind important mainline/upstream work.
+
+For clarity: this section uses **proper GameNative = upstream/mainline**, not just the slightly older local `master` snapshot in this worktree.
+
+### Security / request integrity features missing in the fork
+
+Current proper GameNative contains infrastructure the fork lacks, including:
+
+- `app/src/main/java/app/gamenative/utils/PlayIntegrity.kt`
+- `app/src/main/java/app/gamenative/utils/KeyAttestationHelper.kt`
+- upstream attestation / namespace-verification request work
+
+That means the fork is missing significant newer security / abuse-hardening work.
+
+### Stability / platform fixes missing in the fork
+
+Notable missing upstream-side fixes include:
+
+- `cf29ca74` – stream/resource close fix in `listRunningWineProcesses`
+- `1f9018ca` – glibc VirGL library-path fix
+- `ce241623` – Vulkan extension enumeration / edit-container crash fix
+- `336653b9` – external launch while app is open fix
+- `a376d3b4` – Steam download resume fix
+- upstream cloud-save retry/error-handling work (for example the AsyncJobFailedException retry fix)
+- pointer/input/external-display fixes such as `c7bac61e` and related upstream controller/input work
+
+### Store / content handling improvements missing in the fork
+
+The fork also misses newer GameNative work around:
+
+- Epic language support
+- gen1 GOG language support
+- GOG partial-download / script-interpreter handling
+- more recent cloud-save / download manager fixes
+- diacritic-insensitive search
+
+## Recommendation summary
+
+### Strongest adoption candidates
+
+- selective component filtering/sorting improvements
+- selective ImageFs installation hardening
+- custom artwork override feature (implemented cleanly)
+- reusable folder-picker refactor
+
+### Plausible but needs design work
+
+- shared/master containers
+- manual save import/export
+- expanded in-game quick-menu actions
+- surface-format advanced setting
+
+### Reject as-is
+
+- whole-fork merge
+- `PerformanceTuner`
+- internal production file explorer
+- ALSA reflector / simulated audio engine wholesale
+
+## Provisional chat-ready summary
+
+Short version:
+
+- `maxjivi05/GameNative-Performance` has some genuinely interesting ideas
+- but it is also behind important newer GameNative/upstream work and contains a lot of repo hygiene / implementation-quality problems
+- it should be mined selectively, **never merged wholesale**
+
+Best feature candidates to adopt in proper GameNative:
+
+- component filtering/sorting improvements
+- parts of ImageFs install hardening
+- custom artwork override support
+- a generalized download-folder picker helper
+- possibly some extra in-game quick-menu actions
+
+Features that are interesting but need a fresh design:
+
+- shared/master containers
+- manual save import/export
+- surface-format advanced graphics option
+
+Features that should not be imported as-is:
+
+- `PerformanceTuner`
+- ALSA reflector / simulated audio engine redesign
+- internal production file explorer
+
 ## Next analysis steps
 
-Still to finish in detail:
+Remaining work before final user-facing summary:
 
-1. separate **already-in-mainline** features from truly unique ones
-2. inspect the master-container implementation in more depth
-3. inspect unique components-manager logic for portable snippets
-4. inspect ImageFs hardening for cherry-pickable pieces
-5. inspect ALSA changes enough to say whether they are good, risky, or junk
-6. write final recommendation table with “good / maybe / no” for each feature area
+1. tighten the recommendation summary into a cleaner final table
+2. double-check a few omission claims against local `master` vs `upstream/master`
+3. keep expanding the journal only where new evidence changes the recommendation
