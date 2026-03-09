@@ -282,6 +282,27 @@ What proper GameNative should do instead:
 - reuse the existing dialogs, or first build a shared backend model before any UI merge
 - keep current trust / validation flows from mainline
 
+### 2026-03-09 15:11 — container config robustness / Wine-version-change handling
+
+Separate from shared containers, the fork also carries a useful cluster of container-application hardening in `ContainerUtils`:
+
+- safer `user.reg` reads/writes behind existence checks and `try/catch`
+- guard against missing GPU vendor mapping when writing `VideoPciVendorID`
+- on Wine version change:
+  - re-extract container pattern files
+  - clear cached Steam DLL markers
+  - clear stale original-DLL cache
+
+This is one of the more cherry-pickable areas in the fork because it is solving concrete failure cases, not inventing a whole new architecture.
+
+Recommendation: **yes, likely worth selectively porting**.
+
+Proper GameNative implementation should:
+
+- port the defensive registry-read/write handling
+- port Wine-version-change refresh logic as an isolated fix
+- keep it separate from the fork's master-container machinery
+
 ### 2026-03-09 15:14 — ImageFs installer hardening
 
 What the fork adds:
@@ -489,6 +510,22 @@ Current proper GameNative contains infrastructure the fork lacks, including:
 
 That means the fork is missing significant newer security / abuse-hardening work.
 
+### Notable local-`master` subsystems absent in the fork
+
+Even before considering the extra 10 upstream commits, the local `master` snapshot already contains subsystems the fork does not, including:
+
+- `app/src/main/java/app/gamenative/ui/component/QuickMenu.kt`
+- `app/src/main/java/app/gamenative/externaldisplay/IMEInputReceiver.kt`
+- `app/src/main/java/com/winlator/xenvironment/components/WineRequestComponent.java`
+- the local `PlayIntegrity` / `KeyAttestationHelper` stack already mentioned above
+
+That means the fork is missing some newer GameNative architecture around:
+
+- in-game overlay UX
+- external-display keyboard handling
+- Wine-to-Android external request handling
+- request-integrity/security plumbing
+
 ### Stability / platform fixes missing in the fork
 
 Notable missing upstream-side fixes include:
@@ -515,6 +552,7 @@ The fork also misses newer GameNative work around:
 
 ### Strongest adoption candidates
 
+- container-config / Wine-version-change hardening from `ContainerUtils`
 - selective component filtering/sorting improvements
 - selective ImageFs installation hardening
 - custom artwork override feature (implemented cleanly)
@@ -534,6 +572,23 @@ The fork also misses newer GameNative work around:
 - internal production file explorer
 - ALSA reflector / simulated audio engine wholesale
 
+## Final recommendation table (working draft)
+
+| Area | In current local `master`? | Recommendation | Proper GameNative implementation |
+|---|---:|---|---|
+| Shared/master containers | No | Partial yes | Fresh overlay-based design, not fork callback hack |
+| Container config / Wine-version-change hardening | Partly | Yes, selective | Port defensive registry/prefix-refresh fixes independently |
+| Components filtering/sorting | Partly (via separate managers, not fork dialog) | Yes, selective | Shared classifier utilities inside existing managers |
+| ImageFs hardening | Partly | Yes, selective | Temp-dir + validate + swap, bounded retries |
+| Performance tuner / aggressive clocks | No | No | Do not upstream without full restore/device gating |
+| ALSA reflector/audio rewrite | No | No | At most small crash-proofing fallback patches |
+| Expanded in-game menu actions | Partly (`QuickMenu`) | Partial yes | Extend current `QuickMenu` |
+| Custom artwork override | No | Yes, selective | Add clean metadata/storage-backed override flow |
+| Manual save import/export | No | Maybe | Add guarded utility flow with preview/confirm |
+| Internal file explorer | No | No | Debug-only at most |
+| Download folder picker helper | Partly (`CustomGameFolderPicker`) | Yes, selective | Generalize existing picker helper |
+| Surface format option | No | Maybe | Advanced graphics option after validation |
+
 ## Provisional chat-ready summary
 
 Short version:
@@ -544,6 +599,7 @@ Short version:
 
 Best feature candidates to adopt in proper GameNative:
 
+- container-config / Wine-version-change hardening
 - component filtering/sorting improvements
 - parts of ImageFs install hardening
 - custom artwork override support
@@ -566,6 +622,6 @@ Features that should not be imported as-is:
 
 Remaining work before final user-facing summary:
 
-1. tighten the recommendation summary into a cleaner final table
-2. double-check a few omission claims against local `master` vs `upstream/master`
-3. keep expanding the journal only where new evidence changes the recommendation
+1. double-check a few omission claims against local `master` vs `upstream/master`
+2. keep expanding the journal only where new evidence changes the recommendation
+3. do one last pass for any small but high-value fork features that have not been bucketed yet
