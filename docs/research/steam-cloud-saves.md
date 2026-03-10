@@ -133,3 +133,145 @@ From the reports above, the failures cluster into a few repeatable categories:
 - The thread already surfaced two high-value implementation tracks:
   - **PR #550**: Ludusavi-backed fallback work
   - **PR #775**: `ExeRunDir` / working-directory fix for game-root-relative saves
+
+## Current upstream/master: what is already covered
+
+Several Steam cloud fixes are already present on `upstream/master` and should not be re-discovered from scratch:
+
+- **Missing / malformed `%GameInstall%` handling is already fixed**
+  - Commit: `fe6c9e33` (`Fix/cloud save gameinstall utkarsh (#508)`)
+  - Current code in `app/src/main/java/app/gamenative/service/SteamAutoCloud.kt` and `app/src/main/java/app/gamenative/data/UserFileInfo.kt` already handles:
+    - `%GameInstall%` being returned inside `file.filename`
+    - `.` / blank prefixes
+    - upload / delete prefix formatting regressions
+
+- **Completely missing UFS metadata already has a limited fallback**
+  - Commit: `90cc7a3e` (`Fixed cloud saves for games with missing ufs (#344)`)
+  - Current `SteamAutoCloud.syncUserFiles()` falls back to recursively scanning the Steam userdata root only when `saveFilePatterns` are entirely absent.
+
+- **Game-specific save location remapping infrastructure exists**
+  - Commit: `61bb7a95` (`Feat: Adds game-specific save location symlink support (#441)`)
+  - `app/src/main/java/app/gamenative/utils/SteamUtils.kt` calls `ensureSaveLocationsForGames(...)`.
+  - `app/src/main/java/app/gamenative/enums/SpecialGameSaveMapping.kt` currently contains only a very small registry (at the moment, just one title-specific mapping).
+
+- **Auth-loss / session-replacement state preservation already landed**
+  - Commit: `b2f80321` (`fix: preserve steam cloud sync state across auth loss (#791)`)
+  - This reduces one class of save loss where cloud-sync bookkeeping was being cleared too aggressively.
+
+## Current upstream/master: gaps still visible in code
+
+### 1. `ColdClientLoader.ini` still leaves `ExeRunDir` blank
+
+- File: `app/src/main/java/app/gamenative/utils/SteamUtils.kt`
+- Current `writeColdClientIni()` still writes:
+  - `Exe=<game exe path>`
+  - `ExeRunDir=`
+- This matches the **New Star GP** / **Rogue Prince of Persia** style report where files are downloaded correctly but a game opening saves relative to the game root cannot see them when the executable lives in a subdirectory.
+- This is the exact issue addressed by **PR #775** (`pr-775`, commit `1e1d9d4e`).
+
+### 2. Incomplete-but-non-empty UFS still has no fallback path on master
+
+- File: `app/src/main/java/app/gamenative/service/SteamAutoCloud.kt`
+- Current local file discovery behaves roughly like this:
+  - if Windows `saveFilePatterns` exist, trust them
+  - only if they do **not** exist at all, recursively scan Steam userdata
+- That means titles like **Yakuza 4** can still fail when Steam metadata is present but only covers part of the true cloud save set.
+- This matches the thread’s repeated theme that some games mix **Steam Auto-Cloud metadata** with **Steam Cloud API behavior inside the game**, leaving UFS as an incomplete source of truth.
+
+### 3. Upstream/master currently has no Ludusavi path at all
+
+- A repository search on current `upstream/master` turns up no active `Ludusavi` integration.
+- The thread’s Ludusavi work therefore survives as **historical side work**, not as current master behavior.
+- That makes **PR #550** / branch work especially relevant for titles where Steam metadata is incomplete.
+
+### 4. Automatic exit sync is effectively silent to the user
+
+- Files involved:
+  - `app/src/main/java/app/gamenative/ui/model/MainViewModel.kt`
+  - `app/src/main/java/app/gamenative/service/SteamService.kt`
+- Current exit flow awaits `SteamService.closeApp(...)`, but `closeApp()` does not surface a rich result back to the UI.
+- In practice this means **upload-only failures** can be hard for users to distinguish from success unless they manually inspect logs or run a manual force-sync.
+- That lines up with thread reports like **Witcher 3 downloads fine, uploads fail**.
+
+### 5. There is no test coverage for `ColdClientLoader.ini` working-directory behavior
+
+- Existing cloud-save tests are concentrated around `SteamAutoCloud` path handling.
+- There does not appear to be a regression test covering `writeColdClientIni()` or the runtime consequence of `ExeRunDir` being blank.
+- That makes PR #775 low risk conceptually, but currently under-tested.
+
+## Historical work worth reviving or forward-porting
+
+### PR #775 — `ExeRunDir` fix
+
+- Ref fetched locally as: `pr-775`
+- Commit: `1e1d9d4e`
+- Summary:
+  - sets `ExeRunDir=steamapps\common\<gameName>`
+  - aligns GameNative working-directory behavior with desktop Steam
+  - directly addresses titles whose save files live relative to the game root while the executable sits in a subdirectory
+
+### PR #550 / Ludusavi branch
+
+- PR head: `ddfdb435` (`feat: add preferLudusavi option to SteamService and related components`)
+- Earlier base commit: `90fced26` (`feat: initial ludusavi fallback and opt in toggle in container settings`)
+- Follow-up fix: `9e5d5df5` (`fix: save ludusavi pref in container config`)
+- Why it matters:
+  - it is the clearest existing answer to the **Yakuza / incomplete UFS** class of problems
+  - it gives users an explicit escape hatch when Steam metadata is not sufficient
+
+### Per-game local-only / disable-cloud branch
+
+- Commit: `f56fea59` (`feat: allow disabling of cloud saves per game`)
+- Why it matters:
+  - this was explicitly requested in-thread
+  - even if root-cause fixes take time, a **local-only mode** is a practical safety valve for titles that repeatedly corrupt, overwrite, or fail to upload correctly
+
+## Suggested priority order
+
+1. **Land or recreate PR #775 first**
+   - smallest, best-understood, highest-confidence fix
+   - clear user evidence
+   - easy to regression test with a title whose exe sits below the game root
+
+2. **Add regression coverage for `ColdClientLoader.ini` generation**
+   - unit test the emitted `ExeRunDir`
+   - if possible, add an integration fixture around a subdirectory exe + root-relative save file
+
+3. **Improve post-exit sync observability**
+   - surface automatic upload result to the UI or persistent logs
+   - make it obvious when auto-upload failed versus succeeded
+   - this will shorten future research loops for titles like Witcher 3
+
+4. **Forward-port Ludusavi fallback work behind an explicit toggle (or smart fallback)**
+   - best fit for incomplete-UFS titles
+   - especially relevant for Yakuza-like reports where master already has *some* path handling, but still lacks a better save manifest source
+
+5. **Forward-port per-game cloud-disable / local-only mode**
+   - useful as a safety mechanism even after other fixes land
+
+6. **Grow the title-specific fixture / mapping corpus**
+   - remote storage screenshots
+   - failing app IDs
+   - save root shape (`0`, `765611...`, `remote/save`, game-root-relative, etc.)
+   - whether the title uses Steam Auto-Cloud only, or appears to depend on Steam Cloud API behavior
+
+## Suggested validation matrix
+
+| Title / signal | Failure class | Why it matters | Best current fix track |
+| --- | --- | --- | --- |
+| New Star GP | Files present, game cannot read them | Confirms working-directory mismatch | `ExeRunDir` / PR #775 |
+| Rogue Prince of Persia | Downloads land, game still misses saves | Another working-directory / runtime-path candidate | `ExeRunDir` / runtime path audit |
+| Yakuza 4 | UFS covers only part of remote set | Best evidence for incomplete metadata | Ludusavi fallback |
+| Witcher 3 | Download works, upload fails | Best evidence for silent exit-sync failures | exit-sync observability + upload audit |
+| Megabonk | `0` folder vs `765611...` folder | Good placeholder / multi-root fixture | account-id / multi-root investigation |
+| Costume Quest | out-of-sync replacement confusion | Good conflict / pending-op fixture | conflict-state audit |
+| Turnip Boy | possible large-save issue | Useful stress fixture, but unverified | size / quota / buffering audit |
+
+## Working hypothesis after code + thread review
+
+The remaining Steam cloud problems on `upstream/master` are likely the combination of:
+
+- one **runtime working-directory bug** (`ExeRunDir`)
+- one **metadata completeness problem** (UFS is sometimes not enough)
+- one **product/visibility gap** (automatic upload failures are too quiet)
+- a smaller set of **title-specific path quirks** that probably need either mappings or a better manifest source
