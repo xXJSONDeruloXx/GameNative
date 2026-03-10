@@ -38,6 +38,12 @@ Implication:
 - `~/.local/share/vulkan/implicit_layer.d/...` is **already per-container**.
 - `~/.local/lib/...` is **already per-container**.
 
+In practical GameNative terms, the real install targets can simply be derived from `container.rootDir`:
+
+- `<container.rootDir>/.config/lsfg-vk/conf.toml`
+- `<container.rootDir>/.local/share/vulkan/implicit_layer.d/VkLayer_LS_frame_generation.json`
+- `<container.rootDir>/.local/lib/liblsfg-vk.so`
+
 This is a big difference from the Decky plugin situation. We do **not** need weird profile-sharing hacks just to keep configs separated per container.
 
 ### 2) Container env vars already flow into launch
@@ -358,6 +364,24 @@ Optional note-only fields for later:
 - present mode override
 - GPU selection
 - quick menu / hot reload
+
+## Likely implementation shape
+
+A clean first implementation would probably be a small helper like `LsfgVkManager` under `app/src/main/java/app/gamenative/utils/` with responsibilities split like this:
+
+- `resolveLosslessDllPath(...)`
+  - manual override first
+  - then `SteamService.getAppDirPath(993090) + "/Lossless.dll"`
+- `installLsfgVkFiles(...)`
+  - ensure container-local `.local/lib` and `.local/share/vulkan/implicit_layer.d`
+  - extract or copy `liblsfg-vk.so`
+  - write/fix the manifest JSON `library_path`
+- `applyLegacyEnv(...)`
+  - inject `LSFG_LEGACY`, dll path, multiplier, flow scale, performance mode
+- later: `writeConfigToml(...)`
+  - for the non-legacy / hot-reload path
+
+That keeps the XServer launch code mostly focused on orchestration instead of file plumbing.
 
 ## Likely implementation touchpoints
 
