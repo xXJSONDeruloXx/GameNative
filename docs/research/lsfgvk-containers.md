@@ -8,14 +8,34 @@ Figure out the smallest realistic path to a **Lossless Scaling Frame Generation*
 
 ## High-level recommendation
 
-**Start with GLIBC containers only** and target the current **x86_64 lsfg-vk release artifact** (`lsfg-vk_noui.zip`) first.
+**Start with GLIBC containers only** and target the **AArch64 GLIBC** build from `xXJSONDeruloXx/lsfg-vk` tag `arm-test` first.
+
+This materially changes my earlier assessment.
 
 Why:
 
-- GameNative GLIBC launches Wine/Proton through **box64**, so the Unix-side Vulkan userland is effectively the **x86_64 Linux stack running under box64**.
-- Upstream lsfg-vk stable release assets are readily available as **x86_64**.
-- This matches the existing Steam Deck / Decky ecosystem most closely.
-- BIONIC / arm64ec support is much less certain and likely needs a different native layer build.
+- GameNative GLIBC launches Wine/Proton through **box64**, and the launcher clearly separates:
+  - native library path: `LD_LIBRARY_PATH=/usr/lib`
+  - emulated x86_64 library path: `BOX64_LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu`
+- Vulkan layers are very likely to need to exist on the **native side** of that boundary.
+- I verified the `arm-test` release asset is:
+  - `ELF 64-bit LSB shared object, ARM aarch64`
+  - exporting `layer_vkGetInstanceProcAddr` and `layer_vkGetDeviceProcAddr`
+- The `arm-test` source tag also includes the matching manifest file:
+  - `VkLayer_LS_frame_generation.json`
+- The fork is still on the familiar **v1 config / legacy env var** model, which is ideal for an MVP.
+
+Important caveat:
+
+- The `arm-test` binary is **GLIBC-linked** and references `GLIBC_2.38`.
+- So it looks like a good fit for **GLIBC** containers, but **not** for **BIONIC** containers.
+- We still need to verify the GameNative GLIBC imagefs provides a new enough glibc runtime.
+
+So the updated priority order is:
+
+1. **GLIBC + arm-test AArch64 build**
+2. **GLIBC + upstream x86_64 build** as fallback experiment
+3. **BIONIC / arm64ec** later, with a different binary strategy
 
 ## What GameNative already gives us
 
@@ -106,6 +126,85 @@ Observed locally from the downloaded asset:
 - `lib/liblsfg-vk.so` is **ELF 64-bit x86-64**
 - manifest layer name is `VK_LAYER_LS_frame_generation`
 - disable env is `DISABLE_LSFG=1`
+
+### Fork ARM build line (`xXJSONDeruloXx/lsfg-vk` tag `arm-test`)
+
+User-provided lead:
+
+- `https://github.com/xXJSONDeruloXx/lsfg-vk/releases/tag/arm-test`
+
+What I verified:
+
+- release metadata:
+  - tag: `arm-test`
+  - prerelease: `true`
+  - tag created: `2025-10-06T15:16:09Z`
+  - release published: `2025-11-28T03:10:14Z`
+- tag commit:
+  - `62f814999f754907570c7c55be74493f0ff5e0c7`
+  - message: `enhancement(flatpak): add support for 25.08`
+- release assets:
+  - only `liblsfg-vk.so`
+
+Binary inspection of that asset:
+
+- architecture: `aarch64`
+- SONAME: `liblsfg-vk.so`
+- exported layer entrypoints:
+  - `layer_vkGetInstanceProcAddr`
+  - `layer_vkGetDeviceProcAddr`
+- also exports the framegen symbols:
+  - `LSFG_3_1::*`
+  - `LSFG_3_1P::*`
+- dynamic dependencies:
+  - `libstdc++.so.6`
+  - `libm.so.6`
+  - `libgcc_s.so.1`
+  - `libc.so.6`
+- required symbol versions include:
+  - `GLIBC_2.17`
+  - `GLIBC_2.32`
+  - `GLIBC_2.34`
+  - `GLIBC_2.38`
+
+Implications:
+
+- This is **not** an Android/Bionic-native build.
+- It is an **ARM64 Linux GLIBC** build.
+- That makes it promising for **GLIBC** GameNative containers and still questionable for **BIONIC** ones.
+
+Manifest / packaging findings:
+
+- The release asset does **not** include the manifest JSON.
+- But the tag source tree does include:
+  - `VkLayer_LS_frame_generation.json`
+- The tag `CMakeLists.txt` installs:
+  - `liblsfg-vk.so -> lib`
+  - `VkLayer_LS_frame_generation.json -> share/vulkan/implicit_layer.d`
+
+So for GameNative we can still package/install it ourselves by pairing:
+
+- the released `liblsfg-vk.so`
+- the source manifest from the same tag
+
+We would still want to patch `library_path` in the manifest to the Decky-style relative path:
+
+- `../../../lib/liblsfg-vk.so`
+
+Config / env model at that tag:
+
+- config version is still `version = 1`
+- config shape is still `[global]` + `[[game]]`
+- legacy env vars still exist:
+  - `LSFG_LEGACY`
+  - `LSFG_DLL_PATH`
+  - `LSFG_MULTIPLIER`
+  - `LSFG_FLOW_SCALE`
+  - `LSFG_PERFORMANCE_MODE`
+  - `LSFG_HDR_MODE`
+  - `LSFG_EXPERIMENTAL_PRESENT_MODE`
+
+That means the forked ARM build still fits the simple MVP plan very well.
 
 ### Stable v1 config format
 
@@ -273,9 +372,28 @@ GLIBC launch path executes:
 
 - `box64 <wine/proton command>`
 
-Meaning the Unix-side Wine/Proton userspace is the x86_64 stack under box64.
+Important env split from the launcher:
 
-That makes the upstream **x86_64 lsfg-vk release artifact the correct first thing to test** for GLIBC containers.
+- `LD_LIBRARY_PATH=<root>/usr/lib`
+- `BOX64_LD_LIBRARY_PATH=<root>/usr/lib/x86_64-linux-gnu`
+
+This suggests a split between:
+
+- native ARM64-side libraries used by the host / wrappers
+- emulated x86_64-side libraries used by boxed programs
+
+Given that, the newly found `arm-test` build is now the **preferred first thing to test** for GLIBC containers:
+
+- it is `aarch64`
+- it exports the actual Vulkan layer entrypoints
+- it uses the same v1 config/env model
+
+But there is a compatibility caveat:
+
+- the binary requires `GLIBC_2.38`
+- so we need to verify the GameNative GLIBC imagefs is new enough
+
+If that glibc requirement turns out to be too new, the upstream x86_64 bundle remains the obvious fallback experiment.
 
 ### BIONIC containers: unclear / risky for MVP
 
@@ -285,17 +403,19 @@ Relevant code:
 
 BIONIC launch path is native ARM/Bionic-oriented and does not mirror the GLIBC/box64 model.
 
-Risks:
+The newly found ARM build does **not** remove that risk, because binary inspection shows it is linked against:
 
-- official upstream release assets I found are **not ARM/Bionic builds**
-- a BIONIC path may require:
-  - an ARM64 build
-  - and possibly Android/Bionic-compatible packaging assumptions
+- `libc.so.6`
+- `libstdc++.so.6`
+- `GLIBC_2.38`
+
+So this ARM asset looks like a **Linux GLIBC AArch64** build, not an Android/Bionic build.
 
 Recommendation:
 
 - **Do not block the first PoC on BIONIC / arm64ec support.**
 - Gate the first implementation to **GLIBC**.
+- Treat BIONIC as a separate follow-up that likely needs a different build target.
 
 ## Fastest PoC design
 
@@ -304,7 +424,8 @@ Recommendation:
 Target:
 
 - GLIBC containers only
-- stable `lsfg-vk_noui.zip`
+- forked `arm-test` AArch64 GLIBC `liblsfg-vk.so`
+- source-matched manifest from the same tag
 - legacy env vars
 
 At launch / setup time:
@@ -312,25 +433,32 @@ At launch / setup time:
 1. Ensure the active container has:
    - `~/.local/lib/liblsfg-vk.so`
    - `~/.local/share/vulkan/implicit_layer.d/VkLayer_LS_frame_generation.json`
-2. Fix manifest `library_path` if needed to the Decky-style relative path:
+2. Source those files from:
+   - release asset: `liblsfg-vk.so`
+   - tag source tree: `VkLayer_LS_frame_generation.json`
+3. Fix manifest `library_path` to the Decky-style relative path:
    - `../../../lib/liblsfg-vk.so`
-3. Resolve `Lossless.dll` via either:
+4. Resolve `Lossless.dll` via either:
    - manual path override, or
    - `SteamService.getAppDirPath(993090) + "/Lossless.dll"`
-4. Inject legacy env vars:
+5. Inject legacy env vars:
    - `LSFG_LEGACY=1`
    - `LSFG_DLL_PATH=<resolved path>`
    - `LSFG_MULTIPLIER=<n>`
    - `LSFG_FLOW_SCALE=<value>`
    - `LSFG_PERFORMANCE_MODE=0|1`
-5. Do **not** worry about hot reload yet.
+6. Do **not** worry about hot reload yet.
 
 Why this is attractive:
 
 - almost no profile logic
 - no quick-menu work required
 - minimal UI requirement
-- closest match to the Decky “just prove it works” path
+- binary/model still matches the familiar v1 lsfg-vk integration style
+
+Fallback if the GLIBC runtime is too old for the forked ARM binary:
+
+- try the upstream x86_64 bundle as the secondary experiment
 
 ### Phase 2: container-native config file
 
@@ -427,8 +555,7 @@ Files likely needing changes if we add real settings:
 If I start implementing next, I would do this exact scope:
 
 - GLIBC only
-- stable `lsfg-vk_noui.zip`
-- install/extract into active container `~/.local`
+- install the forked `arm-test` `liblsfg-vk.so` plus the matching manifest into active container `~/.local`
 - add a minimal Graphics-tab section with:
   - enable toggle
   - dll path
@@ -437,5 +564,6 @@ If I start implementing next, I would do this exact scope:
   - performance mode
 - inject **legacy** lsfg env vars at launch
 - auto-fill DLL path from Steam app **993090** when available
+- add one explicit runtime caveat in logs / docs if GLIBC version mismatch prevents loading
 
 That gives the best chance of a quick yes/no answer on whether LSFG is viable in GameNative containers without overcommitting to the final UX yet.
