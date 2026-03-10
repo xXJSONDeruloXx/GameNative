@@ -82,6 +82,7 @@ import app.gamenative.ui.data.XServerState
 import app.gamenative.utils.ContainerUtils
 import app.gamenative.utils.CustomGameScanner
 import app.gamenative.utils.ExecutableSelectionUtils
+import app.gamenative.utils.LsfgVkManager
 import app.gamenative.utils.PreLaunchSteps
 import app.gamenative.utils.SteamTokenLogin
 import app.gamenative.utils.SteamUtils
@@ -2066,6 +2067,7 @@ private fun setupXEnvironment(
 
         envVars.putAll(container.envVars)
         if (!envVars.has("WINEESYNC")) envVars.put("WINEESYNC", "1")
+        LsfgVkManager.applyLaunchEnv(context, container, envVars)
         val graphicsDriverConfig = KeyValueSet(container.getGraphicsDriverConfig())
         if (graphicsDriverConfig.get("version").lowercase(Locale.getDefault()).contains("gen8")) {
             var tuDebug = envVars.get("TU_DEBUG")

@@ -608,6 +608,19 @@
     <string name="sharpness_effect">Sharpness Boost</string>
     <string name="sharpness_level">Sharpness Level</string>
     <string name="sharpness_denoise">Sharpness Denoise</string>
+    <string name="lsfg_enable">Lossless Frame Generation</string>
+    <string name="lsfg_enable_description">Experimental lsfg-vk proof of concept for GLIBC containers</string>
+    <string name="lsfg_dll_path_title">Lossless.dll Path</string>
+    <string name="lsfg_dll_path_override_subtitle">Manual override: %1$s</string>
+    <string name="lsfg_dll_path_override_missing_subtitle">Manual override not found: %1$s</string>
+    <string name="lsfg_dll_path_override_fallback_subtitle">Manual override not found: %1$s — using auto-detected path: %2$s</string>
+    <string name="lsfg_dll_path_auto_subtitle">Auto-detected: %1$s</string>
+    <string name="lsfg_dll_path_missing_subtitle">Auto-detect failed. Install Lossless Scaling on Steam or set a manual path.</string>
+    <string name="lsfg_dll_path_dialog_hint">Leave this blank to auto-detect Lossless.dll from the Steam install of Lossless Scaling.</string>
+    <string name="lsfg_multiplier_title">Frame Generation Multiplier</string>
+    <string name="lsfg_flow_scale_title">Flow Scale</string>
+    <string name="lsfg_performance_mode_title">Performance Mode</string>
+    <string name="lsfg_performance_mode_description">Use the lighter LSFG model for better performance</string>
 
     <!-- Container Configuration: Emulation -->
     <string name="fexcore_version">FEXCore Version</string>

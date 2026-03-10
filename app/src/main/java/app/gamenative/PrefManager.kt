@@ -192,6 +192,41 @@ object PrefManager {
             setPref(SHARPNESS_DENOISE, value.coerceIn(0, 100))
         }
 
+    private val LSFG_ENABLED = booleanPreferencesKey("lsfg_enabled")
+    var lsfgEnabled: Boolean
+        get() = getPref(LSFG_ENABLED, false)
+        set(value) {
+            setPref(LSFG_ENABLED, value)
+        }
+
+    private val LSFG_DLL_PATH = stringPreferencesKey("lsfg_dll_path")
+    var lsfgDllPath: String
+        get() = getPref(LSFG_DLL_PATH, "")
+        set(value) {
+            setPref(LSFG_DLL_PATH, value)
+        }
+
+    private val LSFG_MULTIPLIER = intPreferencesKey("lsfg_multiplier")
+    var lsfgMultiplier: Int
+        get() = getPref(LSFG_MULTIPLIER, 2)
+        set(value) {
+            setPref(LSFG_MULTIPLIER, value.coerceIn(2, 4))
+        }
+
+    private val LSFG_FLOW_SCALE = floatPreferencesKey("lsfg_flow_scale")
+    var lsfgFlowScale: Float
+        get() = getPref(LSFG_FLOW_SCALE, 1.0f)
+        set(value) {
+            setPref(LSFG_FLOW_SCALE, value.coerceIn(0.25f, 1.0f))
+        }
+
+    private val LSFG_PERFORMANCE_MODE = booleanPreferencesKey("lsfg_performance_mode")
+    var lsfgPerformanceMode: Boolean
+        get() = getPref(LSFG_PERFORMANCE_MODE, false)
+        set(value) {
+            setPref(LSFG_PERFORMANCE_MODE, value)
+        }
+
     private val CONTAINER_VARIANT = stringPreferencesKey("container_variant")
     var containerVariant: String
         get() = getPref(CONTAINER_VARIANT, Container.DEFAULT_VARIANT)

@@ -93,6 +93,11 @@ data class ContainerData(
     val sharpnessEffect: String = "None",
     val sharpnessLevel: Int = 100,
     val sharpnessDenoise: Int = 100,
+    val lsfgEnabled: Boolean = false,
+    val lsfgDllPath: String = "",
+    val lsfgMultiplier: Int = 2,
+    val lsfgFlowScale: Float = 1.0f,
+    val lsfgPerformanceMode: Boolean = false,
 ) {
     companion object {
         val Saver = mapSaver(
@@ -155,6 +160,11 @@ data class ContainerData(
                     "sharpnessEffect" to state.sharpnessEffect,
                     "sharpnessLevel" to state.sharpnessLevel,
                     "sharpnessDenoise" to state.sharpnessDenoise,
+                    "lsfgEnabled" to state.lsfgEnabled,
+                    "lsfgDllPath" to state.lsfgDllPath,
+                    "lsfgMultiplier" to state.lsfgMultiplier,
+                    "lsfgFlowScale" to state.lsfgFlowScale,
+                    "lsfgPerformanceMode" to state.lsfgPerformanceMode,
                 )
             },
             restore = { savedMap ->
@@ -216,6 +226,11 @@ data class ContainerData(
                     sharpnessEffect = (savedMap["sharpnessEffect"] as? String) ?: "None",
                     sharpnessLevel = (savedMap["sharpnessLevel"] as? Int) ?: 100,
                     sharpnessDenoise = (savedMap["sharpnessDenoise"] as? Int) ?: 100,
+                    lsfgEnabled = (savedMap["lsfgEnabled"] as? Boolean) ?: false,
+                    lsfgDllPath = (savedMap["lsfgDllPath"] as? String) ?: "",
+                    lsfgMultiplier = (savedMap["lsfgMultiplier"] as? Int)?.coerceIn(2, 4) ?: 2,
+                    lsfgFlowScale = (savedMap["lsfgFlowScale"] as? Number)?.toFloat()?.coerceIn(0.25f, 1.0f) ?: 1.0f,
+                    lsfgPerformanceMode = (savedMap["lsfgPerformanceMode"] as? Boolean) ?: false,
                 )
             },
         )

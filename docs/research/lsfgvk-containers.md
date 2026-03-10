@@ -622,3 +622,29 @@ If I start implementing next, I would do this exact scope:
 - add one explicit runtime caveat in logs / docs if GLIBC version mismatch prevents loading
 
 That gives the best chance of a quick yes/no answer on whether LSFG is viable in GameNative containers without overcommitting to the final UX yet.
+
+## Branch implementation notes
+
+A first MVP implementation now exists on this research branch with this shape:
+
+- GLIBC containers only
+- bundled runtime assets under:
+  - `app/src/main/assets/lsfg_vk/liblsfg-vk.so`
+  - `app/src/main/assets/lsfg_vk/VkLayer_LS_frame_generation.json`
+- launch/install helper:
+  - `app/src/main/java/app/gamenative/utils/LsfgVkManager.kt`
+- Graphics-tab controls added for:
+  - enable
+  - Lossless.dll path override / auto-detect
+  - multiplier
+  - flow scale
+  - performance mode
+- launch-time env injection wired from:
+  - `app/src/main/java/app/gamenative/ui/screen/xserver/XServerScreen.kt`
+
+The current implementation path is still intentionally simple:
+
+- uses the forked ARM GLIBC layer build
+- uses legacy env vars (`LSFG_LEGACY`, etc.)
+- installs the runtime into each container’s local HOME under `.local`
+- auto-detects `Lossless.dll` from the Steam install of app `993090`, with a manual override field when needed

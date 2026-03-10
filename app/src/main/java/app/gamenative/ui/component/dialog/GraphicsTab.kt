@@ -2,9 +2,16 @@ package app.gamenative.ui.component.dialog
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -13,13 +20,17 @@ import app.gamenative.ui.component.settings.SettingsListDropdown
 import app.gamenative.ui.component.settings.SettingsMultiListDropdown
 import app.gamenative.ui.theme.settingsTileColors
 import app.gamenative.ui.theme.settingsTileColorsAlt
+import app.gamenative.utils.LsfgVkManager
 import com.alorma.compose.settings.ui.SettingsGroup
+import com.alorma.compose.settings.ui.SettingsMenuLink
 import com.alorma.compose.settings.ui.SettingsSwitch
 import com.winlator.contents.ContentProfile
 import com.winlator.container.Container
 import com.winlator.core.KeyValueSet
 import com.winlator.core.StringUtils
 import com.winlator.core.envvars.EnvVars
+import java.io.File
+import java.util.Locale
 import kotlin.math.roundToInt
 
 @Composable
@@ -314,6 +325,9 @@ fun GraphicsTabContent(state: ContainerConfigState) {
                 }
             }
         }
+        if (config.containerVariant.equals(Container.GLIBC, ignoreCase = true)) {
+            LsfgVkSection(state)
+        }
         SettingsSwitch(
             colors = settingsTileColorsAlt(),
             title = { Text(text = stringResource(R.string.use_dri3)) },
@@ -321,6 +335,123 @@ fun GraphicsTabContent(state: ContainerConfigState) {
             state = config.useDRI3,
             onCheckedChange = {
                 state.config.value = config.copy(useDRI3 = it)
+            },
+        )
+    }
+}
+
+@Composable
+private fun LsfgVkSection(state: ContainerConfigState) {
+    val config = state.config.value
+    var showDllPathDialog by rememberSaveable { mutableStateOf(false) }
+    val overridePath = config.lsfgDllPath.trim()
+    val overrideExists = overridePath.isNotEmpty() && File(overridePath).isFile
+    val effectiveDllPath = LsfgVkManager.resolveLosslessDllPath(config.lsfgDllPath)
+    val pathSubtitle = when {
+        overrideExists -> stringResource(R.string.lsfg_dll_path_override_subtitle, overridePath)
+        overridePath.isNotEmpty() && !effectiveDllPath.isNullOrBlank() ->
+            stringResource(R.string.lsfg_dll_path_override_fallback_subtitle, overridePath, effectiveDllPath)
+        overridePath.isNotEmpty() -> stringResource(R.string.lsfg_dll_path_override_missing_subtitle, overridePath)
+        !effectiveDllPath.isNullOrBlank() -> stringResource(R.string.lsfg_dll_path_auto_subtitle, effectiveDllPath)
+        else -> stringResource(R.string.lsfg_dll_path_missing_subtitle)
+    }
+
+    SettingsSwitch(
+        colors = settingsTileColorsAlt(),
+        title = { Text(text = stringResource(R.string.lsfg_enable)) },
+        subtitle = { Text(text = stringResource(R.string.lsfg_enable_description)) },
+        state = config.lsfgEnabled,
+        onCheckedChange = { enabled ->
+            state.config.value = config.copy(lsfgEnabled = enabled)
+        },
+    )
+
+    SettingsMenuLink(
+        colors = settingsTileColors(),
+        title = { Text(text = stringResource(R.string.lsfg_dll_path_title)) },
+        subtitle = { Text(text = pathSubtitle) },
+        onClick = { showDllPathDialog = true },
+    )
+
+    val multiplierValues = listOf(2, 3, 4)
+    val multiplierLabels = listOf("2x", "3x", "4x")
+    val multiplierIndex = multiplierValues.indexOf(config.lsfgMultiplier.coerceIn(2, 4)).coerceAtLeast(0)
+    SettingsListDropdown(
+        colors = settingsTileColors(),
+        enabled = config.lsfgEnabled,
+        title = { Text(text = stringResource(R.string.lsfg_multiplier_title)) },
+        value = multiplierIndex,
+        items = multiplierLabels,
+        onItemSelected = { idx ->
+            state.config.value = config.copy(lsfgMultiplier = multiplierValues[idx])
+        },
+    )
+
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Text(text = stringResource(R.string.lsfg_flow_scale_title))
+        Slider(
+            enabled = config.lsfgEnabled,
+            value = config.lsfgFlowScale.coerceIn(0.25f, 1.0f),
+            onValueChange = { newValue ->
+                val rounded = (((newValue * 20f).roundToInt()) / 20f).coerceIn(0.25f, 1.0f)
+                state.config.value = config.copy(lsfgFlowScale = rounded)
+            },
+            valueRange = 0.25f..1.0f,
+            steps = 14,
+        )
+        Text(text = String.format(Locale.US, "%.2f", config.lsfgFlowScale.coerceIn(0.25f, 1.0f)))
+    }
+
+    SettingsSwitch(
+        colors = settingsTileColorsAlt(),
+        enabled = config.lsfgEnabled,
+        title = { Text(text = stringResource(R.string.lsfg_performance_mode_title)) },
+        subtitle = { Text(text = stringResource(R.string.lsfg_performance_mode_description)) },
+        state = config.lsfgPerformanceMode,
+        onCheckedChange = { enabled ->
+            state.config.value = config.copy(lsfgPerformanceMode = enabled)
+        },
+    )
+
+    if (showDllPathDialog) {
+        var dllPath by rememberSaveable { mutableStateOf(config.lsfgDllPath) }
+        AlertDialog(
+            onDismissRequest = { showDllPathDialog = false },
+            title = { Text(text = stringResource(R.string.lsfg_dll_path_title)) },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = dllPath,
+                        onValueChange = { dllPath = it },
+                        label = { Text(text = stringResource(R.string.lsfg_dll_path_title)) },
+                    )
+                    Text(
+                        text = stringResource(R.string.lsfg_dll_path_dialog_hint),
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                    val previewPath = LsfgVkManager.resolveLosslessDllPath(dllPath)
+                    if (!previewPath.isNullOrBlank()) {
+                        Text(
+                            text = stringResource(R.string.lsfg_dll_path_auto_subtitle, previewPath),
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDllPathDialog = false },
+                    content = { Text(text = stringResource(R.string.cancel)) },
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        state.config.value = config.copy(lsfgDllPath = dllPath.trim())
+                        showDllPathDialog = false
+                    },
+                    content = { Text(text = stringResource(R.string.ok)) },
+                )
             },
         )
     }

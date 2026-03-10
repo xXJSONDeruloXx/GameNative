@@ -142,6 +142,11 @@ object ContainerUtils {
             sharpnessEffect = PrefManager.sharpnessEffect,
             sharpnessLevel = PrefManager.sharpnessLevel,
             sharpnessDenoise = PrefManager.sharpnessDenoise,
+            lsfgEnabled = PrefManager.lsfgEnabled,
+            lsfgDllPath = PrefManager.lsfgDllPath,
+            lsfgMultiplier = PrefManager.lsfgMultiplier,
+            lsfgFlowScale = PrefManager.lsfgFlowScale,
+            lsfgPerformanceMode = PrefManager.lsfgPerformanceMode,
         )
     }
 
@@ -203,6 +208,11 @@ object ContainerUtils {
         PrefManager.sharpnessEffect = containerData.sharpnessEffect
         PrefManager.sharpnessLevel = containerData.sharpnessLevel
         PrefManager.sharpnessDenoise = containerData.sharpnessDenoise
+        PrefManager.lsfgEnabled = containerData.lsfgEnabled
+        PrefManager.lsfgDllPath = containerData.lsfgDllPath
+        PrefManager.lsfgMultiplier = containerData.lsfgMultiplier
+        PrefManager.lsfgFlowScale = containerData.lsfgFlowScale
+        PrefManager.lsfgPerformanceMode = containerData.lsfgPerformanceMode
     }
 
     fun toContainerData(container: Container): ContainerData {
@@ -315,6 +325,11 @@ object ContainerUtils {
             sharpnessEffect = container.getExtra("sharpnessEffect", "None"),
             sharpnessLevel = container.getExtra("sharpnessLevel", "100").toIntOrNull() ?: 100,
             sharpnessDenoise = container.getExtra("sharpnessDenoise", "100").toIntOrNull() ?: 100,
+            lsfgEnabled = container.getExtra("lsfgEnabled", "0") == "1",
+            lsfgDllPath = container.getExtra("lsfgDllPath", ""),
+            lsfgMultiplier = container.getExtra("lsfgMultiplier", "2").toIntOrNull()?.coerceIn(2, 4) ?: 2,
+            lsfgFlowScale = container.getExtra("lsfgFlowScale", "1.0").toFloatOrNull()?.coerceIn(0.25f, 1.0f) ?: 1.0f,
+            lsfgPerformanceMode = container.getExtra("lsfgPerformanceMode", "0") == "1",
         )
     }
 
@@ -480,6 +495,11 @@ object ContainerUtils {
         container.putExtra("sharpnessEffect", containerData.sharpnessEffect)
         container.putExtra("sharpnessLevel", containerData.sharpnessLevel.toString())
         container.putExtra("sharpnessDenoise", containerData.sharpnessDenoise.toString())
+        container.putExtra("lsfgEnabled", if (containerData.lsfgEnabled) "1" else "0")
+        container.putExtra("lsfgDllPath", containerData.lsfgDllPath)
+        container.putExtra("lsfgMultiplier", containerData.lsfgMultiplier.coerceIn(2, 4).toString())
+        container.putExtra("lsfgFlowScale", containerData.lsfgFlowScale.coerceIn(0.25f, 1.0f).toString())
+        container.putExtra("lsfgPerformanceMode", if (containerData.lsfgPerformanceMode) "1" else "0")
         try {
             container.language = containerData.language
         } catch (e: Exception) {
