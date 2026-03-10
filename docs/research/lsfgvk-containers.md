@@ -29,7 +29,7 @@ Important caveat:
 
 - The `arm-test` binary is **GLIBC-linked** and references `GLIBC_2.38`.
 - So it looks like a good fit for **GLIBC** containers, but **not** for **BIONIC** containers.
-- We still need to verify the GameNative GLIBC imagefs provides a new enough glibc runtime.
+- I have now verified the current downloadable GameNative GLIBC imagefs is new enough for this specific requirement.
 
 So the updated priority order is:
 
@@ -341,6 +341,59 @@ Things we probably **do not** need for first GameNative PoC:
 
 GameNative already owns launch orchestration, container HOME, and env injection.
 
+## Verified against current GameNative GLIBC imagefs download
+
+Relevant code paths:
+
+- `app/src/main/java/app/gamenative/service/SteamService.kt`
+- `app/src/main/java/com/winlator/xenvironment/ImageFsInstaller.java`
+
+What the code does:
+
+- GLIBC variant downloads `imagefs_gamenative.txz`
+- primary URL:
+  - `https://downloads.gamenative.app/imagefs_gamenative.txz`
+- fallback URL:
+  - `https://pub-9fcd5294bd0d4b85a9d73615bf98f3b5.r2.dev/imagefs_gamenative.txz`
+
+What I checked:
+
+- current remote file size: `166,439,388` bytes
+- current remote last-modified: `Wed, 17 Sep 2025 14:48:53 GMT`
+- downloaded the archive and extracted the key ARM64 runtime pieces from `./usr/lib`
+
+Relevant files present in the current GLIBC imagefs:
+
+- `./usr/lib/libc.so.6`
+- `./usr/lib/libm.so.6`
+- `./usr/lib/libgcc_s.so.1`
+- `./usr/lib/libstdc++.so.6 -> libstdc++.so.6.0.33`
+- `./usr/lib/ld-linux-aarch64.so.1`
+
+Version verification:
+
+- `arm-test` binary requires:
+  - `GLIBC_2.38` max
+  - `GLIBCXX_3.4.32` max
+- current `imagefs_gamenative.txz` provides:
+  - glibc max symbol version: `GLIBC_2.41`
+  - libc version string: `GNU C Library (GNU libc for Android/app.gamenative) stable release version 2.41-1.`
+  - libstdc++ max symbol version: `GLIBCXX_3.4.33`
+
+Bottom line:
+
+- **The current GameNative GLIBC imagefs is new enough for the forked `arm-test` lsfg-vk binary.**
+- At least from the native runtime dependency angle, the following requirements are satisfied:
+  - `libc.so.6`
+  - `libm.so.6`
+  - `libgcc_s.so.1`
+  - `libstdc++.so.6`
+  - `ld-linux-aarch64.so.1`
+  - `GLIBC_2.38`
+  - `GLIBCXX_3.4.32`
+
+This removes the main versioning concern for the **GLIBC + arm-test** MVP path.
+
 ## Vulkan loader path findings
 
 I checked the Khronos Vulkan loader documentation.
@@ -388,12 +441,14 @@ Given that, the newly found `arm-test` build is now the **preferred first thing 
 - it exports the actual Vulkan layer entrypoints
 - it uses the same v1 config/env model
 
-But there is a compatibility caveat:
+The earlier compatibility caveat has now been checked:
 
 - the binary requires `GLIBC_2.38`
-- so we need to verify the GameNative GLIBC imagefs is new enough
+- current GameNative `imagefs_gamenative.txz` provides glibc `2.41` symbols and libstdc++ up to `GLIBCXX_3.4.33`
 
-If that glibc requirement turns out to be too new, the upstream x86_64 bundle remains the obvious fallback experiment.
+So the native runtime version check now looks **green** for this binary.
+
+The upstream x86_64 bundle still remains a useful fallback experiment, but no longer because of this specific glibc concern.
 
 ### BIONIC containers: unclear / risky for MVP
 
@@ -456,7 +511,7 @@ Why this is attractive:
 - minimal UI requirement
 - binary/model still matches the familiar v1 lsfg-vk integration style
 
-Fallback if the GLIBC runtime is too old for the forked ARM binary:
+Fallback if the ARM build hits a problem unrelated to native runtime versioning:
 
 - try the upstream x86_64 bundle as the secondary experiment
 
