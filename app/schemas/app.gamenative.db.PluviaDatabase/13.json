@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 13,
-    "identityHash": "b3e49b55790b0707b8d144747f4cedfe",
+    "identityHash": "190d3e74756cd0b79f67a24c557baa4c",
     "entities": [
       {
         "tableName": "app_info",
@@ -993,6 +993,157 @@
         }
       },
       {
+        "tableName": "amazon_games",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`app_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `product_id` TEXT NOT NULL, `entitlement_id` TEXT NOT NULL DEFAULT '', `title` TEXT NOT NULL, `is_installed` INTEGER NOT NULL, `install_path` TEXT NOT NULL, `art_url` TEXT NOT NULL, `hero_url` TEXT NOT NULL DEFAULT '', `purchased_date` TEXT NOT NULL, `developer` TEXT NOT NULL DEFAULT '', `publisher` TEXT NOT NULL DEFAULT '', `release_date` TEXT NOT NULL DEFAULT '', `download_size` INTEGER NOT NULL DEFAULT 0, `install_size` INTEGER NOT NULL DEFAULT 0, `version_id` TEXT NOT NULL DEFAULT '', `product_sku` TEXT NOT NULL DEFAULT '', `last_played` INTEGER NOT NULL DEFAULT 0, `play_time_minutes` INTEGER NOT NULL DEFAULT 0, `product_json` TEXT NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "appId",
+            "columnName": "app_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "productId",
+            "columnName": "product_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "entitlementId",
+            "columnName": "entitlement_id",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isInstalled",
+            "columnName": "is_installed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "installPath",
+            "columnName": "install_path",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "artUrl",
+            "columnName": "art_url",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "heroUrl",
+            "columnName": "hero_url",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "purchasedDate",
+            "columnName": "purchased_date",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "developer",
+            "columnName": "developer",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "publisher",
+            "columnName": "publisher",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "releaseDate",
+            "columnName": "release_date",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "downloadSize",
+            "columnName": "download_size",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "installSize",
+            "columnName": "install_size",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "versionId",
+            "columnName": "version_id",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "productSku",
+            "columnName": "product_sku",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "lastPlayed",
+            "columnName": "last_played",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "playTimeMinutes",
+            "columnName": "play_time_minutes",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "productJson",
+            "columnName": "product_json",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "app_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_amazon_games_product_id",
+            "unique": false,
+            "columnNames": [
+              "product_id"
+            ],
+            "orders": [
+              "ASC"
+            ],
+            "createSql": "CREATE INDEX IF NOT EXISTS `${INDEX_NAME}` ON `${TABLE_NAME}` (`product_id`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
         "tableName": "downloading_app_info",
         "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`appId` INTEGER NOT NULL, `dlcAppIds` TEXT NOT NULL, PRIMARY KEY(`appId`))",
         "fields": [
@@ -1015,143 +1166,11 @@
             "appId"
           ]
         }
-      },
-      {
-        "tableName": "itch_games",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `title` TEXT NOT NULL, `url` TEXT NOT NULL, `cover_url` TEXT NOT NULL, `short_text` TEXT NOT NULL, `developer` TEXT NOT NULL, `p_windows` INTEGER NOT NULL, `p_linux` INTEGER NOT NULL, `p_osx` INTEGER NOT NULL, `p_android` INTEGER NOT NULL, `min_price` INTEGER NOT NULL, `classification` TEXT NOT NULL, `created_at` TEXT NOT NULL, `is_installed` INTEGER NOT NULL, `install_path` TEXT NOT NULL, `install_size` INTEGER NOT NULL, `last_played` INTEGER NOT NULL, `play_time` INTEGER NOT NULL, `type` INTEGER NOT NULL, `download_key_id` INTEGER NOT NULL, PRIMARY KEY(`id`))",
-        "fields": [
-          {
-            "fieldPath": "id",
-            "columnName": "id",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "title",
-            "columnName": "title",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "url",
-            "columnName": "url",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "coverUrl",
-            "columnName": "cover_url",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "shortText",
-            "columnName": "short_text",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "developer",
-            "columnName": "developer",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "pWindows",
-            "columnName": "p_windows",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "pLinux",
-            "columnName": "p_linux",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "pOsx",
-            "columnName": "p_osx",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "pAndroid",
-            "columnName": "p_android",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "minPrice",
-            "columnName": "min_price",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "classification",
-            "columnName": "classification",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "createdAt",
-            "columnName": "created_at",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "isInstalled",
-            "columnName": "is_installed",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "installPath",
-            "columnName": "install_path",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "installSize",
-            "columnName": "install_size",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "lastPlayed",
-            "columnName": "last_played",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "playTime",
-            "columnName": "play_time",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "type",
-            "columnName": "type",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "downloadKeyId",
-            "columnName": "download_key_id",
-            "affinity": "INTEGER",
-            "notNull": true
-          }
-        ],
-        "primaryKey": {
-          "autoGenerate": false,
-          "columnNames": [
-            "id"
-          ]
-        }
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'b3e49b55790b0707b8d144747f4cedfe')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '190d3e74756cd0b79f67a24c557baa4c')"
     ]
   }
 }

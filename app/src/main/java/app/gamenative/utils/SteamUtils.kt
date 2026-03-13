@@ -17,6 +17,7 @@ import com.winlator.core.WineRegistryEditor
 import com.winlator.xenvironment.ImageFs
 import `in`.dragonbra.javasteam.types.KeyValue
 import `in`.dragonbra.javasteam.util.HardwareUtils
+import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -32,15 +33,43 @@ import kotlin.io.path.absolutePathString
 import kotlin.io.path.name
 import timber.log.Timber
 import okhttp3.*
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.dnsoverhttps.DnsOverHttps
 import org.json.JSONObject
+import java.net.InetAddress
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 object SteamUtils {
 
+    private val bootstrapClient = OkHttpClient.Builder()
+        .protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
+        .build()
+
+    private val doh: DnsOverHttps = DnsOverHttps.Builder()
+        .client(bootstrapClient)
+        .url("https://dns.google/dns-query".toHttpUrl())
+        .bootstrapDnsHosts(
+            InetAddress.getByName("8.8.8.8"),
+            InetAddress.getByName("8.8.4.4"),
+        )
+        .build()
+
+    private val fallbackDns = object : Dns {
+        override fun lookup(hostname: String): List<InetAddress> {
+            return try {
+                doh.lookup(hostname)
+            } catch (e: Exception) {
+                Timber.w(e, "DoH lookup failed for $hostname, falling back to system DNS")
+                Dns.SYSTEM.lookup(hostname)
+            }
+        }
+    }
+
     internal val http = OkHttpClient.Builder()
-        .readTimeout(5, TimeUnit.MINUTES)      // from 2 min → 5 min
-        .protocols(listOf(Protocol.HTTP_1_1))  // skip HTTP/2 stream stalls
+        .dns(fallbackDns)
+        .readTimeout(5, TimeUnit.MINUTES)
+        .protocols(listOf(Protocol.HTTP_1_1))
         .retryOnConnectionFailure(true)
         .build()
 
@@ -142,7 +171,7 @@ object SteamUtils {
      * Replaces any existing `steam_api.dll` or `steam_api64.dll` in the app directory
      * with our pipe dll stored in assets
      */
-    suspend fun replaceSteamApi(context: Context, appId: String) {
+    suspend fun replaceSteamApi(context: Context, appId: String, isOffline: Boolean = false) {
         val steamAppId = ContainerUtils.extractGameIdFromContainerId(appId)
         val appDirPath = SteamService.getAppDirPath(steamAppId)
         if (MarkerUtils.hasMarker(appDirPath, Marker.STEAM_DLL_REPLACED)) {
@@ -187,7 +216,7 @@ object SteamUtils {
                 }
                 Timber.i("Replaced $dllName")
                 if (is64Bit) replaced64Count++ else replaced32Count++
-                ensureSteamSettings(context, path, appId, ticketBase64)
+                ensureSteamSettings(context, path, appId, ticketBase64, isOffline)
             }
         }
 
@@ -220,13 +249,16 @@ object SteamUtils {
         // Game-specific Handling
         ensureSaveLocationsForGames(context, steamAppId)
 
+        // Generate achievements.json
+        generateAchievementsFile(rootPath.resolve("steam_settings"), appId)
+
         MarkerUtils.addMarker(appDirPath, Marker.STEAM_DLL_REPLACED)
     }
 
     /**
      * Replaces any existing `steamclient.dll` or `steamclient64.dll` in the Steam directory
      */
-    suspend fun replaceSteamclientDll(context: Context, appId: String) {
+    suspend fun replaceSteamclientDll(context: Context, appId: String, isOffline: Boolean = false) {
         val steamAppId = ContainerUtils.extractGameIdFromContainerId(appId)
         val appDirPath = SteamService.getAppDirPath(steamAppId)
         val container = ContainerUtils.getContainer(context, appId)
@@ -259,7 +291,9 @@ object SteamUtils {
 
         // Get ticket and pass to ensureSteamSettings
         val ticketBase64 = SteamService.instance?.getEncryptedAppTicketBase64(steamAppId)
-        ensureSteamSettings(context, File(container.getRootDir(), ".wine/drive_c/Program Files (x86)/Steam/steamclient.dll").toPath(), appId, ticketBase64)
+        val path = File(container.getRootDir(), ".wine/drive_c/Program Files (x86)/Steam/steamclient.dll").toPath()
+        ensureSteamSettings(context, path, appId, ticketBase64, isOffline)
+        generateAchievementsFile(path, appId)
 
         // Game-specific Handling
         ensureSaveLocationsForGames(context, steamAppId)
@@ -804,7 +838,7 @@ object SteamUtils {
     /**
      * Sibling folder "steam_settings" + empty "offline.txt" file, no-ops if they already exist.
      */
-    private fun ensureSteamSettings(context: Context, dllPath: Path, appId: String, ticketBase64: String? = null) {
+    private fun ensureSteamSettings(context: Context, dllPath: Path, appId: String, ticketBase64: String? = null, isOffline: Boolean = false) {
         val steamAppId = ContainerUtils.extractGameIdFromContainerId(appId)
         val steamDir = dllPath.parent
         Files.createDirectories(steamDir)
@@ -916,9 +950,14 @@ object SteamUtils {
 
         val mainIni = settingsDir.resolve("configs.main.ini")
 
+        val steamOfflineMode = container.isSteamOfflineMode()
+        val useOfflineConfig = steamOfflineMode || isOffline
         val mainIniContent = buildString {
             appendLine("[main::connectivity]")
-            appendLine("disable_lan_only=1")
+            appendLine("disable_lan_only=${if (useOfflineConfig) 0 else 1}")
+            if (useOfflineConfig) {
+                appendLine("offline=1")
+            }
         }
 
         if (Files.notExists(mainIni)) Files.createFile(mainIni)
@@ -943,7 +982,6 @@ object SteamUtils {
                 Timber.w(error, "Failed to delete controller config for $steamAppId")
             }
         }
-
 
         // Write supported languages list
         val supportedLanguagesFile = settingsDir.resolve("supported_languages.txt")
@@ -1299,6 +1337,18 @@ object SteamUtils {
             Timber.i("[${mapping.description}] Created symlink: ${targetPath.absolutePath} -> ${sourcePath.absolutePath}")
         } catch (e: Exception) {
             Timber.e(e, "[${mapping.description}] Failed to create save location symlink")
+        }
+    }
+
+    fun generateAchievementsFile(dllPath: Path, appId: String) {
+        val steamAppId = ContainerUtils.extractGameIdFromContainerId(appId)
+        val settingsDir = dllPath.parent.resolve("steam_settings")
+        if (Files.notExists(settingsDir)) {
+            Files.createDirectories(settingsDir)
+        }
+
+        runBlocking {
+            SteamService.generateAchievements(steamAppId, settingsDir.absolutePathString())
         }
     }
 }

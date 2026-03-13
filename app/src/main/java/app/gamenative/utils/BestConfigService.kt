@@ -31,7 +31,7 @@ import java.util.concurrent.ConcurrentHashMap
  * Service for fetching best configurations for games from GameNative API.
  */
 object BestConfigService {
-    private const val API_BASE_URL = "https://gamenative-best-config-worker.gamenative.workers.dev/api/best-config"
+    private const val API_BASE_URL = "https://api.gamenative.app/api/best-config"
     private const val TIMEOUT_SECONDS = 10L
 
     private val httpClient = OkHttpClient.Builder()
@@ -97,14 +97,26 @@ object BestConfigService {
                     put("gpuName", gpuName)
                 }
 
-                val mediaType = "application/json".toMediaType()
-                val body = requestBody.toString().toRequestBody(mediaType)
+                val attestation = KeyAttestationHelper.getAttestationFields("https://api.gamenative.app")
+                if (attestation != null) {
+                    requestBody.put("nonce", attestation.first)
+                    requestBody.put("attestationChain", org.json.JSONArray(attestation.second))
+                }
 
-                val request = Request.Builder()
+                val mediaType = "application/json".toMediaType()
+                val bodyString = requestBody.toString()
+                val body = bodyString.toRequestBody(mediaType)
+
+                val integrityToken = PlayIntegrity.requestToken(bodyString.toByteArray())
+
+                val requestBuilder = Request.Builder()
                     .url(API_BASE_URL)
                     .post(body)
                     .header("Content-Type", "application/json")
-                    .build()
+                if (integrityToken != null) {
+                    requestBuilder.header("X-Integrity-Token", integrityToken)
+                }
+                val request = requestBuilder.build()
 
                 val response = httpClient.newCall(request).execute()
 
@@ -767,6 +779,9 @@ object BestConfigService {
                 }
                 if (filteredJson.has("useLegacyDRM") && !filteredJson.isNull("useLegacyDRM")) {
                     resultMap["useLegacyDRM"] = filteredJson.optBoolean("useLegacyDRM", PrefManager.useLegacyDRM)
+                }
+                if (filteredJson.has("steamOfflineMode") && !filteredJson.isNull("steamOfflineMode")) {
+                    resultMap["steamOfflineMode"] = filteredJson.optBoolean("steamOfflineMode", PrefManager.steamOfflineMode)
                 }
                 if (filteredJson.has("envVars") && !filteredJson.isNull("envVars")) {
                     resultMap["envVars"] = filteredJson.optString("envVars", PrefManager.envVars)

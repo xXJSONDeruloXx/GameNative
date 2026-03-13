@@ -5,7 +5,9 @@ import androidx.room.Room
 import app.gamenative.db.DATABASE_NAME
 import app.gamenative.db.PluviaDatabase
 import app.gamenative.db.dao.AppInfoDao
+import app.gamenative.db.dao.AmazonGameDao
 import app.gamenative.db.dao.CachedLicenseDao
+import app.gamenative.db.dao.ItchGameDao
 import app.gamenative.db.dao.DownloadingAppInfoDao
 import app.gamenative.db.dao.EncryptedAppTicketDao
 import app.gamenative.db.migration.ROOM_MIGRATION_V7_to_V8
@@ -70,6 +72,10 @@ class DatabaseModule {
     @Provides
     @Singleton
     fun provideItchGameDao(db: PluviaDatabase) = db.itchGameDao()
+
+    @Provides
+    @Singleton
+    fun provideAmazonGameDao(db: PluviaDatabase) = db.amazonGameDao()
 
     @Provides
     @Singleton

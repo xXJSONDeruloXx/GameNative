@@ -15,6 +15,7 @@ import app.gamenative.data.EncryptedAppTicket
 import app.gamenative.data.GOGGame
 import app.gamenative.data.EpicGame
 import app.gamenative.data.ItchGame
+import app.gamenative.data.AmazonGame
 import app.gamenative.db.converters.AppConverter
 import app.gamenative.db.converters.ByteArrayConverter
 import app.gamenative.db.converters.FriendConverter
@@ -33,6 +34,7 @@ import app.gamenative.db.dao.EncryptedAppTicketDao
 import app.gamenative.db.dao.GOGGameDao
 import app.gamenative.db.dao.EpicGameDao
 import app.gamenative.db.dao.ItchGameDao
+import app.gamenative.db.dao.AmazonGameDao
 
 const val DATABASE_NAME = "pluvia.db"
 
@@ -47,10 +49,11 @@ const val DATABASE_NAME = "pluvia.db"
         SteamLicense::class,
         GOGGame::class,
         EpicGame::class,
+        AmazonGame::class,
         DownloadingAppInfo::class,
         ItchGame::class,
     ],
-    version = 13,
+    version = 14,
     // For db migration, visit https://developer.android.com/training/data-storage/room/migrating-db-versions for more information
     exportSchema = true, // It is better to handle db changes carefully, as GN is getting much more users.
     autoMigrations = [
@@ -59,7 +62,8 @@ const val DATABASE_NAME = "pluvia.db"
         AutoMigration(from = 9, to = 10),
         AutoMigration(from = 10, to = 11),
         AutoMigration(from = 11, to = 12),
-        AutoMigration(from = 12, to = 13),
+        AutoMigration(from = 12, to = 13), // Added amazon_games table
+        AutoMigration(from = 13, to = 14), // Added itch_games table
     ]
 )
 @TypeConverters(
@@ -92,6 +96,8 @@ abstract class PluviaDatabase : RoomDatabase() {
     abstract fun epicGameDao(): EpicGameDao
 
     abstract fun itchGameDao(): ItchGameDao
+
+    abstract fun amazonGameDao(): AmazonGameDao
 
     abstract fun downloadingAppInfoDao(): DownloadingAppInfoDao
 }

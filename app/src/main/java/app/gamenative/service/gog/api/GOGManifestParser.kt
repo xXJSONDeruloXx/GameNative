@@ -1,5 +1,6 @@
 package app.gamenative.service.gog.api
 
+import app.gamenative.service.gog.GOGConstants
 import timber.log.Timber
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -54,35 +55,45 @@ class GOGManifestParser @Inject constructor() {
     }
 
     /**
-     * Filter depots based on language
+     * Filter depots based on container language. Resolves container language to GOG manifest codes
+     * via [GOGConstants.containerLanguageToGogCodes], tries each in order, and for each tries English
+     * fallback if needed. Returns the first non-empty result.
      *
      * @param manifest Main manifest metadata
-     * @param language Target language (e.g., "en-US") or is *
-     * @return Filtered list of depots matching language
+     * @param containerLanguage Container language name (e.g. "english", "german"). See [GOGConstants.containerLanguageToGogCodes].
+     * @return Pair of (filtered list of depots, effective GOG language code that matched)
      */
-    fun filterDepotsByLanguage(manifest: GOGManifestMeta, language: String): List<Depot> {
-        val filtered = manifest.depots.filter { depot ->
-            depot.matchesLanguage(language) || (depot.languages?.contains("*") == true)
+    fun filterDepotsByLanguage(manifest: GOGManifestMeta, containerLanguage: String): Pair<List<Depot>, String> {
+        val allDepotLangCodes = manifest.depots.flatMap { it.languages }.distinct().sorted()
+        Timber.tag(TAG).d("Language depots codes in manifest: $allDepotLangCodes")
+
+        val starDepots = manifest.depots.filter { it.matchesLanguage("*") }
+        fun filter(lang: String): List<Depot> = manifest.depots.filter { it.matchesLanguage(lang) }
+        val requestedCodes = GOGConstants.containerLanguageToGogCodes(containerLanguage)
+        val englishCodes = GOGConstants.CONTAINER_LANGUAGE_TO_GOG_CODES.getValue(GOGConstants.GOG_FALLBACK_DOWNLOAD_LANGUAGE)
+
+        // Try all requested language codes first (e.g. german, de-DE, then de)
+        for (lang in requestedCodes) {
+            val matched = filter(lang)
+            if (matched.isNotEmpty()) {
+                val result = (matched + starDepots).distinct()
+                Timber.tag(TAG).d("Filtered ${result.size}/${manifest.depots.size} depots for language: $lang")
+                return result to lang
+            }
         }
-
-        Timber.tag(TAG).d("Filtered ${filtered.size}/${manifest.depots.size} depots for language: $language")
-        return filtered
-    }
-
-    /**
-     * Filter depots based on OS bitness
-     *
-     * @param depots List of depots to filter
-     * @param bitness Target bitness (e.g., "64", "32")
-     * @return Filtered list of depots matching bitness
-     */
-    fun filterDepotsByBitness(depots: List<Depot>, bitness: String = "64"): List<Depot> {
-        val filtered = depots.filter { depot ->
-            depot.osBitness == null || depot.osBitness.contains(bitness)
+        // Only then try English fallbacks (en-US, then en)
+        for (fallbackLang in englishCodes) {
+            val matched = filter(fallbackLang)
+            if (matched.isNotEmpty()) {
+                val result = (matched + starDepots).distinct()
+                Timber.tag(TAG).d("No depots for requested language codes, fell back to $fallbackLang: ${result.size}/${manifest.depots.size} depots")
+                return result to fallbackLang
+            }
         }
-
-        Timber.tag(TAG).d("Filtered ${filtered.size}/${depots.size} depots for bitness: $bitness")
-        return filtered
+        // No language-specific match: return all depots with first requested language as effective
+        val effectiveLang = requestedCodes.firstOrNull() ?: "en"
+        Timber.tag(TAG).d("No language match for $containerLanguage, using all ${manifest.depots.size} depots with effective: $effectiveLang")
+        return manifest.depots to effectiveLang
     }
 
     /**

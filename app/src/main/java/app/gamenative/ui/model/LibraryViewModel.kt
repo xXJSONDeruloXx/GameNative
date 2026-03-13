@@ -1,51 +1,60 @@
 package app.gamenative.ui.model
 
+import android.content.Context
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import app.gamenative.PrefManager
 import app.gamenative.PluviaApp
+import app.gamenative.PrefManager
+import app.gamenative.data.GameCompatibilityStatus
+import app.gamenative.data.GameSource
 import app.gamenative.data.LibraryItem
 import app.gamenative.data.SteamApp
+import app.gamenative.events.AndroidEvent
 import app.gamenative.data.GOGGame
 import app.gamenative.data.EpicGame
 import app.gamenative.data.ItchGame
-import app.gamenative.data.GameSource
+import app.gamenative.data.AmazonGame
 import app.gamenative.db.dao.SteamAppDao
 import app.gamenative.db.dao.GOGGameDao
 import app.gamenative.db.dao.EpicGameDao
 import app.gamenative.db.dao.ItchGameDao
+import app.gamenative.db.dao.AmazonGameDao
 import app.gamenative.service.DownloadService
 import app.gamenative.service.SteamService
+import app.gamenative.service.amazon.AmazonService
+import app.gamenative.service.epic.EpicService
+import app.gamenative.service.gog.GOGService
 import app.gamenative.ui.data.LibraryState
 import app.gamenative.ui.enums.AppFilter
-import app.gamenative.events.AndroidEvent
+import app.gamenative.ui.enums.LibraryTab
+import app.gamenative.ui.enums.LibraryTab.Companion.next
+import app.gamenative.ui.enums.LibraryTab.Companion.previous
+import app.gamenative.ui.enums.SortOption
 import app.gamenative.utils.CustomGameScanner
 import app.gamenative.utils.GameCompatibilityCache
 import app.gamenative.utils.GameCompatibilityService
-import app.gamenative.data.GameCompatibilityStatus
+import app.gamenative.utils.unaccent
 import com.winlator.core.GPUInformation
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import android.content.Context
-import app.gamenative.ui.enums.PaneType
 import java.io.File
 import java.util.EnumSet
 import javax.inject.Inject
+import kotlin.math.max
+import kotlin.math.min
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import timber.log.Timber
-import kotlin.math.max
-import kotlin.math.min
 
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
@@ -53,6 +62,7 @@ class LibraryViewModel @Inject constructor(
     private val gogGameDao: GOGGameDao,
     private val epicGameDao: EpicGameDao,
     private val itchGameDao: ItchGameDao,
+    private val amazonGameDao: AmazonGameDao,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -73,14 +83,15 @@ class LibraryViewModel @Inject constructor(
     }
 
     // How many items loaded on one page of results
-    private var paginationCurrentPage: Int = 0;
-    private var lastPageInCurrentFilter: Int = 0;
+    @Volatile private var paginationCurrentPage: Int = 0
+    @Volatile private var lastPageInCurrentFilter: Int = 0
 
     // Complete and unfiltered app list
     private var appList: List<SteamApp> = emptyList()
     private var gogGameList: List<GOGGame> = emptyList()
     private var epicGameList: List<EpicGame> = emptyList()
     private var itchGameList: List<ItchGame> = emptyList()
+    private var amazonGameList: List<AmazonGame> = emptyList()
 
     // Track if this is the first load to apply minimum load time
     private var isFirstLoad = true
@@ -149,10 +160,19 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             itchGameDao.getAll().collect { games ->
                 Timber.tag("LibraryViewModel").d("Collecting ${games.size} itch.io games")
-
                 val hasChanges = itchGameList.size != games.size || itchGameList != games
                 itchGameList = games
+                if (hasChanges) {
+                    onFilterApps(paginationCurrentPage)
+                }
+            }
+        }
 
+        viewModelScope.launch(Dispatchers.IO) {
+            amazonGameDao.getAll().collect { games ->
+                Timber.tag("LibraryViewModel").d("Collecting ${games.size} Amazon games")
+                val hasChanges = amazonGameList.size != games.size || amazonGameList != games
+                amazonGameList = games
                 if (hasChanges) {
                     onFilterApps(paginationCurrentPage)
                 }
@@ -189,6 +209,7 @@ class LibraryViewModel @Inject constructor(
                 PrefManager.showSteamInLibrary = newValue
                 _state.update { it.copy(showSteamInLibrary = newValue) }
             }
+
             GameSource.CUSTOM_GAME -> {
                 val newValue = !current.showCustomGamesInLibrary
                 PrefManager.showCustomGamesInLibrary = newValue
@@ -209,8 +230,46 @@ class LibraryViewModel @Inject constructor(
                 PrefManager.showItchInLibrary = newValue
                 _state.update { it.copy(showItchInLibrary = newValue) }
             }
+            GameSource.AMAZON -> {
+                val newValue = !current.showAmazonInLibrary
+                PrefManager.showAmazonInLibrary = newValue
+                _state.update { it.copy(showAmazonInLibrary = newValue) }
+            }
         }
         onFilterApps(paginationCurrentPage)
+    }
+
+    fun onSortOptionChanged(sortOption: SortOption) {
+        PrefManager.librarySortOption = sortOption
+        _state.update { it.copy(currentSortOption = sortOption) }
+        onFilterApps()
+    }
+
+    fun onOptionsPanelToggle(isOpen: Boolean) {
+        _state.update { it.copy(isOptionsPanelOpen = isOpen) }
+    }
+
+    fun onTabChanged(tab: LibraryTab) {
+        _state.update { it.copy(currentTab = tab) }
+        onFilterApps(0) // Reset to first page and refresh
+    }
+
+    fun onNextTab() {
+        _state.update { currentState ->
+            val nextTab = currentState.currentTab.next()
+            Timber.tag("LibraryViewModel").d("Tab next via bumper: ${currentState.currentTab} -> $nextTab")
+            currentState.copy(currentTab = nextTab)
+        }
+        onFilterApps(0)
+    }
+
+    fun onPreviousTab() {
+        _state.update { currentState ->
+            val previousTab = currentState.currentTab.previous()
+            Timber.tag("LibraryViewModel").d("Tab previous via bumper: ${currentState.currentTab} -> $previousTab")
+            currentState.copy(currentTab = previousTab)
+        }
+        onFilterApps(0)
     }
 
     fun onSearchQuery(value: String) {
@@ -272,6 +331,14 @@ class LibraryViewModel @Inject constructor(
                     Timber.tag("LibraryViewModel").i("Triggering GOG library refresh")
                     app.gamenative.service.gog.GOGService.triggerLibrarySync(context)
                 }
+                if (app.gamenative.service.itch.ItchService.hasStoredCredentials(context)) {
+                    Timber.tag("LibraryViewModel").i("Triggering itch.io library refresh")
+                    app.gamenative.service.itch.ItchService.triggerLibrarySync(context)
+                }
+                if (AmazonService.hasStoredCredentials(context)) {
+                    Timber.tag("LibraryViewModel").i("Triggering Amazon library refresh")
+                    AmazonService.triggerLibrarySync(context)
+                }
             } catch (e: Exception) {
                 Timber.tag("LibraryViewModel").e(e, "Failed to refresh owned games from server")
             } finally {
@@ -330,7 +397,7 @@ class LibraryViewModel @Inject constructor(
                         } ?: emptyList()
                     }.let { owners ->
                         if (owners.isEmpty()) {
-                            true                       // no owner info ⇒ don’t filter the item out
+                            true // no owner info ⇒ don’t filter the item out
                         } else {
                             owners.any { item.ownerAccountId.contains(it) }
                         }
@@ -348,14 +415,16 @@ class LibraryViewModel @Inject constructor(
                 }
                 .filter { item ->
                     if (currentState.searchQuery.isNotEmpty()) {
-                        item.name.contains(currentState.searchQuery, ignoreCase = true)
+                        matches(item.name, currentState.searchQuery)
                     } else {
                         true
                     }
                 }
                 .filter { item ->
-                    if (currentState.appInfoSortType.contains(AppFilter.INSTALLED)) {
-                        downloadDirectoryApps.contains(SteamService.getAppDirName(item))
+                    val installedOnly = currentState.currentTab.installedOnly ||
+                        currentState.appInfoSortType.contains(AppFilter.INSTALLED)
+                    if (installedOnly) {
+                        downloadDirectorySet.contains(SteamService.getAppDirName(item))
                     } else {
                         true
                     }
@@ -363,7 +432,7 @@ class LibraryViewModel @Inject constructor(
                 .sortedWith(
                     compareByDescending<SteamApp> {
                         downloadDirectorySet.contains(SteamService.getAppDirName(it))
-                    }.thenBy { it.name.lowercase() }
+                    }.thenBy { it.name.lowercase() },
                 )
                 .toList()
 
@@ -371,6 +440,10 @@ class LibraryViewModel @Inject constructor(
             data class LibraryEntry(val item: LibraryItem, val isInstalled: Boolean)
             val steamEntries: List<LibraryEntry> = filteredSteamApps.map { item ->
                 val isInstalled = downloadDirectorySet.contains(SteamService.getAppDirName(item))
+                // Calculate total size from all depot manifests (use "public" branch as default)
+                val totalSizeBytes = item.depots.values.sumOf { depot ->
+                    depot.manifests["public"]?.size ?: depot.manifests.values.firstOrNull()?.size ?: 0L
+                }
                 LibraryEntry(
                     item = LibraryItem(
                         index = 0, // temporary, will be re-indexed after combining and paginating
@@ -379,7 +452,9 @@ class LibraryViewModel @Inject constructor(
                         iconHash = item.clientIconHash,
                         capsuleImageUrl = item.getCapsuleUrl(),
                         headerImageUrl = item.headerUrl,
+                        heroImageUrl = item.getHeroUrl(),
                         isShared = (PrefManager.steamUserAccountId != 0 && !item.ownerAccountId.contains(PrefManager.steamUserAccountId)),
+                        sizeBytes = totalSizeBytes,
                     ),
                     isInstalled = isInstalled,
                 )
@@ -389,7 +464,7 @@ class LibraryViewModel @Inject constructor(
             // Only include custom games if GAME filter is selected
             val customGameItems = if (currentState.appInfoSortType.contains(AppFilter.GAME)) {
                 CustomGameScanner.scanAsLibraryItems(
-                    query = currentState.searchQuery
+                    query = currentState.searchQuery,
                 )
             } else {
                 emptyList()
@@ -401,13 +476,15 @@ class LibraryViewModel @Inject constructor(
                 .asSequence()
                 .filter { game ->
                     if (currentState.searchQuery.isNotEmpty()) {
-                        game.title.contains(currentState.searchQuery, ignoreCase = true)
+                        matches(game.title, currentState.searchQuery)
                     } else {
                         true
                     }
                 }
                 .filter { game ->
-                    if (currentState.appInfoSortType.contains(AppFilter.INSTALLED)) {
+                    val installedOnly = currentState.currentTab.installedOnly ||
+                        currentState.appInfoSortType.contains(AppFilter.INSTALLED)
+                    if (installedOnly) {
                         game.isInstalled
                     } else {
                         true
@@ -434,13 +511,15 @@ class LibraryViewModel @Inject constructor(
                 .asSequence()
                 .filter { game ->
                     if (currentState.searchQuery.isNotEmpty()) {
-                        game.title.contains(currentState.searchQuery, ignoreCase = true)
+                        matches(game.title, currentState.searchQuery)
                     } else {
                         true
                     }
                 }
                 .filter { game ->
-                    if (currentState.appInfoSortType.contains(AppFilter.INSTALLED)) {
+                    val installedOnly = currentState.currentTab.installedOnly ||
+                        currentState.appInfoSortType.contains(AppFilter.INSTALLED)
+                    if (installedOnly) {
                         game.isInstalled
                     } else {
                         true
@@ -452,7 +531,7 @@ class LibraryViewModel @Inject constructor(
                 LibraryEntry(
                     item = LibraryItem(
                         index = 0,
-                        appId = "EPIC_${game.id}",
+                        appId = "${GameSource.EPIC.name}_${game.id}",
                         name = game.title,
                         iconHash = game.artCover,
                         isShared = false,
@@ -467,13 +546,36 @@ class LibraryViewModel @Inject constructor(
                 .asSequence()
                 .filter { game ->
                     if (currentState.searchQuery.isNotEmpty()) {
-                        game.title.contains(currentState.searchQuery, ignoreCase = true)
+                        matches(game.title, currentState.searchQuery)
                     } else {
                         true
                     }
                 }
                 .filter { game ->
-                    if (currentState.appInfoSortType.contains(AppFilter.INSTALLED)) {
+                    val installedOnly = currentState.currentTab.installedOnly ||
+                        currentState.appInfoSortType.contains(AppFilter.INSTALLED)
+                    if (installedOnly) {
+                        game.isInstalled
+                    } else {
+                        true
+                    }
+                }
+                .toList()
+
+            // Amazon games
+            val filteredAmazonGames = amazonGameList
+                .asSequence()
+                .filter { game ->
+                    if (currentState.searchQuery.isNotEmpty()) {
+                        matches(game.title, currentState.searchQuery)
+                    } else {
+                        true
+                    }
+                }
+                .filter { game ->
+                    val installedOnly = currentState.currentTab.installedOnly ||
+                        currentState.appInfoSortType.contains(AppFilter.INSTALLED)
+                    if (installedOnly) {
                         game.isInstalled
                     } else {
                         true
@@ -495,10 +597,25 @@ class LibraryViewModel @Inject constructor(
                 )
             }
 
+            val amazonEntries = filteredAmazonGames.map { game ->
+                LibraryEntry(
+                    item = LibraryItem(
+                        index = 0,
+                        appId = "AMAZON_${game.appId}",
+                        name = game.title,
+                        iconHash = game.artUrl,
+                        isShared = false,
+                        gameSource = GameSource.AMAZON,
+                    ),
+                    isInstalled = game.isInstalled,
+                )
+            }
+
             // Calculate installed counts
             val gogInstalledCount = filteredGOGGames.count { it.isInstalled }
             val epicInstalledCount = filteredEpicGames.count { it.isInstalled }
             val itchInstalledCount = filteredItchGames.count { it.isInstalled }
+            val amazonInstalledCount = filteredAmazonGames.count { it.isInstalled }
             // Save game counts for skeleton loaders (only when not searching, to get accurate counts)
             // This needs to happen before filtering by source, so we save the total counts
             if (currentState.searchQuery.isEmpty()) {
@@ -510,35 +627,79 @@ class LibraryViewModel @Inject constructor(
                 PrefManager.epicInstalledGamesCount = epicInstalledCount
                 PrefManager.itchGamesCount = filteredItchGames.size
                 PrefManager.itchInstalledGamesCount = itchInstalledCount
-                Timber.tag("LibraryViewModel").d("Saved counts - Custom: ${customGameItems.size}, Steam: ${filteredSteamApps.size}, GOG: ${filteredGOGGames.size}, GOG installed: $gogInstalledCount, Epic: ${filteredEpicGames.size}, Epic installed: $epicInstalledCount, Itch: ${filteredItchGames.size}, Itch installed: $itchInstalledCount")
+                PrefManager.amazonInstalledGamesCount = amazonInstalledCount
+                Timber.tag("LibraryViewModel").d(
+                    "Saved counts - Custom: ${customGameItems.size}, Steam: ${filteredSteamApps.size}, GOG: ${filteredGOGGames.size}, GOG installed: $gogInstalledCount, Epic: ${filteredEpicGames.size}, Epic installed: $epicInstalledCount, Itch: ${filteredItchGames.size}, Itch installed: $itchInstalledCount, Amazon installed: $amazonInstalledCount",
+                )
             }
 
-            // Apply App Source filters
-            val includeSteam = _state.value.showSteamInLibrary
-            val includeOpen = _state.value.showCustomGamesInLibrary
-            val includeGOG = _state.value.showGOGInLibrary
-            val includeEpic = _state.value.showEpicInLibrary
-            val includeItch = _state.value.showItchInLibrary
+            // Compute effective source filters based on current tab
+            // ALL tab uses user preferences, other tabs override with their presets
+            // Use captured currentState (not _state.value) to avoid TOCTOU race
+            val currentTab = currentState.currentTab
+            val includeSteam = if (currentTab == app.gamenative.ui.enums.LibraryTab.ALL) {
+                currentState.showSteamInLibrary
+            } else {
+                currentTab.showSteam
+            }
+            val includeOpen = if (currentTab == app.gamenative.ui.enums.LibraryTab.ALL) {
+                currentState.showCustomGamesInLibrary
+            } else {
+                currentTab.showCustom
+            }
+            val includeItch = currentTab == app.gamenative.ui.enums.LibraryTab.ALL &&
+                currentState.showItchInLibrary &&
+                app.gamenative.service.itch.ItchService.hasStoredCredentials(context)
 
-            // Combine all lists and sort: installed games first, then alphabetically
-            val combined = buildList<LibraryEntry> {
+            val includeGOG = (if (currentTab == app.gamenative.ui.enums.LibraryTab.ALL) {
+                currentState.showGOGInLibrary
+            } else {
+                currentTab.showGoG
+            }) && GOGService.hasStoredCredentials(context)
+
+            val includeEpic = (if (currentTab == app.gamenative.ui.enums.LibraryTab.ALL) {
+                currentState.showEpicInLibrary
+            } else {
+                currentTab.showEpic
+            }) && EpicService.hasStoredCredentials(context)
+
+            val includeAmazon = (if (currentTab == app.gamenative.ui.enums.LibraryTab.ALL) {
+                currentState.showAmazonInLibrary
+            } else {
+                currentTab.showAmazon
+            }) && AmazonService.hasStoredCredentials(context)
+
+            // Combine both lists and apply sort option
+            val sortComparator: Comparator<LibraryEntry> = when (currentState.currentSortOption) {
+                SortOption.INSTALLED_FIRST -> compareBy<LibraryEntry> { entry ->
+                    if (entry.isInstalled) 0 else 1
+                }.thenBy { it.item.name.lowercase() }
+
+                SortOption.NAME_ASC -> compareBy { it.item.name.lowercase() }
+
+                SortOption.NAME_DESC -> compareByDescending { it.item.name.lowercase() }
+
+                SortOption.RECENTLY_PLAYED -> compareBy<LibraryEntry> { entry ->
+                    if (entry.isInstalled) 0 else 1
+                }.thenBy { it.item.name.lowercase() }
+
+                SortOption.SIZE_SMALLEST -> compareBy<LibraryEntry> { it.item.sizeBytes }
+                    .thenBy { it.item.name.lowercase() }
+
+                SortOption.SIZE_LARGEST -> compareByDescending<LibraryEntry> { it.item.sizeBytes }
+                    .thenBy { it.item.name.lowercase() }
+            }
+
+            val combined = buildList {
                 if (includeSteam) addAll(steamEntries)
                 if (includeOpen) addAll(customEntries)
                 if (includeGOG) addAll(gogEntries)
                 if (includeEpic) addAll(epicEntries)
                 if (includeItch) addAll(itchEntries)
-            }.sortedWith(
-                // Primary sort: installed status (0 = installed at top, 1 = not installed at bottom)
-                // Secondary sort: alphabetically by name (case-insensitive)
-                compareBy<LibraryEntry> { entry ->
-                    if (entry.isInstalled) 0 else 1
-                }.thenBy { it.item.name.lowercase() }
-            ).also { sortedList ->
-                if (sortedList.isNotEmpty()) {
-                    val installedCount = sortedList.count { it.isInstalled }
-                    val first10 = sortedList.take(10)
-                }
-            }.mapIndexed { idx, entry -> entry.item.copy(index = idx) }
+                if (includeAmazon) addAll(amazonEntries)
+            }.sortedWith(sortComparator).mapIndexed { idx, entry ->
+                entry.item.copy(index = idx, isInstalled = entry.isInstalled)
+            }
 
             // Total count for the current filter
             val totalFound = combined.size
@@ -552,7 +713,7 @@ class LibraryViewModel @Inject constructor(
             val endIndex = min((paginationPage + 1) * pageSize, totalFound)
             val pagedList = combined.take(endIndex)
 
-            Timber.tag("LibraryViewModel").d("Filtered list size (with Custom Games): ${totalFound}")
+            Timber.tag("LibraryViewModel").d("Filtered list size (with Custom Games): $totalFound")
 
             if (isFirstLoad) {
                 isFirstLoad = false
@@ -568,9 +729,30 @@ class LibraryViewModel @Inject constructor(
                     lastPaginationPage = lastPageInCurrentFilter + 1,
                     totalAppsInFilter = totalFound,
                     isLoading = false, // Loading complete
+                    // Per-source counts for tab badges
+                    // Use user prefs + auth state only (not current tab) so badges stay stable across tab switches
+                    allCount = (if (currentState.showSteamInLibrary) steamEntries.size else 0) +
+                        (if (currentState.showCustomGamesInLibrary) customEntries.size else 0) +
+                        (if (currentState.showGOGInLibrary && GOGService.hasStoredCredentials(context)) gogEntries.size else 0) +
+                        (if (currentState.showEpicInLibrary && EpicService.hasStoredCredentials(context)) epicEntries.size else 0) +
+                        (if (currentState.showItchInLibrary && app.gamenative.service.itch.ItchService.hasStoredCredentials(context)) itchEntries.size else 0) +
+                        (if (currentState.showAmazonInLibrary && AmazonService.hasStoredCredentials(context)) amazonEntries.size else 0),
+                    steamCount = if (currentState.showSteamInLibrary) steamEntries.size else 0,
+                    gogCount = if (currentState.showGOGInLibrary && GOGService.hasStoredCredentials(context)) gogEntries.size else 0,
+                    epicCount = if (currentState.showEpicInLibrary && EpicService.hasStoredCredentials(context)) epicEntries.size else 0,
+                    amazonCount = if (currentState.showAmazonInLibrary && AmazonService.hasStoredCredentials(context)) amazonEntries.size else 0,
+                    localCount = if (currentState.showCustomGamesInLibrary) customEntries.size else 0,
                 )
             }
         }
+    }
+
+    /**
+     * Compares the game name against the search query using an exact match
+     * and then again using a normalized form with diacritics removed.
+     */
+    private fun matches(gameName: String, searchQuery:String): Boolean {
+        return gameName.contains(searchQuery, ignoreCase = true) || gameName.unaccent().contains(searchQuery, ignoreCase = true)
     }
 
     /**

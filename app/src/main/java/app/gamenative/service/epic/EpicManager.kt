@@ -396,7 +396,7 @@ class EpicManager @Inject constructor(
         val mainExe = exeFiles.firstOrNull()
         if (mainExe != null) {
             Timber.tag("Epic").i("Found executable: ${mainExe.absolutePath}")
-            return mainExe.absolutePath
+            return mainExe.relativeTo(installDir).path
         }
 
         Timber.tag("Epic").w("No executable found in ${game.installPath}")
@@ -951,9 +951,8 @@ class EpicManager @Inject constructor(
             // Parse with Kotlin parser
             val manifest = app.gamenative.service.epic.manifest.EpicManifest.readAll(manifestData.manifestBytes)
 
-            // Calculate install size
-            val installSize = manifest.fileManifestList?.elements?.sumOf { it.fileSize } ?: 0L
-            val downloadSize = app.gamenative.service.epic.manifest.ManifestUtils.getTotalDownloadSize(manifest)
+            // Required-only sizes for detail page display (download uses container language via getSizesForSelectedInstallTags elsewhere).
+            val (downloadSize, installSize) = app.gamenative.service.epic.manifest.ManifestUtils.getSizesForSelectedInstallTags(manifest, emptyList())
             Timber.tag("Epic").d(
                 "Manifest stats for $appName: version=${manifest.version}, featureLevel=${manifest.meta?.featureLevel}, " +
                     "buildVersion=${manifest.meta?.buildVersion}, buildId=${manifest.meta?.buildId}",

@@ -297,6 +297,13 @@ object PrefManager {
             setPref(FORCE_DLC, value)
         }
 
+    private val STEAM_OFFLINE_MODE = booleanPreferencesKey("steam_offline_mode")
+    var steamOfflineMode: Boolean
+        get() = getPref(STEAM_OFFLINE_MODE, false)
+        set(value) {
+            setPref(STEAM_OFFLINE_MODE, value)
+        }
+
     private val USE_LEGACY_DRM = booleanPreferencesKey("use_legacy_drm")
     var useLegacyDRM: Boolean
         get() = getPref(USE_LEGACY_DRM, false)
@@ -309,6 +316,13 @@ object PrefManager {
         get() = getPref(UNPACK_FILES, false)
         set(value) {
             setPref(UNPACK_FILES, value)
+        }
+
+    private val SUSPEND_POLICY = stringPreferencesKey("suspend_policy")
+    var suspendPolicy: String
+        get() = Container.normalizeSuspendPolicy(getPref(SUSPEND_POLICY, Container.SUSPEND_POLICY_MANUAL))
+        set(value) {
+            setPref(SUSPEND_POLICY, Container.normalizeSuspendPolicy(value))
         }
 
     private val CPU_LIST = stringPreferencesKey("cpu_list")
@@ -471,6 +485,13 @@ object PrefManager {
             setPref(DISABLE_MOUSE_INPUT, value)
         }
 
+    private val PORTRAIT_MODE = booleanPreferencesKey("portrait_mode")
+    var portraitMode: Boolean
+        get() = getPref(PORTRAIT_MODE, false)
+        set(value) {
+            setPref(PORTRAIT_MODE, value)
+        }
+
     private val BOX_86_VERSION = stringPreferencesKey("box86_version")
     var box86Version: String
         get() = getPref(BOX_86_VERSION, DefaultVersion.BOX86)
@@ -587,6 +608,24 @@ object PrefManager {
         }
         set(value) {
             setPref(LIBRARY_FILTER, AppFilter.toFlags(value))
+        }
+
+    private val LIBRARY_SORT_KEY = stringPreferencesKey("library_sort_key")
+    private val LIBRARY_SORT_LEGACY = intPreferencesKey("library_sort")
+    var librarySortOption: app.gamenative.ui.enums.SortOption
+        get() {
+            // Try string key first, fall back to legacy ordinal for migration
+            val keyValue = getPref(LIBRARY_SORT_KEY, "")
+            return if (keyValue.isNotEmpty()) {
+                app.gamenative.ui.enums.SortOption.fromKey(keyValue)
+            } else {
+                val ordinal = getPref(LIBRARY_SORT_LEGACY, app.gamenative.ui.enums.SortOption.INSTALLED_FIRST.ordinal)
+                @Suppress("DEPRECATION")
+                app.gamenative.ui.enums.SortOption.fromOrdinal(ordinal)
+            }
+        }
+        set(value) {
+            setPref(LIBRARY_SORT_KEY, value.key)
         }
 
     /**
@@ -774,6 +813,13 @@ object PrefManager {
             setPref(SHOW_ITCH_IN_LIBRARY, value)
         }
 
+    private val SHOW_AMAZON_IN_LIBRARY = booleanPreferencesKey("show_amazon_in_library")
+    var showAmazonInLibrary: Boolean
+        get() = getPref(SHOW_AMAZON_IN_LIBRARY, true)
+        set(value) {
+            setPref(SHOW_AMAZON_IN_LIBRARY, value)
+        }
+
     // Game counts for skeleton loaders
     private val CUSTOM_GAMES_COUNT = intPreferencesKey("custom_games_count")
     var customGamesCount: Int
@@ -829,6 +875,13 @@ object PrefManager {
         get() = getPref(ITCH_INSTALLED_GAMES_COUNT, 0)
         set(value) {
             setPref(ITCH_INSTALLED_GAMES_COUNT, value)
+        }
+
+    private val AMAZON_INSTALLED_GAMES_COUNT = intPreferencesKey("amazon_installed_games_count")
+    var amazonInstalledGamesCount: Int
+        get() = getPref(AMAZON_INSTALLED_GAMES_COUNT, 0)
+        set(value) {
+            setPref(AMAZON_INSTALLED_GAMES_COUNT, value)
         }
 
     // Show dialog when adding custom game folder
@@ -948,4 +1001,20 @@ object PrefManager {
         set(value) {
             setPref(GAME_COMPATIBILITY_CACHE, value)
         }
+
+    /* Security / Attestation */
+    private val KEY_ATTESTATION_AVAILABLE = booleanPreferencesKey("key_attestation_available")
+    var keyAttestationAvailable: Boolean
+        get() = getPref(KEY_ATTESTATION_AVAILABLE, false)
+        set(value) = setPref(KEY_ATTESTATION_AVAILABLE, value)
+
+    private val PLAY_INTEGRITY_AVAILABLE = booleanPreferencesKey("play_integrity_available")
+    var playIntegrityAvailable: Boolean
+        get() = getPref(PLAY_INTEGRITY_AVAILABLE, false)
+        set(value) = setPref(PLAY_INTEGRITY_AVAILABLE, value)
+
+    private val GOG_AMAZON_PATH_MIGRATED = booleanPreferencesKey("gog_amazon_path_migrated")
+    var gogAmazonPathMigrated: Boolean
+        get() = getPref(GOG_AMAZON_PATH_MIGRATED, false)
+        set(value) { setPref(GOG_AMAZON_PATH_MIGRATED, value) }
 }

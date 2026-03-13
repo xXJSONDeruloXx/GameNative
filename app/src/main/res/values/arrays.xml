@@ -33,7 +33,7 @@
         <item>System</item>
         <item>v762</item>
         <item>v805</item>
-        <item>Turnip_Gen8_V23</item>
+        <item>Turnip_Gen8_V25</item>
         <item>turnip25.1.0</item>
         <item>turnip25.3.0_R3_Auto</item>
         <item>turnip25.3.0_R3_Gmem</item>
@@ -193,6 +193,7 @@
         <item>2511</item>
         <item>2512</item>
         <item>2601</item>
+        <item>2603</item>
     </string-array>
     <string-array name="dinput_mapper_type_entries">
         <item>Standard (Old Gamepads)</item>

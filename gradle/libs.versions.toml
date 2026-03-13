@@ -10,8 +10,9 @@ dagger-hilt = "2.55" # https://mvnrepository.com/artifact/com.google.dagger/hilt
 dataStore = "1.1.2" # https://mvnrepository.com/artifact/androidx.datastore/datastore-preferences
 espressoCore = "3.6.1" # https://mvnrepository.com/artifact/androidx.test.espresso/espresso-core
 feature-delivery = "2.1.0" # https://mvnrepository.com/artifact/com.google.android.play/feature-delivery
+play-integrity = "1.6.0" # https://mvnrepository.com/artifact/com.google.android.play/integrity
 hiltNavigationCompose = "1.2.0" # https://mvnrepository.com/artifact/androidx.hilt/hilt-navigation-compose
-javasteam = "1.8.0-11-SNAPSHOT" # https://mvnrepository.com/artifact/in.dragonbra/javasteam
+javasteam = "1.8.0.1-13-SNAPSHOT" # https://mvnrepository.com/artifact/in.dragonbra/javasteam
 json = "1.8.0" # https://mvnrepository.com/artifact/org.jetbrains.kotlinx/kotlinx-serialization-json
 junit = "4.13.2" # https://mvnrepository.com/artifact/junit/junit
 junitVersion = "1.2.1" # https://mvnrepository.com/artifact/androidx.test.ext/junit
@@ -70,6 +71,7 @@ compose-settings-ui = { module = "com.github.alorma.compose-settings:ui-tiles", 
 compose-settings-ui-extended = { module = "com.github.alorma.compose-settings:ui-tiles-extended", version.ref = "settings" }
 datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "dataStore" }
 feature-delivery = { module = "com.google.android.play:feature-delivery-ktx", version.ref = "feature-delivery" }
+play-integrity = { module = "com.google.android.play:integrity", version.ref = "play-integrity" }
 hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "dagger-hilt" }
 hilt-android-compiler = { module = "com.google.dagger:hilt-android-compiler", version.ref = "dagger-hilt" }
 javasteam = { group = "io.github.joshuatam", name = "javasteam", version.ref = "javasteam" }
@@ -108,6 +110,7 @@ commons-validator = { module = "commons-validator:commons-validator", version = 
 ktor-engine = { module = "io.ktor:ktor-client-cio", version = "3.0.3" } # https://mvnrepository.com/artifact/io.ktor/ktor-client-cio
 okhttp = { module = "com.squareup.okhttp3:okhttp", version = "5.1.0"} # https://mvnrepository.com/artifact/com.squareup.okhttp3/okhttp
 okhttp-coroutines = { module = "com.squareup.okhttp3:okhttp-coroutines", version = "5.1.0"} # https://mvnrepository.com/artifact/com.squareup.okhttp3/okhttp-coroutines
+okhttp-dnsoverhttps = { module = "com.squareup.okhttp3:okhttp-dnsoverhttps", version = "5.1.0"} # https://mvnrepository.com/artifact/com.squareup.okhttp3/okhttp-dnsoverhttps
 xz = { module = "org.tukaani:xz", version = "1.10" } # https://mvnrepository.com/artifact/org.tukaani/xz
 
 [plugins]
@@ -162,8 +165,10 @@ javasteam-dev = [
     "xz",
     "ktor-engine",
     "okhttp",
-    "okhttp-coroutines"
+    "okhttp-coroutines",
+    "okhttp-dnsoverhttps"
 ]
 google = [
     "feature-delivery",
+    "play-integrity",
 ]
