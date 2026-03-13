@@ -70,11 +70,6 @@ object LsfgVkManager {
     fun applyLaunchEnv(context: Context, container: Container, envVars: EnvVars): Boolean {
         clearLaunchEnv(envVars)
 
-        if (!container.containerVariant.equals(Container.GLIBC, ignoreCase = true)) {
-            envVars.put(ENV_DISABLE, "1")
-            return false
-        }
-
         if (!isEnabled(container)) {
             envVars.put(ENV_DISABLE, "1")
             return false

@@ -325,9 +325,7 @@ fun GraphicsTabContent(state: ContainerConfigState) {
                 }
             }
         }
-        if (config.containerVariant.equals(Container.GLIBC, ignoreCase = true)) {
-            LsfgVkSection(state)
-        }
+        LsfgVkSection(state)
         SettingsSwitch(
             colors = settingsTileColorsAlt(),
             title = { Text(text = stringResource(R.string.use_dri3)) },
