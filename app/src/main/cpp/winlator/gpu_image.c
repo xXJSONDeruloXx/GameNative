@@ -10,13 +10,17 @@
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 #include <jni.h>
+#include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
 #include <sys/mman.h>
+#include <sys/syscall.h>
+#include <unistd.h>
 
 #include "native_handle.h"
 
 #define HAL_PIXEL_FORMAT_BGRA_8888 5
+#define HAL_PIXEL_FORMAT_RGBA_8888 AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM
 #define println(...) __android_log_print(ANDROID_LOG_DEBUG, "System.out", __VA_ARGS__);
 
 extern const native_handle_t* _Nullable AHardwareBuffer_getNativeHandle(const AHardwareBuffer* _Nonnull buffer);
@@ -71,39 +75,6 @@ EGLImageKHR createImageKHR(AHardwareBuffer* hardwareBuffer, int textureId) {
     glBindTexture(GL_TEXTURE_2D, 0);
 
     return imageKHR;
-}
-
-
-long createImageKHR(undefined8 param_1,undefined4 param_2)
-
-{
-    long lVar1;
-    long lVar2;
-    undefined8 uVar3;
-    undefined8 local_48;
-    undefined4 local_40;
-    long local_38;
-
-    lVar1 = tpidr_el0;
-    local_38 = *(long *)(lVar1 + 0x28);
-    local_48 = 0x1000030d2;
-    local_40 = 0x3038;
-    AHardwareBuffer_acquire();
-    lVar2 = eglGetNativeClientBufferANDROID(param_1);
-    if (lVar2 != 0) {
-        uVar3 = eglGetDisplay(0);
-        lVar2 = eglCreateImageKHR(uVar3,0,0x3140,lVar2,&local_48);
-        if (lVar2 != 0) {
-            glBindTexture(0xde1,param_2);
-            glEGLImageTargetTexture2DOES(0xde1,lVar2);
-            glBindTexture(0xde1,0);
-        }
-    }
-    if (*(long *)(lVar1 + 0x28) == local_38) {
-        return lVar2;
-    }
-    /* WARNING: Subroutine does not return */
-    __stack_chk_fail();
 }
 
 // Function to create a hardware buffer

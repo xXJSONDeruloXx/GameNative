@@ -15,6 +15,7 @@
 #include <errno.h>
 
 #define printf(...) __android_log_print(ANDROID_LOG_DEBUG, "System.out", __VA_ARGS__);
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "XConnectorEpoll", __VA_ARGS__)
 #define MAX_EVENTS 10
 #define MAX_FDS 32
 
@@ -27,7 +28,11 @@ typedef struct {
 
 static FdTracker fd_tracking[MAX_TRACKED_FDS] = {0};
 
-struct epoll_event events[MAX_EVENTS];
+static void logErrnoState(const char *operation, int primaryFd, int secondaryFd) {
+    int savedErrno = errno;
+    LOGE("%s failed: fd1=%d fd2=%d errno=%d (%s)", operation, primaryFd, secondaryFd, savedErrno,
+         strerror(savedErrno));
+}
 
 // Call this when you first obtain/create a file descriptor
 void trackFd(jint fd) {
@@ -114,11 +119,6 @@ Java_com_winlator_xconnector_XConnectorEpoll_createEpollFd(JNIEnv *env, jobject 
     return fd;
 }
 
-JNIEXPORT jint JNICALL
-Java_com_winlator_xconnector_XConnectorEpoll_closeFd(JNIEnv *env, jobject obj, jint fd) {
-    return close(fd);        // direct close, matches stub
-}
-
 JNIEXPORT void JNICALL
 Java_com_winlator_xconnector_XConnectorEpoll_closeFd(JNIEnv *env, jobject obj, jint fd) {
     closeFd(fd);
@@ -137,8 +137,18 @@ Java_com_winlator_xconnector_XConnectorEpoll_doEpollIndefinitely(JNIEnv *env, jo
             (*env)->GetMethodID(env, cls, "handleNewConnection", "(I)V");
     jmethodID handleExistingConnection =
             (*env)->GetMethodID(env, cls, "handleExistingConnection", "(I)V");
+    struct epoll_event events[MAX_EVENTS];
 
-    int numFds = epoll_wait(epollFd, events, MAX_EVENTS, -1);
+    int numFds;
+    do {
+        numFds = epoll_wait(epollFd, events, MAX_EVENTS, -1);
+    } while (numFds < 0 && errno == EINTR);
+
+    if (numFds < 0) {
+        logErrnoState("epoll_wait", epollFd, serverFd);
+        return JNI_FALSE;
+    }
+
     for (int i = 0; i < numFds; i++) {
         if (events[i].data.fd == serverFd) {
             int clientFd = accept(serverFd, NULL, NULL);
@@ -149,16 +159,20 @@ Java_com_winlator_xconnector_XConnectorEpoll_doEpollIndefinitely(JNIEnv *env, jo
                     struct epoll_event ev = {.data.fd = clientFd, .events = EPOLLIN};
                     if (epoll_ctl(epollFd, EPOLL_CTL_ADD, clientFd, &ev) >= 0) {
                         (*env)->CallVoidMethod(env, obj, handleNewConnection, clientFd);
+                    } else {
+                        logErrnoState("epoll_ctl ADD client", epollFd, clientFd);
                     }
                 } else {
                     (*env)->CallVoidMethod(env, obj, handleNewConnection, clientFd);
                 }
+            } else if (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK) {
+                logErrnoState("accept", serverFd, -1);
             }
         } else if (events[i].events & EPOLLIN) {
             (*env)->CallVoidMethod(env, obj, handleExistingConnection, events[i].data.fd);
         }
     }
-    return numFds >= 0;
+    return JNI_TRUE;
 }
 
 JNIEXPORT jboolean JNICALL
@@ -168,7 +182,10 @@ Java_com_winlator_xconnector_XConnectorEpoll_addFdToEpoll(JNIEnv *env, jobject o
     struct epoll_event event;
     event.data.fd = fd;
     event.events = EPOLLIN;
-    if (epoll_ctl(epollFd, EPOLL_CTL_ADD, fd, &event) < 0) return JNI_FALSE;
+    if (epoll_ctl(epollFd, EPOLL_CTL_ADD, fd, &event) < 0) {
+        logErrnoState("epoll_ctl ADD", epollFd, fd);
+        return JNI_FALSE;
+    }
     return JNI_TRUE;
 }
 
@@ -285,8 +302,16 @@ Java_com_winlator_xconnector_XConnectorEpoll_waitForSocketRead(JNIEnv *env, jobj
     pfds[1].fd = shutdownFd;
     pfds[1].events = POLLIN;
 
-    int res = poll(pfds, 2, -1);
-    if (res < 0 || (pfds[1].revents & POLLIN)) return JNI_FALSE;
+    int res;
+    do {
+        res = poll(pfds, 2, -1);
+    } while (res < 0 && errno == EINTR);
+
+    if (res < 0) {
+        logErrnoState("poll", clientFd, shutdownFd);
+        return JNI_FALSE;
+    }
+    if (pfds[1].revents & POLLIN) return JNI_FALSE;
 
     if (pfds[0].revents & POLLIN) {
         jclass cls = (*env)->GetObjectClass(env, obj);

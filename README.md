@@ -25,8 +25,9 @@ You can support GameNative on Ko-fi at https://ko-fi.com/gamenative
 
 ## Building
 ### IF YOU JUST WANT TO USE THE APP, PLEASE SEE THE HOW TO USE SECTION ABOVE. THIS IS ONLY NEEDED IF YOU WANT TO CONTRIBUTE FOR DEVELOPMENT.
-1. I use a normal build in Android studio. Hit me up if you can't figure out how to build.
-2. **SteamGridDB API Key (Optional):** To enable automatic fetching of game images for Custom Games, add your SteamGridDB API key to `local.properties`:
+1. Build normally in Android Studio or with `./gradlew :app:assembleDebug`.
+2. The app build now compiles `libwinlator.so` from `app/src/main/cpp` for `arm64-v8a` and `armeabi-v7a` before packaging, so make sure your Android SDK/NDK are installed and `sdk.dir` is set in `local.properties` (or `ANDROID_SDK_ROOT` / `ANDROID_HOME` is set).
+3. **SteamGridDB API Key (Optional):** To enable automatic fetching of game images for Custom Games, add your SteamGridDB API key to `local.properties`:
    ```
    STEAMGRIDDB_API_KEY=your_api_key_here
    ```
