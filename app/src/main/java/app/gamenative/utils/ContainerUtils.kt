@@ -142,6 +142,7 @@ object ContainerUtils {
             sharpnessEffect = PrefManager.sharpnessEffect,
             sharpnessLevel = PrefManager.sharpnessLevel,
             sharpnessDenoise = PrefManager.sharpnessDenoise,
+            nativeRendering = PrefManager.nativeRendering,
         )
     }
 
@@ -202,6 +203,7 @@ object ContainerUtils {
         PrefManager.sharpnessEffect = containerData.sharpnessEffect
         PrefManager.sharpnessLevel = containerData.sharpnessLevel
         PrefManager.sharpnessDenoise = containerData.sharpnessDenoise
+        PrefManager.nativeRendering = containerData.nativeRendering
     }
 
     fun toContainerData(container: Container): ContainerData {
@@ -314,6 +316,7 @@ object ContainerUtils {
             sharpnessEffect = container.getExtra("sharpnessEffect", "None"),
             sharpnessLevel = container.getExtra("sharpnessLevel", "100").toIntOrNull() ?: 100,
             sharpnessDenoise = container.getExtra("sharpnessDenoise", "100").toIntOrNull() ?: 100,
+            nativeRendering = container.getExtra("nativeRendering", "0") == "1",
         )
     }
 
@@ -385,6 +388,7 @@ object ContainerUtils {
                 "audioDriver" -> value?.let { updatedData.copy(audioDriver = it as? String ?: updatedData.audioDriver) } ?: updatedData
                 "wincomponents" -> value?.let { updatedData.copy(wincomponents = it as? String ?: updatedData.wincomponents) } ?: updatedData
                 "videoMemorySize" -> value?.let { updatedData.copy(videoMemorySize = it as? String ?: updatedData.videoMemorySize) } ?: updatedData
+                "nativeRendering" -> value?.let { updatedData.copy(nativeRendering = it as? Boolean ?: updatedData.nativeRendering) } ?: updatedData
                 else -> updatedData
             }
         }
@@ -479,6 +483,7 @@ object ContainerUtils {
         container.putExtra("sharpnessEffect", containerData.sharpnessEffect)
         container.putExtra("sharpnessLevel", containerData.sharpnessLevel.toString())
         container.putExtra("sharpnessDenoise", containerData.sharpnessDenoise.toString())
+        container.putExtra("nativeRendering", if (containerData.nativeRendering) "1" else "0")
         try {
             container.language = containerData.language
         } catch (e: Exception) {

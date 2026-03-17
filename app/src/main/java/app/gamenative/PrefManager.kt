@@ -192,6 +192,13 @@ object PrefManager {
             setPref(SHARPNESS_DENOISE, value.coerceIn(0, 100))
         }
 
+    private val NATIVE_RENDERING = booleanPreferencesKey("native_rendering")
+    var nativeRendering: Boolean
+        get() = getPref(NATIVE_RENDERING, false)
+        set(value) {
+            setPref(NATIVE_RENDERING, value)
+        }
+
     private val CONTAINER_VARIANT = stringPreferencesKey("container_variant")
     var containerVariant: String
         get() = getPref(CONTAINER_VARIANT, Container.DEFAULT_VARIANT)

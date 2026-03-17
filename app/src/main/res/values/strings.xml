@@ -642,6 +642,8 @@
     <string name="sharpness_effect">Sharpness Boost</string>
     <string name="sharpness_level">Sharpness Level</string>
     <string name="sharpness_denoise">Sharpness Denoise</string>
+    <string name="native_rendering">Direct Rendering+</string>
+    <string name="native_rendering_description">Prefer a near-fullscreen game window and render it directly for lower overhead. Best for fullscreen games.</string>
 
     <!-- Container Configuration: Emulation -->
     <string name="fexcore_version">FEXCore Version</string>

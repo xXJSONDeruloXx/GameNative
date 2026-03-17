@@ -192,6 +192,24 @@ private const val EXIT_PROCESS_TIMEOUT_MS = 30_000L
 private const val EXIT_PROCESS_POLL_INTERVAL_MS = 1_000L
 private const val EXIT_PROCESS_RESPONSE_TIMEOUT_MS = 2_000L
 
+private fun applyHighestRefreshRate(activity: Activity): Float {
+    val previous = activity.window.attributes.preferredRefreshRate
+    val highest = activity.display?.supportedModes?.maxOfOrNull { it.refreshRate }
+        ?: 0f
+    if (highest > 0f && highest != previous) {
+        val params = activity.window.attributes
+        params.preferredRefreshRate = highest
+        activity.window.attributes = params
+    }
+    return previous
+}
+
+private fun restorePreferredRefreshRate(activity: Activity, refreshRate: Float) {
+    val params = activity.window.attributes
+    params.preferredRefreshRate = refreshRate
+    activity.window.attributes = params
+}
+
 private data class XServerViewReleaseBinding(
     val xServerView: XServerView,
     val windowModificationListener: WindowManager.OnWindowModificationListener,
@@ -256,6 +274,7 @@ fun XServerScreen(
 ) {
     Timber.i("Starting up XServerScreen")
     val context = LocalContext.current
+    val activity = context as? Activity
     val view = LocalView.current
     val imm = remember(context) {
         context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
@@ -289,6 +308,15 @@ fun XServerScreen(
 
     SideEffect {
         PluviaApp.setActiveSuspendPolicy(suspendPolicy)
+    }
+
+    DisposableEffect(activity) {
+        val previousRefreshRate = activity?.let(::applyHighestRefreshRate)
+        onDispose {
+            if (activity != null && previousRefreshRate != null) {
+                restorePreferredRefreshRate(activity, previousRefreshRate)
+            }
+        }
     }
 
     PluviaApp.events.emit(
@@ -1186,6 +1214,7 @@ fun XServerScreen(
                         renderer.forceFullscreenWMClass = Paths.get(container.executablePath).name
                     }
                 }
+                renderer.setNativeMode(container.getExtra("nativeRendering", "0") == "1")
                 // Remove any previous listener before adding a new one (handles key(isPortrait) recreation)
                 windowModificationListener?.let {
                     getxServer().windowManager.removeOnWindowModificationListener(it)

@@ -316,6 +316,15 @@ fun GraphicsTabContent(state: ContainerConfigState) {
         }
         SettingsSwitch(
             colors = settingsTileColorsAlt(),
+            title = { Text(text = stringResource(R.string.native_rendering)) },
+            subtitle = { Text(text = stringResource(R.string.native_rendering_description)) },
+            state = config.nativeRendering,
+            onCheckedChange = {
+                state.config.value = config.copy(nativeRendering = it)
+            },
+        )
+        SettingsSwitch(
+            colors = settingsTileColorsAlt(),
             title = { Text(text = stringResource(R.string.use_dri3)) },
             subtitle = { Text(text = stringResource(R.string.use_dri3_description)) },
             state = config.useDRI3,

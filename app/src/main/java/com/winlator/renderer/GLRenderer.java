@@ -53,6 +53,8 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
     private int surfaceWidth;
     private int surfaceHeight;
     private boolean sceneInitialized = false;
+    private boolean nativeMode = false;
+    private boolean wasDirectMode = false;
 
     public GLRenderer(XServerView xServerView, XServer xServer) {
         this.xServerView = xServerView;
@@ -122,7 +124,23 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
             viewportNeedsUpdate = true;
         }
 
-        drawFrame();
+        if (nativeMode) {
+            drawFrameOptimized();
+        } else {
+            drawFrame();
+        }
+    }
+
+    public void setNativeMode(boolean nativeMode) {
+        if (this.nativeMode == nativeMode) return;
+        this.nativeMode = nativeMode;
+        this.wasDirectMode = false;
+        this.viewportNeedsUpdate = true;
+        xServerView.requestRender();
+    }
+
+    public boolean isNativeMode() {
+        return nativeMode;
     }
 
     private void drawFrame() {
@@ -137,6 +155,8 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
             viewportNeedsUpdate = false;
         }
 
+        GLES20.glEnable(GLES20.GL_BLEND);
+        GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
 
         if (magnifierEnabled) {
@@ -182,6 +202,95 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
             // XrActivity.updateControllers();
             xServerView.requestRender();
         }
+    }
+
+    private void drawFrameOptimized() {
+        RenderableWindow directCandidate = null;
+        int screenW = xServer.screenInfo.width;
+        int screenH = xServer.screenInfo.height;
+
+        try (XLock lock = xServer.lock(XServer.Lockable.DRAWABLE_MANAGER)) {
+            for (int i = renderableWindows.size() - 1; i >= 0; i--) {
+                RenderableWindow renderableWindow = renderableWindows.get(i);
+                if (renderableWindow.content != null
+                        && renderableWindow.content.width >= screenW * 0.95f
+                        && renderableWindow.content.height >= screenH * 0.95f) {
+                    directCandidate = renderableWindow;
+                    break;
+                }
+            }
+        }
+
+        boolean directActive = directCandidate != null;
+        if (directActive != wasDirectMode) {
+            viewportNeedsUpdate = true;
+            wasDirectMode = directActive;
+        }
+
+        if (!directActive) {
+            drawFrame();
+            return;
+        }
+
+        if (viewportNeedsUpdate) {
+            if (fullscreen) {
+                GLES20.glViewport(0, 0, surfaceWidth, surfaceHeight);
+            } else {
+                GLES20.glViewport(viewTransformation.viewOffsetX, viewTransformation.viewOffsetY, viewTransformation.viewWidth, viewTransformation.viewHeight);
+            }
+            viewportNeedsUpdate = false;
+        }
+
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+        GLES20.glDisable(GLES20.GL_BLEND);
+
+        if (magnifierEnabled) {
+            float pointerX = 0;
+            float pointerY = 0;
+            float currentZoom = !screenOffsetYRelativeToCursor ? magnifierZoom : 1.0f;
+
+            if (currentZoom != 1.0f) {
+                pointerX = Mathf.clamp(xServer.pointer.getX() * currentZoom - xServer.screenInfo.width * 0.5f, 0, xServer.screenInfo.width * Math.abs(1.0f - currentZoom));
+            }
+
+            if (screenOffsetYRelativeToCursor || currentZoom != 1.0f) {
+                float scaleY = currentZoom != 1.0f ? Math.abs(1.0f - currentZoom) : 0.5f;
+                float offsetY = xServer.screenInfo.height * (screenOffsetYRelativeToCursor ? 0.25f : 0.5f);
+                pointerY = Mathf.clamp(xServer.pointer.getY() * currentZoom - offsetY, 0, xServer.screenInfo.height * scaleY);
+            }
+
+            XForm.makeTransform(tmpXForm2, -pointerX, -pointerY, currentZoom, currentZoom, 0);
+        }
+        else {
+            if (!fullscreen) {
+                int pointerY = 0;
+                if (screenOffsetYRelativeToCursor) {
+                    short halfScreenHeight = (short)(xServer.screenInfo.height / 2);
+                    pointerY = Mathf.clamp(xServer.pointer.getY() - halfScreenHeight / 2, 0, halfScreenHeight);
+                }
+
+                XForm.makeTransform(tmpXForm2, viewTransformation.sceneOffsetX, viewTransformation.sceneOffsetY - pointerY, viewTransformation.sceneScaleX, viewTransformation.sceneScaleY, 0);
+
+                GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
+                GLES20.glScissor(viewTransformation.viewOffsetX, viewTransformation.viewOffsetY, viewTransformation.viewWidth, viewTransformation.viewHeight);
+            }
+            else XForm.identity(tmpXForm2);
+        }
+
+        windowMaterial.use();
+        GLES20.glUniform2f(windowMaterial.getUniformLocation("viewSize"), xServer.screenInfo.width, xServer.screenInfo.height);
+        quadVertices.bind(windowMaterial.programId);
+        renderDrawable(directCandidate.content, directCandidate.rootX, directCandidate.rootY, windowMaterial);
+
+        if (cursorVisible) {
+            GLES20.glEnable(GLES20.GL_BLEND);
+            GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA);
+            renderCursor();
+        }
+
+        if (!magnifierEnabled && !fullscreen) GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
+
+        quadVertices.disable();
     }
 
     @Override

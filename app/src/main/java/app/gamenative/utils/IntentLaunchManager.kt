@@ -242,6 +242,7 @@ object IntentLaunchManager {
             },
             shaderBackend = if (json.has("shaderBackend")) json.getString("shaderBackend") else "glsl",
             useGLSL = if (json.has("useGLSL")) json.getString("useGLSL") else "enabled",
+            nativeRendering = if (json.has("nativeRendering")) json.getBoolean("nativeRendering") else false,
         )
 
         val validationIssues = validateContainerConfig(config)
@@ -288,6 +289,7 @@ object IntentLaunchManager {
             installPath = override.installPath.ifEmpty { base.installPath },
             // Boolean fields: only override if different from parsing defaults
             showFPS = if (override.showFPS != false) override.showFPS else base.showFPS,
+            nativeRendering = if (override.nativeRendering) override.nativeRendering else base.nativeRendering,
             launchRealSteam = if (override.launchRealSteam != false) override.launchRealSteam else base.launchRealSteam,
             cpuList = if (override.cpuList != Container.getFallbackCPUList()) override.cpuList else base.cpuList,
             cpuListWoW64 = if (override.cpuListWoW64 != Container.getFallbackCPUListWoW64()) {
