@@ -63,6 +63,7 @@ import app.gamenative.events.AndroidEvent
 import app.gamenative.service.SteamService
 import app.gamenative.service.amazon.AmazonService
 import com.posthog.PostHog
+import app.gamenative.ui.component.AchievementOverlay
 import app.gamenative.ui.component.ConnectionStatusBanner
 import app.gamenative.service.epic.EpicService
 import app.gamenative.service.gog.GOGService
@@ -1260,8 +1261,8 @@ fun PluviaMain(
                         onWindowMapped = { context, window ->
                             viewModel.onWindowMapped(context, window, state.launchedAppId)
                         },
-                        onExit = {
-                            viewModel.exitSteamApp(context, state.launchedAppId)
+                        onExit = { onComplete ->
+                            viewModel.exitSteamApp(context, state.launchedAppId, onComplete)
                         },
                         onGameLaunchError = { error ->
                             viewModel.onGameLaunchError(error)
@@ -1306,6 +1307,8 @@ fun PluviaMain(
                     }
                 }
             }
+
+            AchievementOverlay()
         }
     }
 }
