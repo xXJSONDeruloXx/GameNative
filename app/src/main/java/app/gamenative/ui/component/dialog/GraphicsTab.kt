@@ -30,7 +30,6 @@ import com.winlator.core.KeyValueSet
 import com.winlator.core.StringUtils
 import com.winlator.core.envvars.EnvVars
 import java.io.File
-import java.util.Locale
 import kotlin.math.roundToInt
 
 @Composable
@@ -354,61 +353,16 @@ private fun LsfgVkSection(state: ContainerConfigState) {
         else -> stringResource(R.string.lsfg_dll_path_missing_subtitle)
     }
 
-    SettingsSwitch(
-        colors = settingsTileColorsAlt(),
-        title = { Text(text = stringResource(R.string.lsfg_enable)) },
-        subtitle = { Text(text = stringResource(R.string.lsfg_enable_description)) },
-        state = config.lsfgEnabled,
-        onCheckedChange = { enabled ->
-            state.config.value = config.copy(lsfgEnabled = enabled)
-        },
-    )
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Text(text = stringResource(R.string.lsfg_enable))
+        Text(text = stringResource(R.string.lsfg_container_settings_note))
+    }
 
     SettingsMenuLink(
         colors = settingsTileColors(),
         title = { Text(text = stringResource(R.string.lsfg_dll_path_title)) },
         subtitle = { Text(text = pathSubtitle) },
         onClick = { showDllPathDialog = true },
-    )
-
-    val multiplierValues = listOf(2, 3, 4)
-    val multiplierLabels = listOf("2x", "3x", "4x")
-    val multiplierIndex = multiplierValues.indexOf(config.lsfgMultiplier.coerceIn(2, 4)).coerceAtLeast(0)
-    SettingsListDropdown(
-        colors = settingsTileColors(),
-        enabled = config.lsfgEnabled,
-        title = { Text(text = stringResource(R.string.lsfg_multiplier_title)) },
-        value = multiplierIndex,
-        items = multiplierLabels,
-        onItemSelected = { idx ->
-            state.config.value = config.copy(lsfgMultiplier = multiplierValues[idx])
-        },
-    )
-
-    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Text(text = stringResource(R.string.lsfg_flow_scale_title))
-        Slider(
-            enabled = config.lsfgEnabled,
-            value = config.lsfgFlowScale.coerceIn(0.25f, 1.0f),
-            onValueChange = { newValue ->
-                val rounded = (((newValue * 20f).roundToInt()) / 20f).coerceIn(0.25f, 1.0f)
-                state.config.value = config.copy(lsfgFlowScale = rounded)
-            },
-            valueRange = 0.25f..1.0f,
-            steps = 14,
-        )
-        Text(text = String.format(Locale.US, "%.2f", config.lsfgFlowScale.coerceIn(0.25f, 1.0f)))
-    }
-
-    SettingsSwitch(
-        colors = settingsTileColorsAlt(),
-        enabled = config.lsfgEnabled,
-        title = { Text(text = stringResource(R.string.lsfg_performance_mode_title)) },
-        subtitle = { Text(text = stringResource(R.string.lsfg_performance_mode_description)) },
-        state = config.lsfgPerformanceMode,
-        onCheckedChange = { enabled ->
-            state.config.value = config.copy(lsfgPerformanceMode = enabled)
-        },
     )
 
     if (showDllPathDialog) {

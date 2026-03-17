@@ -13,30 +13,66 @@ object LsfgVkManager {
     private const val LOSSLESS_SCALING_APP_ID = 993090
     private const val LOSSLESS_DLL_NAME = "Lossless.dll"
 
-    private const val ASSET_LIB_PATH = "lsfg_vk/liblsfg-vk.so"
-    private const val ASSET_MANIFEST_PATH = "lsfg_vk/VkLayer_LS_frame_generation.json"
-    private const val RUNTIME_VERSION = "arm-test-2025-11-28"
+    private const val CONFIG_RELATIVE_PATH = ".config/lsfg-vk/conf.toml"
+    private const val CONFIG_PROFILE_NAME = "GameNative"
+    private const val LIB_FILENAME = "liblsfg-vk-layer.so"
+    private const val MANIFEST_FILENAME = "VkLayer_LSFGVK_frame_generation.json"
+    private const val VERSION_FILENAME = ".lsfg_vk_runtime_version"
+    private const val MANIFEST_LIBRARY_PATH = "../../../lib/$LIB_FILENAME"
 
-    private const val EXTRA_ENABLED = "lsfgEnabled"
+    // `lsfgEnabled` is the persistent container-level "armed" switch.
+    private const val EXTRA_ARMED = "lsfgEnabled"
+    private const val EXTRA_EFFECT_ENABLED = "lsfgEffectEnabled"
     private const val EXTRA_DLL_PATH = "lsfgDllPath"
     private const val EXTRA_MULTIPLIER = "lsfgMultiplier"
     private const val EXTRA_FLOW_SCALE = "lsfgFlowScale"
     private const val EXTRA_PERFORMANCE_MODE = "lsfgPerformanceMode"
 
-    private const val ENV_DISABLE = "DISABLE_LSFG"
-    private const val ENV_LEGACY = "LSFG_LEGACY"
-    private const val ENV_DLL_PATH = "LSFG_DLL_PATH"
-    private const val ENV_MULTIPLIER = "LSFG_MULTIPLIER"
-    private const val ENV_FLOW_SCALE = "LSFG_FLOW_SCALE"
-    private const val ENV_PERFORMANCE_MODE = "LSFG_PERFORMANCE_MODE"
-    private const val ENV_HDR_MODE = "LSFG_HDR_MODE"
-    private const val ENV_EXPERIMENTAL_PRESENT_MODE = "LSFG_EXPERIMENTAL_PRESENT_MODE"
+    private const val ENV_DISABLE = "DISABLE_LSFGVK"
+    private const val ENV_CONFIG = "LSFGVK_CONFIG"
+    private const val ENV_PROFILE = "LSFGVK_PROFILE"
 
-    fun isEnabled(container: Container): Boolean = container.getExtra(EXTRA_ENABLED, "0") == "1"
+    // Clear old v1 env vars too so earlier experiments do not leak into the current v2 path.
+    private const val LEGACY_ENV_DISABLE = "DISABLE_LSFG"
+    private const val LEGACY_ENV_CONFIG = "LSFG_CONFIG"
+    private const val LEGACY_ENV_PROCESS = "LSFG_PROCESS"
+    private const val LEGACY_ENV_MODE = "LSFG_LEGACY"
+    private const val LEGACY_ENV_DLL_PATH = "LSFG_DLL_PATH"
+    private const val LEGACY_ENV_MULTIPLIER = "LSFG_MULTIPLIER"
+    private const val LEGACY_ENV_FLOW_SCALE = "LSFG_FLOW_SCALE"
+    private const val LEGACY_ENV_PERFORMANCE_MODE = "LSFG_PERFORMANCE_MODE"
+    private const val LEGACY_ENV_HDR_MODE = "LSFG_HDR_MODE"
+    private const val LEGACY_ENV_EXPERIMENTAL_PRESENT_MODE = "LSFG_EXPERIMENTAL_PRESENT_MODE"
+
+    private data class RuntimeSpec(
+        val assetDir: String,
+        val version: String,
+        val label: String,
+    ) {
+        val assetLibPath: String get() = "$assetDir/$LIB_FILENAME"
+        val assetManifestPath: String get() = "$assetDir/$MANIFEST_FILENAME"
+    }
+
+    private val glibcSpec = RuntimeSpec(
+        assetDir = "lsfg_vk/glibc_aarch64",
+        version = "v2-glibc-aarch64-20260317-77b89b2",
+        label = "glibc-aarch64",
+    )
+
+    private val bionicSpec = RuntimeSpec(
+        assetDir = "lsfg_vk/android_arm64_v8a",
+        version = "v2-android-arm64-v8a-20260317-77b89b2",
+        label = "android-arm64-v8a",
+    )
+
+    fun isSupported(container: Container): Boolean = runtimeSpec(container) != null
+
+    fun isEnabled(container: Container): Boolean = container.getExtra(EXTRA_ARMED, "0") == "1"
 
     fun configuredDllPath(container: Container): String = container.getExtra(EXTRA_DLL_PATH, "").trim()
 
-    fun multiplier(container: Container): Int = container.getExtra(EXTRA_MULTIPLIER, "2").toIntOrNull()?.coerceIn(2, 4) ?: 2
+    fun multiplier(container: Container): Int =
+        container.getExtra(EXTRA_MULTIPLIER, "2").toIntOrNull()?.coerceIn(2, 4) ?: 2
 
     fun flowScale(container: Container): Float =
         container.getExtra(EXTRA_FLOW_SCALE, "1.0").toFloatOrNull()?.coerceIn(0.25f, 1.0f) ?: 1.0f
@@ -70,63 +106,109 @@ object LsfgVkManager {
     fun applyLaunchEnv(context: Context, container: Container, envVars: EnvVars): Boolean {
         clearLaunchEnv(envVars)
 
-        if (!isEnabled(container)) {
+        val spec = runtimeSpec(container)
+        if (spec == null) {
             envVars.put(ENV_DISABLE, "1")
             return false
         }
 
-        val dllPath = resolveLosslessDllPath(configuredDllPath(container))
-        if (dllPath.isNullOrEmpty()) {
-            Timber.w("LSFG-VK enabled, but Lossless.dll could not be resolved")
+        if (!ensureRuntimeInstalled(context, container, spec)) {
+            Timber.e("LSFG-VK runtime installation failed for %s", spec.label)
             envVars.put(ENV_DISABLE, "1")
             return false
         }
 
-        if (!ensureRuntimeInstalled(context, container)) {
-            Timber.e("LSFG-VK enabled, but runtime installation failed")
+        if (!syncConfig(container)) {
+            Timber.e("LSFG-VK config write failed")
             envVars.put(ENV_DISABLE, "1")
             return false
         }
 
         envVars.remove(ENV_DISABLE)
-        envVars.put(ENV_LEGACY, "1")
-        envVars.put(ENV_DLL_PATH, dllPath)
-        envVars.put(ENV_MULTIPLIER, multiplier(container))
-        envVars.put(ENV_FLOW_SCALE, formatFlowScale(flowScale(container)))
-        envVars.put(ENV_PERFORMANCE_MODE, if (performanceMode(container)) "1" else "0")
+        envVars.put(ENV_CONFIG, configFile(container).absolutePath)
+        envVars.put(ENV_PROFILE, CONFIG_PROFILE_NAME)
 
-        Timber.i(
-            "LSFG-VK armed (dll=%s, multiplier=%d, flowScale=%s, performance=%s)",
-            dllPath,
-            multiplier(container),
-            formatFlowScale(flowScale(container)),
-            performanceMode(container),
-        )
-        return true
+        val dllPath = resolveLosslessDllPath(configuredDllPath(container))
+        val armed = isEnabled(container) && !dllPath.isNullOrBlank()
+        when {
+            armed -> Timber.i(
+                "LSFG-VK armed via v2 conf.toml (%s, dll=%s, multiplier=%d, flowScale=%s, performance=%s)",
+                spec.label,
+                dllPath,
+                multiplier(container),
+                formatFlowScale(flowScale(container)),
+                performanceMode(container),
+            )
+            isEnabled(container) -> Timber.w(
+                "LSFG-VK enabled but Lossless.dll could not be resolved; wrote dormant v2 conf.toml",
+            )
+            else -> Timber.i("LSFG-VK runtime ready (%s); feature currently disabled", spec.label)
+        }
+
+        return armed
+    }
+
+    fun syncConfig(container: Container): Boolean {
+        if (!isSupported(container)) return false
+
+        return try {
+            val dllPath = resolveLosslessDllPath(configuredDllPath(container))
+            val shouldArm = isEnabled(container) && !dllPath.isNullOrBlank()
+            val configFile = configFile(container)
+            val configText = buildConfigToml(
+                dllPath = dllPath,
+                enabled = shouldArm,
+                multiplier = multiplier(container),
+                flowScale = flowScale(container),
+                performanceMode = performanceMode(container),
+            )
+
+            val success = FileUtils.writeString(configFile, configText)
+            if (success && configFile.exists()) {
+                FileUtils.chmod(configFile, 0b110100100)
+            }
+            success
+        } catch (t: Throwable) {
+            Timber.e(t, "Failed to write LSFG-VK conf.toml")
+            false
+        }
+    }
+
+    private fun runtimeSpec(container: Container): RuntimeSpec? {
+        return when {
+            container.containerVariant.equals(Container.GLIBC, ignoreCase = true) -> glibcSpec
+            container.containerVariant.equals(Container.BIONIC, ignoreCase = true) -> bionicSpec
+            else -> null
+        }
     }
 
     private fun clearLaunchEnv(envVars: EnvVars) {
         envVars.remove(ENV_DISABLE)
-        envVars.remove(ENV_LEGACY)
-        envVars.remove(ENV_DLL_PATH)
-        envVars.remove(ENV_MULTIPLIER)
-        envVars.remove(ENV_FLOW_SCALE)
-        envVars.remove(ENV_PERFORMANCE_MODE)
-        envVars.remove(ENV_HDR_MODE)
-        envVars.remove(ENV_EXPERIMENTAL_PRESENT_MODE)
+        envVars.remove(ENV_CONFIG)
+        envVars.remove(ENV_PROFILE)
+        envVars.remove(LEGACY_ENV_DISABLE)
+        envVars.remove(LEGACY_ENV_CONFIG)
+        envVars.remove(LEGACY_ENV_PROCESS)
+        envVars.remove(LEGACY_ENV_MODE)
+        envVars.remove(LEGACY_ENV_DLL_PATH)
+        envVars.remove(LEGACY_ENV_MULTIPLIER)
+        envVars.remove(LEGACY_ENV_FLOW_SCALE)
+        envVars.remove(LEGACY_ENV_PERFORMANCE_MODE)
+        envVars.remove(LEGACY_ENV_HDR_MODE)
+        envVars.remove(LEGACY_ENV_EXPERIMENTAL_PRESENT_MODE)
     }
 
-    private fun ensureRuntimeInstalled(context: Context, container: Container): Boolean {
+    private fun ensureRuntimeInstalled(context: Context, container: Container, spec: RuntimeSpec): Boolean {
         return try {
             val homeDir = container.rootDir
             val localLibDir = File(homeDir, ".local/lib")
             val layerDir = File(homeDir, ".local/share/vulkan/implicit_layer.d")
-            val libFile = File(localLibDir, "liblsfg-vk.so")
-            val manifestFile = File(layerDir, "VkLayer_LS_frame_generation.json")
-            val versionFile = File(layerDir, ".lsfg_vk_runtime_version")
+            val libFile = File(localLibDir, LIB_FILENAME)
+            val manifestFile = File(layerDir, MANIFEST_FILENAME)
+            val versionFile = File(layerDir, VERSION_FILENAME)
             val installedVersion = versionFile.takeIf { it.exists() }?.readText()?.trim().orEmpty()
             val needsInstall =
-                installedVersion != RUNTIME_VERSION ||
+                installedVersion != spec.version ||
                     !libFile.isFile ||
                     !manifestFile.isFile
 
@@ -137,9 +219,9 @@ object LsfgVkManager {
             localLibDir.mkdirs()
             layerDir.mkdirs()
 
-            FileUtils.copy(context, ASSET_LIB_PATH, libFile)
-            FileUtils.copy(context, ASSET_MANIFEST_PATH, manifestFile)
-            FileUtils.writeString(versionFile, RUNTIME_VERSION)
+            FileUtils.copy(context, spec.assetLibPath, libFile)
+            FileUtils.writeString(manifestFile, patchedManifestText(context, spec))
+            FileUtils.writeString(versionFile, spec.version)
 
             if (libFile.exists()) FileUtils.chmod(libFile, 0b111101101)
             if (manifestFile.exists()) FileUtils.chmod(manifestFile, 0b110100100)
@@ -147,7 +229,7 @@ object LsfgVkManager {
 
             val success = libFile.isFile && manifestFile.isFile
             if (success) {
-                Timber.i("Installed LSFG-VK runtime into %s", homeDir.absolutePath)
+                Timber.i("Installed LSFG-VK runtime (%s) into %s", spec.label, homeDir.absolutePath)
             }
             success
         } catch (t: Throwable) {
@@ -156,5 +238,56 @@ object LsfgVkManager {
         }
     }
 
-    private fun formatFlowScale(value: Float): String = String.format(Locale.US, "%.2f", value.coerceIn(0.25f, 1.0f))
+    private fun patchedManifestText(context: Context, spec: RuntimeSpec): String {
+        val original = context.assets.open(spec.assetManifestPath).bufferedReader().use { it.readText() }
+        return original.replace(
+            oldValue = "\"library_path\": \"$LIB_FILENAME\"",
+            newValue = "\"library_path\": \"$MANIFEST_LIBRARY_PATH\"",
+        )
+    }
+
+    private fun configFile(container: Container): File = File(container.rootDir, CONFIG_RELATIVE_PATH)
+
+    private fun buildConfigToml(
+        dllPath: String?,
+        enabled: Boolean,
+        multiplier: Int,
+        flowScale: Float,
+        performanceMode: Boolean,
+    ): String {
+        return buildString {
+            appendLine("version = 2")
+            appendLine()
+            appendLine("[global]")
+            if (!dllPath.isNullOrBlank()) {
+                appendLine("dll = ${tomlString(dllPath)}")
+            }
+            appendLine("allow_fp16 = true")
+            appendLine()
+
+            if (enabled) {
+                appendLine("[[profile]]")
+                appendLine("name = ${tomlString(CONFIG_PROFILE_NAME)}")
+                appendLine("multiplier = ${multiplier.coerceIn(2, 4)}")
+                appendLine("flow_scale = ${formatFlowScale(flowScale)}")
+                appendLine("performance_mode = ${if (performanceMode) "true" else "false"}")
+                appendLine("pacing = \"none\"")
+            }
+        }
+    }
+
+    private fun tomlString(value: String): String = buildString {
+        append('"')
+        value.forEach { ch ->
+            when (ch) {
+                '\\' -> append("\\\\")
+                '"' -> append("\\\"")
+                else -> append(ch)
+            }
+        }
+        append('"')
+    }
+
+    private fun formatFlowScale(value: Float): String =
+        String.format(Locale.US, "%.2f", value.coerceIn(0.25f, 1.0f))
 }

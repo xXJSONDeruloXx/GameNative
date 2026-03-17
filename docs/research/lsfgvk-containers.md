@@ -627,24 +627,27 @@ That gives the best chance of a quick yes/no answer on whether LSFG is viable in
 
 A first MVP implementation now exists on this research branch with this shape:
 
-- GLIBC containers only
-- bundled runtime assets under:
-  - `app/src/main/assets/lsfg_vk/liblsfg-vk.so`
-  - `app/src/main/assets/lsfg_vk/VkLayer_LS_frame_generation.json`
+- GLIBC and BIONIC containers use bundled v2 runtime assets under:
+  - `app/src/main/assets/lsfg_vk/glibc_aarch64/`
+  - `app/src/main/assets/lsfg_vk/android_arm64_v8a/`
 - launch/install helper:
   - `app/src/main/java/app/gamenative/utils/LsfgVkManager.kt`
-- Graphics-tab controls added for:
+- Graphics-tab controls now keep only the `Lossless.dll` override / auto-detect path
+- in-game runtime controls now live in their own Quick Menu LSFG-VK tab:
   - enable
-  - Lossless.dll path override / auto-detect
   - multiplier
   - flow scale
   - performance mode
-- launch-time env injection wired from:
+- launch-time config wiring lives in:
   - `app/src/main/java/app/gamenative/ui/screen/xserver/XServerScreen.kt`
 
-The current implementation path is still intentionally simple:
+The current implementation path is:
 
-- uses the forked ARM GLIBC layer build
-- uses legacy env vars (`LSFG_LEGACY`, etc.)
-- installs the runtime into each container’s local HOME under `.local`
+- variant-based runtime selection:
+  - GLIBC -> `glibc-aarch64` v2 layer
+  - BIONIC -> `android-arm64-v8a` v2 layer
+- runtime installed into each container’s local HOME under `.local`
+- writes a v2 `~/.config/lsfg-vk/conf.toml`
+- uses a single global `[[profile]]` entry selected via `LSFGVK_PROFILE=GameNative`
+- hot-reloads multiplier / flow scale / performance mode by rewriting that config from the Quick Menu
 - auto-detects `Lossless.dll` from the Steam install of app `993090`, with a manual override field when needed

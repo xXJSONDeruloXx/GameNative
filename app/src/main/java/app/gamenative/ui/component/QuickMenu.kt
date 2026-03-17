@@ -9,6 +9,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -20,11 +21,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -36,6 +35,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Gamepad
@@ -43,7 +43,6 @@ import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -55,7 +54,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -72,6 +70,7 @@ import androidx.compose.ui.unit.dp
 import app.gamenative.R
 import app.gamenative.ui.theme.PluviaTheme
 import app.gamenative.ui.util.adaptivePanelWidth
+import kotlinx.coroutines.delay
 
 object QuickMenuAction {
     const val KEYBOARD = 1
@@ -84,7 +83,8 @@ object QuickMenuAction {
 
 private object QuickMenuTab {
     const val GENERAL = 0
-    const val CONTROLLER = 1
+    const val LSFG = 1
+    const val CONTROLLER = 2
 }
 
 data class QuickMenuItem(
@@ -101,6 +101,12 @@ fun QuickMenu(
     onDismiss: () -> Unit,
     onItemSelected: (Int) -> Unit,
     hasPhysicalController: Boolean = false,
+    showLsfgTab: Boolean = false,
+    lsfgState: QuickMenuLsfgState = QuickMenuLsfgState.Hidden,
+    onLsfgEnabledChanged: (Boolean) -> Unit = {},
+    onLsfgMultiplierChanged: (Int) -> Unit = {},
+    onLsfgFlowScaleChanged: (Float) -> Unit = {},
+    onLsfgPerformanceModeChanged: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val generalItems = listOf(
@@ -125,7 +131,7 @@ fun QuickMenu(
                 icon = Icons.Default.Keyboard,
                 labelResId = R.string.keyboard,
                 accentColor = PluviaTheme.colors.accentCyan,
-            )
+            ),
         )
         add(
             QuickMenuItem(
@@ -133,7 +139,7 @@ fun QuickMenu(
                 icon = Icons.Default.TouchApp,
                 labelResId = R.string.input_controls,
                 accentColor = PluviaTheme.colors.accentPurple,
-            )
+            ),
         )
         if (hasPhysicalController) {
             add(
@@ -142,7 +148,7 @@ fun QuickMenu(
                     icon = Icons.Default.Gamepad,
                     labelResId = R.string.edit_physical_controller,
                     accentColor = PluviaTheme.colors.accentWarning,
-                )
+                ),
             )
         }
         add(
@@ -151,32 +157,40 @@ fun QuickMenu(
                 icon = Icons.Default.Edit,
                 labelResId = R.string.edit_controls,
                 accentColor = PluviaTheme.colors.accentSuccess,
-            )
+            ),
         )
     }
 
     var selectedTab by remember { mutableIntStateOf(QuickMenuTab.GENERAL) }
-    val visibleItems = if (selectedTab == QuickMenuTab.GENERAL) generalItems else controllerItems
-    val selectedTabLabelResId = if (selectedTab == QuickMenuTab.GENERAL) {
-        R.string.quick_menu_tab_general
-    } else {
-        R.string.quick_menu_tab_controller
+    val selectedTabLabelResId = when (selectedTab) {
+        QuickMenuTab.LSFG -> R.string.quick_menu_tab_lsfg
+        QuickMenuTab.CONTROLLER -> R.string.quick_menu_tab_controller
+        else -> R.string.quick_menu_tab_general
     }
 
     val generalTabFocusRequester = remember { FocusRequester() }
+    val lsfgTabFocusRequester = remember { FocusRequester() }
     val controllerTabFocusRequester = remember { FocusRequester() }
     val generalItemFocusRequester = remember { FocusRequester() }
+    val lsfgItemFocusRequester = remember { FocusRequester() }
     val controllerItemFocusRequester = remember { FocusRequester() }
+    val lsfgScrollState = rememberScrollState()
 
     BackHandler(enabled = isVisible) {
         onDismiss()
+    }
+
+    LaunchedEffect(showLsfgTab) {
+        if (!showLsfgTab && selectedTab == QuickMenuTab.LSFG) {
+            selectedTab = QuickMenuTab.GENERAL
+        }
     }
 
     Box(modifier = modifier.fillMaxSize()) {
         AnimatedVisibility(
             visible = isVisible,
             enter = fadeIn(animationSpec = tween(200)),
-            exit = fadeOut(animationSpec = tween(150))
+            exit = fadeOut(animationSpec = tween(150)),
         ) {
             Box(
                 modifier = Modifier
@@ -185,8 +199,8 @@ fun QuickMenu(
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
-                        onClick = onDismiss
-                    )
+                        onClick = onDismiss,
+                    ),
             )
         }
 
@@ -196,21 +210,21 @@ fun QuickMenu(
                 initialOffsetX = { fullWidth -> -fullWidth },
                 animationSpec = spring(
                     dampingRatio = Spring.DampingRatioLowBouncy,
-                    stiffness = Spring.StiffnessMediumLow
-                )
+                    stiffness = Spring.StiffnessMediumLow,
+                ),
             ),
             exit = slideOutHorizontally(
                 targetOffsetX = { fullWidth -> -fullWidth },
                 animationSpec = spring(
                     dampingRatio = Spring.DampingRatioNoBouncy,
-                    stiffness = Spring.StiffnessMedium
-                )
+                    stiffness = Spring.StiffnessMedium,
+                ),
             ),
-            modifier = Modifier.align(Alignment.CenterStart)
+            modifier = Modifier.align(Alignment.CenterStart),
         ) {
             Surface(
                 modifier = Modifier
-                    .width(adaptivePanelWidth(360.dp))
+                    .width(adaptivePanelWidth(400.dp))
                     .fillMaxHeight(),
                 shape = RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp),
                 color = MaterialTheme.colorScheme.surface,
@@ -220,34 +234,34 @@ fun QuickMenu(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .statusBarsPadding()
+                        .statusBarsPadding(),
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(start = 20.dp, end = 8.dp, top = 16.dp, bottom = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
                         Text(
                             text = stringResource(R.string.quick_menu_title),
                             style = MaterialTheme.typography.titleLarge.copy(
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
                             ),
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
                         )
                         QuickMenuCloseButton(onClick = onDismiss)
                     }
 
                     HorizontalDivider(
                         modifier = Modifier.padding(horizontal = 16.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
                     )
 
                     Row(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(horizontal = 12.dp, vertical = 12.dp)
+                            .padding(horizontal = 12.dp, vertical = 12.dp),
                     ) {
                         Column(
                             modifier = Modifier
@@ -266,6 +280,17 @@ fun QuickMenu(
                                 modifier = Modifier.width(56.dp),
                                 focusRequester = generalTabFocusRequester,
                             )
+                            if (showLsfgTab) {
+                                QuickMenuTabButton(
+                                    icon = Icons.Default.AutoAwesome,
+                                    contentDescriptionResId = R.string.quick_menu_tab_lsfg,
+                                    selected = selectedTab == QuickMenuTab.LSFG,
+                                    accentColor = PluviaTheme.colors.accentCyan,
+                                    onSelected = { selectedTab = QuickMenuTab.LSFG },
+                                    modifier = Modifier.width(56.dp),
+                                    focusRequester = lsfgTabFocusRequester,
+                                )
+                            }
                             QuickMenuTabButton(
                                 icon = Icons.Default.Gamepad,
                                 contentDescriptionResId = R.string.quick_menu_tab_controller,
@@ -282,41 +307,79 @@ fun QuickMenu(
                                 .padding(horizontal = 12.dp)
                                 .width(1.dp)
                                 .fillMaxHeight()
-                                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
+                                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)),
                         )
 
                         Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .verticalScroll(rememberScrollState())
-                                .focusGroup(),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                            modifier = Modifier.fillMaxSize(),
                         ) {
                             Text(
                                 text = stringResource(selectedTabLabelResId),
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                                 color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                             )
 
                             HorizontalDivider(
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f),
                             )
 
-                            visibleItems.forEachIndexed { index, item ->
-                                QuickMenuItemRow(
-                                    item = item,
-                                    onClick = {
-                                        onItemSelected(item.id)
-                                        onDismiss()
-                                    },
-                                    focusRequester = when {
-                                        selectedTab == QuickMenuTab.GENERAL && index == 0 -> generalItemFocusRequester
-                                        selectedTab == QuickMenuTab.CONTROLLER && index == 0 -> controllerItemFocusRequester
-                                        else -> null
-                                    },
-                                )
+                            when (selectedTab) {
+                                QuickMenuTab.LSFG -> {
+                                    LsfgQuickMenuTab(
+                                        lsfgState = lsfgState,
+                                        onEnabledChanged = onLsfgEnabledChanged,
+                                        onMultiplierChanged = onLsfgMultiplierChanged,
+                                        onFlowScaleChanged = onLsfgFlowScaleChanged,
+                                        onPerformanceModeChanged = onLsfgPerformanceModeChanged,
+                                        scrollState = lsfgScrollState,
+                                        focusRequester = lsfgItemFocusRequester,
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                }
+
+                                QuickMenuTab.CONTROLLER -> {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .verticalScroll(rememberScrollState())
+                                            .focusGroup(),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    ) {
+                                        controllerItems.forEachIndexed { index, item ->
+                                            QuickMenuItemRow(
+                                                item = item,
+                                                onClick = {
+                                                    onItemSelected(item.id)
+                                                    onDismiss()
+                                                },
+                                                focusRequester = if (index == 0) controllerItemFocusRequester else null,
+                                            )
+                                        }
+                                    }
+                                }
+
+                                else -> {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .verticalScroll(rememberScrollState())
+                                            .focusGroup(),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    ) {
+                                        generalItems.forEachIndexed { index, item ->
+                                            QuickMenuItemRow(
+                                                item = item,
+                                                onClick = {
+                                                    onItemSelected(item.id)
+                                                    onDismiss()
+                                                },
+                                                focusRequester = if (index == 0) generalItemFocusRequester else null,
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -376,7 +439,7 @@ private fun QuickMenuCloseButton(
                     MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                 } else {
                     Color.Transparent
-                }
+                },
             )
             .clickable(
                 interactionSource = interactionSource,
@@ -394,7 +457,7 @@ private fun QuickMenuCloseButton(
             } else {
                 MaterialTheme.colorScheme.onSurfaceVariant
             },
-            modifier = Modifier.size(24.dp)
+            modifier = Modifier.size(24.dp),
         )
     }
 }
@@ -440,12 +503,10 @@ private fun QuickMenuTabButton(
                     selected -> accentColor.copy(alpha = 0.18f)
                     isFocused -> accentColor.copy(alpha = 0.12f)
                     else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-                }
+                },
             )
             .then(
-                if (focusRequester != null) {
-                    Modifier.focusRequester(focusRequester)
-                } else Modifier
+                if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier,
             )
             .onFocusChanged {
                 if (it.isFocused && !selected) {
@@ -468,7 +529,7 @@ private fun QuickMenuTabButton(
                 selected || isFocused -> accentColor
                 else -> MaterialTheme.colorScheme.onSurfaceVariant
             },
-            modifier = Modifier.size(24.dp)
+            modifier = Modifier.size(24.dp),
         )
     }
 }
@@ -510,7 +571,9 @@ private fun QuickMenuItemRow(
                         ),
                         shape,
                     )
-                } else Modifier
+                } else {
+                    Modifier
+                }
             )
             .clip(shape)
             .then(
@@ -520,22 +583,22 @@ private fun QuickMenuItemRow(
                             colors = listOf(
                                 accentColor.copy(alpha = 0.15f),
                                 accentColor.copy(alpha = 0.05f),
-                            )
-                        )
+                            ),
+                        ),
                     )
-                } else Modifier
+                } else {
+                    Modifier
+                }
             )
             .then(
-                if (focusRequester != null) {
-                    Modifier.focusRequester(focusRequester)
-                } else Modifier
+                if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier,
             )
             .selectable(
                 selected = isFocused,
                 enabled = isEnabled,
                 interactionSource = interactionSource,
                 indication = null,
-                onClick = onClick
+                onClick = onClick,
             )
             .focusable(
                 enabled = isEnabled,
@@ -543,7 +606,7 @@ private fun QuickMenuItemRow(
             )
             .padding(horizontal = 12.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Box(
             modifier = Modifier
@@ -554,9 +617,9 @@ private fun QuickMenuItemRow(
                         !isEnabled -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
                         isFocused -> accentColor.copy(alpha = 0.2f)
                         else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    }
+                    },
                 ),
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = item.icon,
@@ -566,7 +629,7 @@ private fun QuickMenuItemRow(
                     isFocused -> accentColor
                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                 },
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(22.dp),
             )
         }
 
@@ -578,7 +641,7 @@ private fun QuickMenuItemRow(
                 isFocused -> accentColor
                 else -> MaterialTheme.colorScheme.onSurface
             },
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
         )
     }
 }
@@ -593,6 +656,15 @@ private fun Preview_QuickMenu() {
                 onDismiss = {},
                 onItemSelected = {},
                 hasPhysicalController = false,
+                showLsfgTab = true,
+                lsfgState = QuickMenuLsfgState(
+                    supported = true,
+                    configured = true,
+                    enabled = true,
+                    multiplier = 3,
+                    flowScale = 0.85f,
+                    performanceMode = true,
+                ),
             )
         }
     }

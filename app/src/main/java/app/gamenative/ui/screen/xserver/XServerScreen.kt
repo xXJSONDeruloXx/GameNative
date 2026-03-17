@@ -84,6 +84,7 @@ import app.gamenative.service.epic.EpicService
 import app.gamenative.service.gog.GOGService
 import app.gamenative.ui.component.QuickMenu
 import app.gamenative.ui.component.QuickMenuAction
+import app.gamenative.ui.component.QuickMenuLsfgState
 import app.gamenative.ui.data.XServerState
 import app.gamenative.ui.widget.PerformanceHudView
 import app.gamenative.utils.ContainerUtils
@@ -368,8 +369,43 @@ fun XServerScreen(
     var showQuickMenu by remember { mutableStateOf(false) }
     var hasPhysicalController by remember { mutableStateOf(false) }
     var keepPausedForEditor by remember { mutableStateOf(false) }
+    val showLsfgQuickMenuTab = LsfgVkManager.isSupported(container)
+    var lsfgEnabled by remember(container.id) { mutableStateOf(LsfgVkManager.isEnabled(container)) }
+    var lsfgMultiplier by remember(container.id) { mutableStateOf(LsfgVkManager.multiplier(container)) }
+    var lsfgFlowScale by remember(container.id) { mutableStateOf(LsfgVkManager.flowScale(container)) }
+    var lsfgPerformanceMode by remember(container.id) { mutableStateOf(LsfgVkManager.performanceMode(container)) }
     var performanceHudView by remember { mutableStateOf<PerformanceHudView?>(null) }
     var performanceHudHost by remember { mutableStateOf<FrameLayout?>(null) }
+
+    fun persistLsfgQuickMenuState(
+        enabled: Boolean = lsfgEnabled,
+        multiplier: Int = lsfgMultiplier,
+        flowScale: Float = lsfgFlowScale,
+        performanceMode: Boolean = lsfgPerformanceMode,
+    ) {
+        lsfgEnabled = enabled
+        lsfgMultiplier = multiplier.coerceIn(2, 4)
+        lsfgFlowScale = flowScale.coerceIn(0.25f, 1.0f)
+        lsfgPerformanceMode = performanceMode
+
+        container.putExtra("lsfgEnabled", if (lsfgEnabled) "1" else "0")
+        container.putExtra("lsfgMultiplier", lsfgMultiplier.toString())
+        container.putExtra("lsfgFlowScale", lsfgFlowScale.toString())
+        container.putExtra("lsfgPerformanceMode", if (lsfgPerformanceMode) "1" else "0")
+        container.saveData()
+
+        if (!LsfgVkManager.syncConfig(container)) {
+            Timber.w("Failed to sync LSFG-VK quick menu config for %s", container.name)
+        } else {
+            Timber.i(
+                "Updated LSFG-VK quick menu config (enabled=%s, multiplier=%d, flowScale=%s, performance=%s)",
+                lsfgEnabled,
+                lsfgMultiplier,
+                String.format(Locale.US, "%.2f", lsfgFlowScale),
+                lsfgPerformanceMode,
+            )
+        }
+    }
 
     fun removePerformanceHud() {
         performanceHudView?.let { hud ->
@@ -1569,6 +1605,27 @@ fun XServerScreen(
             onDismiss = dismissOverlayMenu,
             onItemSelected = onQuickMenuItemSelected,
             hasPhysicalController = hasPhysicalController,
+            showLsfgTab = showLsfgQuickMenuTab,
+            lsfgState = QuickMenuLsfgState(
+                supported = showLsfgQuickMenuTab,
+                configured = !LsfgVkManager.resolveLosslessDllPath(LsfgVkManager.configuredDllPath(container)).isNullOrBlank(),
+                enabled = lsfgEnabled,
+                multiplier = lsfgMultiplier,
+                flowScale = lsfgFlowScale,
+                performanceMode = lsfgPerformanceMode,
+            ),
+            onLsfgEnabledChanged = { enabled ->
+                persistLsfgQuickMenuState(enabled = enabled)
+            },
+            onLsfgMultiplierChanged = { multiplier ->
+                persistLsfgQuickMenuState(multiplier = multiplier)
+            },
+            onLsfgFlowScaleChanged = { flowScale ->
+                persistLsfgQuickMenuState(flowScale = flowScale)
+            },
+            onLsfgPerformanceModeChanged = { performanceMode ->
+                persistLsfgQuickMenuState(performanceMode = performanceMode)
+            },
         )
 
         if (manualResumeMode && PluviaApp.isOverlayPaused && !showQuickMenu && !keepPausedForEditor) {
