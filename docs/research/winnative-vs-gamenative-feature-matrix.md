@@ -108,11 +108,11 @@ The repositories point to different primary product centers:
 The detailed matrix below is intentionally expanded in stages:
 
 - [x] repository / build / manifest baseline
-- [ ] storefronts and account integrations
-- [ ] library and navigation surfaces
-- [ ] downloads and installs
-- [ ] cloud saves and sync
-- [ ] runtime / container / contents management
+- [x] storefronts and account integrations
+- [x] library and navigation surfaces
+- [x] downloads and installs
+- [x] cloud saves and sync
+- [x] runtime / container / contents management
 - [ ] input / controllers / overlays
 - [ ] platform integration and shell features
 - [ ] testing / CI / docs / provenance
@@ -165,6 +165,308 @@ The detailed matrix below is intentionally expanded in stages:
 - includes both `FileProvider` and a `DocumentsProvider` implementation (`WinlatorFilesProvider`)
 - includes a broadcast receiver for shortcut updates
 
-## Notes for next sections
+## Detailed feature matrix
 
-The remaining sections will turn the initial observations above into a thorough feature-by-feature matrix with explicit "shared", "GameNative only", "WinNative only", and "partial / placeholder" calls.
+| Area | Shared baseline | GameNative edge / unique strength | WinNative edge / unique strength | What each lacks against the other |
+|---|---|---|---|---|
+| Product focus | Both combine storefront logic with Winlator-derived runtime code. | Clearer consumer-facing identity as a game library / launcher product. | Clearer emulator-shell identity with Winlator-Cmod-style environment tooling. | GameNative lacks WinNative’s broader emulator shell; WinNative lacks GameNative’s cleaner product focus. |
+| Store logins | Both clearly implement Steam, GOG, and Epic authentication and background services. | Adds a real Amazon Games stack: OAuth activity, service, DAO, app screen, launch path, SDK deployment. | Keeps setup/store configuration more centralized inside setup and store screens. | WinNative lacks a full checked-in Amazon implementation; GameNative lacks WinNative’s setup-first store onboarding. |
+| Library layouts | Both expose library browsing with carousel/list/grid-style layouts and controller-friendly navigation. | More specialized library frontend: `LibraryCarouselPane`, `LibraryListPane`, search bar, compatibility badges, focused library components. | Unified hub can switch between Library, Downloads, and Store tabs in one shell, with AIO / per-store tab building. | GameNative home currently resolves to library-only content; WinNative library is broader but less focused. |
+| Downloads UX | Both support resumable downloads, cancellation, and Wi‑Fi-aware pausing for core stores. | Strong per-game install UX across Steam, GOG, Epic, and Amazon app screens. | Dedicated unified Downloads tab with queue-size control, pause/resume all, cancel all, clear completed, and selection-aware actions. | GameNative lacks a checked-in equivalent unified cross-store downloads control surface; WinNative lacks GameNative’s Amazon download path. |
+| Cloud saves | Both carry Steam, GOG, and Epic cloud-save components. | Strong storefront-facing conflict and sync messaging integrated into the app UX, plus explicit compatibility with launch flows. | Adds a `CloudSyncHelper` orchestration layer and launch-time sync hooks in `XServerDisplayActivity`. | WinNative lacks GameNative’s Amazon launch distinction and consumer-facing compatibility overlays; GameNative lacks WinNative’s explicit cross-launch sync helper. |
+| Runtime / containers / contents | Both retain container, contents, and Winlator-derived runtime management. | Storefront flow is better connected to runtime launch entrypoints, test graphics, and per-game actions. | Setup wizard, preferred-container selection, runtime prerequisite prompting, explicit content installation flow, and prefix repair are more first-class. | GameNative lacks a first-run setup wizard; WinNative lacks GameNative’s tighter storefront-to-launch polish. |
+| Settings / downloads paths / storage | Both support external storage usage and Steam download server settings. | Has per-game move-to-external / move-to-internal actions and stronger storefront-centric storage handling. | Has shared vs per-store download-folder settings surfaced in `StoresScreen`, plus document-provider exposure of Winlator files. | WinNative lacks GameNative’s checked-in per-game storage move actions; GameNative lacks WinNative’s shared/per-store download folder UX. |
+| UI architecture | Both use Compose somewhere in the product. | More Kotlin-heavy and more consistently Compose-fronted in the app-facing surface. | Explicit mixed-mode architecture: Compose where helpful, classic fragments / dialogs / view binding where Winlator shell tooling remains useful. | GameNative lacks some shell breadth; WinNative lacks a consistently modernized frontend. |
+| Support surface | Both link Discord/community support. | Privacy policy is checked into the repo and release/support workflows are richer. | README is more contribution-oriented for external PRs. | WinNative lacks an in-repo privacy policy in this clone; GameNative is less contributor-inviting in README policy. |
+
+## Storefronts and account integrations
+
+### Shared
+
+Both repos clearly implement full stacks for:
+
+- **Steam**
+  - GameNative: `app/src/main/java/app/gamenative/service/SteamService.kt`
+  - WinNative: `/Users/danhimebauch/Developer/WinNative/app/src/main/java/com/winlator/cmod/steam/service/SteamService.kt`
+- **GOG**
+  - GameNative: `app/src/main/java/app/gamenative/service/gog/...`
+  - WinNative: `/Users/danhimebauch/Developer/WinNative/app/src/main/java/com/winlator/cmod/gog/service/...`
+- **Epic**
+  - GameNative: `app/src/main/java/app/gamenative/service/epic/...`
+  - WinNative: `/Users/danhimebauch/Developer/WinNative/app/src/main/java/com/winlator/cmod/epic/service/...`
+
+Both also carry the same broad shape of supporting objects around those stores:
+
+- auth manager / auth client
+- background service
+- download manager
+- cloud save manager for GOG and Epic
+- DAO / DB-backed models
+- OAuth activity for GOG and Epic
+
+### GameNative advantage: full Amazon Games implementation
+
+GameNative ships a real Amazon Games feature stack in the checked repo, including:
+
+- `app/src/main/java/app/gamenative/ui/screen/auth/AmazonOAuthActivity.kt`
+- `app/src/main/java/app/gamenative/service/amazon/AmazonService.kt`
+- `app/src/main/java/app/gamenative/service/amazon/AmazonDownloadManager.kt`
+- `app/src/main/java/app/gamenative/service/amazon/AmazonSdkManager.kt`
+- `app/src/main/java/app/gamenative/db/dao/AmazonGameDao.kt`
+- `app/src/main/java/app/gamenative/ui/screen/library/appscreen/AmazonAppScreen.kt`
+- `app/src/main/java/app/gamenative/data/AmazonGame.kt`
+
+It is not just a label. The checked code covers:
+
+- OAuth
+- library sync
+- install/download support
+- launch path resolution
+- Wine-prefix SDK deployment for Amazon-specific runtime files
+- Amazon-specific library tab / app screen integration
+
+### WinNative limitation: Amazon appears present in UI copy, but not as a full stack
+
+WinNative contains Amazon-facing strings and UI placeholders, for example:
+
+- `/Users/danhimebauch/Developer/WinNative/app/src/main/java/com/winlator/cmod/UnifiedActivity.kt`
+- `/Users/danhimebauch/Developer/WinNative/app/src/main/java/com/winlator/cmod/StoresScreen.kt`
+- `/Users/danhimebauch/Developer/WinNative/app/src/main/res/values/strings.xml`
+
+But the checked Java/Kotlin tree contains **no Amazon-named implementation files** comparable to GameNative’s Amazon stack.
+
+The most concrete checked-in behavior is placeholder-like:
+
+- an Amazon tab can be built into the unified hub
+- `StoresScreen` shows an **Amazon Games** card marked `isComingSoon = true`
+- folder settings include **Amazon Downloads**
+
+So the safest conclusion is:
+
+- **GameNative has real Amazon Games implementation**
+- **WinNative has partial Amazon-facing surface area, but not an equivalent checked-in backend implementation**
+
+## Library and navigation surfaces
+
+### Shared
+
+Both apps support the same broad library ideas:
+
+- controller-friendly navigation
+- carousel/list/grid style presentation
+- store-separated and mixed library views
+- search/filtering concepts
+- custom/local game support
+- shortcut creation
+
+### GameNative edge: more specialized storefront-library frontend
+
+GameNative’s library stack is more decomposed and frontend-specific. Evidence includes:
+
+- `app/src/main/java/app/gamenative/ui/screen/library/LibraryScreen.kt`
+- `app/src/main/java/app/gamenative/ui/screen/library/components/LibraryCarouselPane.kt`
+- `app/src/main/java/app/gamenative/ui/screen/library/components/LibraryListPane.kt`
+- `app/src/main/java/app/gamenative/ui/screen/library/components/LibrarySearchBar.kt`
+- `app/src/main/java/app/gamenative/ui/screen/library/components/LibraryTabBar.kt`
+
+Notable strengths:
+
+- library-specific composables are cleaner and more specialized
+- explicit carousel/grid/list separation
+- compatibility badges and compatibility-cache plumbing show up in the library flow
+  - `app/src/main/java/app/gamenative/ui/component/CompatibilityBadge.kt`
+  - `app/src/main/java/app/gamenative/utils/GameCompatibilityService.kt`
+  - `app/src/main/java/app/gamenative/utils/GameCompatibilityCache.kt`
+- storefront tabs include Steam, GOG, Epic, Amazon, and Local in one consistent library model
+
+### WinNative edge: broader unified hub shell
+
+WinNative’s newer Compose shell is concentrated in `UnifiedActivity.kt`, which builds:
+
+- **Library** tab
+- **Downloads** tab
+- **Store** tab, or separate Steam / Epic / GOG / Amazon tabs depending on mode
+
+Evidence:
+
+- `/Users/danhimebauch/Developer/WinNative/app/src/main/java/com/winlator/cmod/UnifiedActivity.kt`
+- `/Users/danhimebauch/Developer/WinNative/app/src/main/java/com/winlator/cmod/ui/CarouselView.kt`
+- `/Users/danhimebauch/Developer/WinNative/app/src/main/java/com/winlator/cmod/ui/ListView.kt`
+
+Notable strengths:
+
+- unified shell can build tabs dynamically (`Library`, `Downloads`, `Store`, or store-specific tabs)
+- includes AIO-vs-per-store tab logic
+- downloads are treated as a first-class peer to library browsing
+- older `HubActivity` and `BigPictureActivity` still provide alternate library shells
+
+### Important asymmetry
+
+GameNative still defines `HomeDestination.Library`, `HomeDestination.Downloads`, and `HomeDestination.Friends`, but `HomeScreen.kt` currently always renders `HomeLibraryScreen`.
+
+Evidence:
+
+- `app/src/main/java/app/gamenative/ui/enums/HomeDestination.kt`
+- `app/src/main/java/app/gamenative/ui/screen/HomeScreen.kt`
+
+So in the current checked tree:
+
+- **WinNative has a clearly implemented unified Downloads tab in the main Compose hub**
+- **GameNative enumerates broader home destinations but currently behaves as a library-first home shell**
+
+## Downloads and installs
+
+### Shared
+
+Both repos clearly support:
+
+- resumable downloads
+- per-download cancel flow
+- Wi‑Fi / LAN-aware download pausing for Steam and other stores
+- active download tracking per store
+
+Evidence exists in both repos’ Steam / GOG / Epic service trees.
+
+### GameNative strength: polished per-game install surfaces
+
+GameNative’s install / resume / cancel flows are tightly integrated into store-specific app screens:
+
+- `app/src/main/java/app/gamenative/ui/screen/library/appscreen/SteamAppScreen.kt`
+- `app/src/main/java/app/gamenative/ui/screen/library/appscreen/GOGAppScreen.kt`
+- `app/src/main/java/app/gamenative/ui/screen/library/appscreen/EpicAppScreen.kt`
+- `app/src/main/java/app/gamenative/ui/screen/library/appscreen/AmazonAppScreen.kt`
+- `app/src/main/java/app/gamenative/ui/screen/library/appscreen/BaseAppScreen.kt`
+
+This is especially notable because it extends through Amazon as well, not just Steam/GOG/Epic.
+
+### WinNative strength: unified downloads command center
+
+WinNative has the stronger checked-in **global downloads UX**.
+
+Evidence:
+
+- `/Users/danhimebauch/Developer/WinNative/app/src/main/java/com/winlator/cmod/UnifiedActivity.kt`
+- `/Users/danhimebauch/Developer/WinNative/app/src/main/java/com/winlator/cmod/service/DownloadService.kt`
+
+Checked-in capabilities include:
+
+- `DownloadService.getAllDownloads()` across Steam / Epic / GOG
+- `pauseAll()` / `resumeAll()` / `cancelAll()`
+- `pauseDownload(id)` / `resumeDownload(id)` / `cancelDownload(id)`
+- `clearCompletedDownloads()`
+- a Downloads tab with:
+  - queue-size control
+  - selection-aware buttons
+  - pause all / resume all
+  - cancel all / cancel selection
+  - clear completed / cancelled
+
+### Relative lack
+
+- **GameNative lacks an equivalent checked-in cross-store downloads control surface** like WinNative’s Downloads tab + global `DownloadService` façade.
+- **WinNative lacks GameNative’s Amazon install/download path**, so even where both are strong, GameNative covers more storefronts end-to-end.
+
+## Cloud saves and sync behavior
+
+### Shared
+
+Both repos carry the same broad cloud-save shape for the stores that visibly support it:
+
+- Steam Auto Cloud
+- GOG cloud saves manager
+- Epic cloud saves manager
+- sync result enums / result messaging
+- launch-time sync hooks and conflict-related strings
+
+Evidence examples:
+
+- GameNative:
+  - `app/src/main/java/app/gamenative/service/SteamAutoCloud.kt`
+  - `app/src/main/java/app/gamenative/service/gog/GOGCloudSavesManager.kt`
+  - `app/src/main/java/app/gamenative/service/epic/EpicCloudSavesManager.kt`
+  - `app/src/main/java/app/gamenative/enums/SyncResult.kt`
+- WinNative:
+  - `/Users/danhimebauch/Developer/WinNative/app/src/main/java/com/winlator/cmod/steam/service/SteamAutoCloud.kt`
+  - `/Users/danhimebauch/Developer/WinNative/app/src/main/java/com/winlator/cmod/gog/service/GOGCloudSavesManager.kt`
+  - `/Users/danhimebauch/Developer/WinNative/app/src/main/java/com/winlator/cmod/epic/service/EpicCloudSavesManager.kt`
+  - `/Users/danhimebauch/Developer/WinNative/app/src/main/java/com/winlator/cmod/steam/enums/SyncResult.kt`
+
+### GameNative edge
+
+GameNative’s checked storefront/frontend layer exposes cloud-save concerns very directly in user-facing library flows and launch dialogs.
+
+Examples visible in `app/src/main/res/values/strings.xml` and app-screen code include:
+
+- cloud sync success / failure messages
+- save-conflict and "launch anyway" messaging
+- sync-in-progress launch prompts
+- Amazon-specific skip-cloud-sync behavior because Amazon does not support it in this integration
+
+### WinNative edge
+
+WinNative adds a more explicit launch-shell helper layer via:
+
+- `/Users/danhimebauch/Developer/WinNative/app/src/main/java/com/winlator/cmod/CloudSyncHelper.kt`
+- launch-time sync handling inside `XServerDisplayActivity.java`
+
+So relative to GameNative, WinNative’s checked shell makes cloud sync feel slightly more centralized around the runtime launch path.
+
+### Relative lack
+
+- **GameNative lacks WinNative’s explicit `CloudSyncHelper` façade.**
+- **WinNative lacks GameNative’s Amazon-specific launch distinction and broader storefront-facing polish around compatibility + app-screen integration.**
+- **Neither repo shows Amazon cloud saves as a supported, end-to-end capability.** In GameNative, Amazon is explicitly treated as a no-cloud-sync launch path.
+
+## Runtime, containers, contents, and setup
+
+### Shared
+
+Both repos are still fundamentally backed by Winlator-style runtime/container infrastructure:
+
+- `ContainerManager`
+- `ContentsManager`
+- XServer runtime / renderer / env-var code
+- content profiles for Wine / Proton / box64 / related pieces
+
+This is visible throughout both source trees.
+
+### GameNative edge
+
+GameNative keeps these features connected to its storefront shell via modern settings/dialog surfaces such as:
+
+- `app/src/main/java/app/gamenative/ui/screen/settings/DriverManagerDialog.kt`
+- `app/src/main/java/app/gamenative/ui/screen/settings/ContentsManagerDialog.kt`
+- `app/src/main/java/app/gamenative/ui/screen/settings/WineProtonManagerDialog.kt`
+- `app/src/main/java/app/gamenative/ui/screen/xserver/XServerScreen.kt`
+
+It also exposes storefront-adjacent runtime actions that matter to players, including:
+
+- launch as container / test graphics pathing from the app frontend
+- per-game storage movement actions
+- compatibility context in the library itself
+
+### WinNative edge
+
+WinNative makes runtime/bootstrap management much more first-class in the app shell.
+
+Evidence:
+
+- `/Users/danhimebauch/Developer/WinNative/app/src/main/java/com/winlator/cmod/SetupWizardActivity.kt`
+- `/Users/danhimebauch/Developer/WinNative/app/src/main/java/com/winlator/cmod/SetupWizardDriversDialogFragment.kt`
+- `/Users/danhimebauch/Developer/WinNative/app/src/main/java/com/winlator/cmod/ContentsFragment.kt`
+- `/Users/danhimebauch/Developer/WinNative/app/src/main/java/com/winlator/cmod/ContainerDetailFragment.java`
+- `/Users/danhimebauch/Developer/WinNative/app/src/main/java/com/winlator/cmod/XServerDisplayActivity.java`
+
+Checked-in WinNative strengths include:
+
+- first-run setup wizard
+- default / preferred container selection
+- prompting users to install Wine/Proton or create a usable container before launch
+- more explicit contents/driver bootstrap flow
+- runtime repair hooks such as Wine-prefix repair
+- wider sense that the app is managing an emulator environment, not just launching storefront games
+
+### Relative lack
+
+- **GameNative lacks WinNative’s setup wizard and explicit first-run runtime bootstrap flow.**
+- **WinNative lacks GameNative’s tighter storefront-facing integration around library polish and compatibility presentation.**
