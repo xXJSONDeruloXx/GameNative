@@ -113,10 +113,10 @@ The detailed matrix below is intentionally expanded in stages:
 - [x] downloads and installs
 - [x] cloud saves and sync
 - [x] runtime / container / contents management
-- [ ] input / controllers / overlays
-- [ ] platform integration and shell features
-- [ ] testing / CI / docs / provenance
-- [ ] final “shared / has / lacks” summary
+- [x] input / controllers / overlays
+- [x] platform integration and shell features
+- [x] testing / CI / docs / provenance
+- [x] final “shared / has / lacks” summary
 
 ## Initial comparison notes
 
@@ -470,3 +470,252 @@ Checked-in WinNative strengths include:
 
 - **GameNative lacks WinNative’s setup wizard and explicit first-run runtime bootstrap flow.**
 - **WinNative lacks GameNative’s tighter storefront-facing integration around library polish and compatibility presentation.**
+
+## Input, controllers, overlays, and in-session UX
+
+### Shared
+
+Both repos clearly retain substantial Winlator-style input-control capability:
+
+- touch controls / overlay controls
+- physical controller support
+- controller binding data structures
+- XServer-backed in-session input routing
+- per-profile input control management
+
+### GameNative edge: in-session quick menu + floating performance HUD
+
+GameNative’s stronger checked-in in-session UX is the modern overlay stack built around:
+
+- `app/src/main/java/app/gamenative/ui/component/QuickMenu.kt`
+- `app/src/main/java/app/gamenative/ui/data/PerformanceHudConfig.kt`
+- `app/src/main/java/app/gamenative/ui/widget/PerformanceHudView.kt`
+- `app/src/main/java/app/gamenative/ui/screen/xserver/XServerScreen.kt`
+- `app/src/main/java/app/gamenative/ui/component/dialog/TouchGestureSettingsDialog.kt`
+- `app/src/main/java/app/gamenative/ui/component/dialog/PhysicalControllerConfigSection.kt`
+
+Checked-in strengths include:
+
+- dedicated quick menu surface for in-game actions
+- HUD-specific tab inside that menu
+- floating performance HUD with drag / placement behavior
+- controller-oriented quick actions such as edit controls and edit physical controller
+- stronger touch-gesture configuration surfaced in the modern frontend
+
+### WinNative edge: broader legacy-style session drawer and controller tooling
+
+WinNative’s stronger checked-in in-session shell is the broader Winlator-style drawer/tooling set, including:
+
+- `XServerDrawerMenu.kt`
+- `XServerDisplayActivity.java`
+- `contentdialog/ScreenEffectDialog.java`
+- `contentdialog/ControllerAssignmentDialog.java`
+- `contentdialog/GamepadConfiguratorDialog.java`
+- `InputControlsFragment.kt`
+- `ControlsEditorActivity.java`
+
+Checked-in strengths include:
+
+- drawer actions for keyboard, input controls, relative mouse, mouse input, fullscreen, pause/resume, PiP, task manager, logs, exit
+- explicit **screen effects** dialog from the in-session shell
+- more explicit multi-controller / controller-assignment surface area
+- gamepad configurator and controller-manager concepts in the visible code and strings
+
+### Relative lack
+
+- **GameNative lacks WinNative’s surfaced controller-assignment / controller-manager tooling and broader in-session shell actions like PiP, task manager, logs, and screen-effects drawer entries.**
+- **WinNative lacks GameNative’s dedicated quick menu + floating performance HUD experience.** In the checked WinNative tree, HUD references are primarily env-var based (`DXVK_HUD`, `GALLIUM_HUD`) rather than an equivalent dedicated custom HUD UI.
+
+## Platform integration and shell features
+
+### GameNative edge
+
+GameNative’s platform integration is narrower but more product-polished:
+
+- launcher icon aliases in the manifest allow icon switching
+- `release-gold` build variant swaps branding assets and build config
+- checked-in privacy policy and support flows are more productized
+- PostHog is not only declared in Gradle, but used in app code (`PluviaApp.kt`, `MainActivity.kt`, `XServerScreen.kt`, `PluviaMain.kt`)
+
+### WinNative edge
+
+WinNative has the broader system-shell footprint.
+
+Manifest and code evidence show:
+
+- `SetupWizardActivity`
+- `UnifiedActivity`
+- `HubActivity`
+- `BigPictureActivity`
+- `XServerDisplayActivity`
+- `XrActivity`
+- `ControlsEditorActivity`
+- `WinlatorFilesProvider` (`DocumentsProvider`)
+- shortcut broadcast receiver
+- XR / Oculus-related features in the manifest
+- accessibility-service and Samsung Dex shortcut-interception settings in XML/string resources
+
+This gives WinNative more of a full emulator-shell profile than GameNative.
+
+### Permission / feature differences worth calling out
+
+Even though both manifests declare 14 permissions, they emphasize different capabilities:
+
+**GameNative**
+- `RECORD_AUDIO`
+- `REQUEST_INSTALL_PACKAGES`
+- `READ_LOGS`
+- consumer-app style launcher aliases
+
+**WinNative**
+- multiple Oculus / XR feature flags
+- `com.android.launcher.permission.INSTALL_SHORTCUT`
+- `HIGH_SAMPLING_RATE_SENSORS`
+- `WRITE_SECURE_SETTINGS` in the checked manifest
+- document-provider style file exposure
+
+### Relative lack
+
+- **GameNative lacks WinNative’s document provider, receiver-based shortcut plumbing, XR shell, hub/big-picture shell, and accessibility/Dex shortcut interception surface.**
+- **WinNative lacks GameNative’s manifest alias / consumer-brand polish and checked-in gold-brand release path.**
+
+## Testing, CI, documentation, and repo health
+
+### GameNative edge
+
+GameNative is materially stronger in checked-in project hygiene:
+
+- 21 unit tests
+- 1 shared test
+- 11 Android tests
+- 4 GitHub workflows
+  - `app-release-signed.yml`
+  - `issues-contributors-only.yml`
+  - `pluvia-pr-check.yml`
+  - `tagged-release.yml`
+- in-repo privacy policy
+- clearer release/support posture for an end-user app
+
+### WinNative current state
+
+In the checked clone, WinNative has:
+
+- 0 unit tests
+- 0 shared tests
+- 0 Android tests
+- 1 GitHub workflow: `android-ci.yml`
+- no equivalent checked-in privacy policy file in the repo root structure examined here
+
+### Localization nuance
+
+Both repos have 14 `values*` resource directories, but they are not identical:
+
+- **GameNative** includes `values-ru`
+- **WinNative** includes `values-v27` instead of `values-ru`
+
+So the localization footprint is similar in size, but not identical in language / resource targeting.
+
+## Shared ancestry and likely provenance
+
+### What strongly suggests shared code ancestry
+
+The repos share **304 source basenames**, despite package roots being reorganized.
+
+Representative shared basenames include:
+
+- `SteamAutoCloud.kt`
+- `SteamUnifiedFriends.kt`
+- `EpicService.kt`
+- `EpicCloudSavesManager.kt`
+- `GOGCloudSavesManager.kt`
+- `AppInfo.kt`
+- `ContainerManager.java`
+- `DownloadService.kt`
+- `CachedLicense.kt`
+- many XServer / renderer / input classes
+
+### What suggests WinNative is not simply a one-branch rebrand of GameNative
+
+- package roots are different enough that common relative source paths are effectively zero
+- WinNative’s top-level repo layout is much more Winlator-style (`android_sysvshm`, `audio_plugin`, `input_controls`, `references`)
+- WinNative’s reversed early history starts with Winlator-oriented cleanup / shell changes, not with a straight GameNative app structure
+- WinNative README explicitly describes the app as a fusion of **Winlator Bionic** and **Pluvia**
+- WinNative strings still contain leftover **Pluvia** references, implying a mixed-origin codebase rather than a clean-room rewrite
+
+### Best-fit provenance conclusion
+
+The most defensible reading of the checked repos is:
+
+- **GameNative** = Pluvia-derived storefront/game-launcher product with embedded Winlator backend work
+- **WinNative** = Winlator-Cmod-style emulator/container product that has incorporated meaningful Pluvia/GameNative-derived storefront and library code
+
+That means the overlap is real, but the product centers are still different.
+
+## Final “shared / has / lacks” summary
+
+### Clearly shared today
+
+Both repos clearly have:
+
+- Steam support
+- Epic support
+- GOG support
+- library browsing with controller-aware presentation
+- custom/local game support
+- shortcut creation
+- Winlator-derived runtime/container plumbing
+- cloud-save machinery for Steam/GOG/Epic
+- touch + controller input systems
+- Compose usage in at least part of the app
+
+### GameNative clearly has that WinNative lacks or only partially exposes
+
+1. **A full checked-in Amazon Games implementation**
+2. **A more specialized storefront/library frontend architecture**
+3. **Compatibility badges and compatibility-cache-driven library UX**
+4. **Quick menu + floating custom performance HUD**
+5. **Per-game storage movement actions in the storefront shell**
+6. **More Kotlin-heavy / more consistently modernized app-facing UI**
+7. **Stronger test coverage and workflow/release scaffolding**
+8. **A checked-in privacy policy and stronger end-user release posture**
+
+### WinNative clearly has that GameNative lacks
+
+1. **A first-run setup wizard**
+2. **A unified Downloads tab with bulk actions**
+3. **A broader emulator-shell app structure** (`HubActivity`, `BigPictureActivity`, `XrActivity`, etc.)
+4. **A document provider / broader file-manager integration surface**
+5. **A surfaced controller assignment / controller manager story**
+6. **A richer legacy-style in-session drawer with pause, PiP, task manager, logs, and screen effects**
+7. **A more explicit runtime/bootstrap posture around containers and content prerequisites**
+8. **XR / Oculus-oriented platform hooks in the manifest and activity shell**
+
+### Areas where WinNative currently looks partial relative to GameNative
+
+- Amazon storefront implementation
+- consumer-facing library polish
+- compatibility presentation in the library
+- testing / CI / release hygiene
+- repo-level documentation completeness around privacy/support policy
+
+### Areas where GameNative currently looks narrower relative to WinNative
+
+- setup/onboarding shell breadth
+- runtime bootstrap visibility
+- unified downloads control center
+- system-shell / emulator-shell features
+- document-provider and accessibility/Dex integration
+- XR / big-picture / alternate-shell coverage
+
+## Overall conclusion
+
+If the question is **“are these effectively the same app?”**, the answer is **no**.
+
+If the question is **“does WinNative appear to contain meaningful GameNative/Pluvia-derived work?”**, the answer is **yes**.
+
+If the question is **“which one is more advanced at what?”**, the cleanest answer is:
+
+- **GameNative is ahead as a polished storefront/game-library product**
+- **WinNative is ahead as a broader emulator-shell / Winlator-environment product**
+
+That is the most accurate feature-level comparison I can defend from the checked-in repositories at these two revisions.
