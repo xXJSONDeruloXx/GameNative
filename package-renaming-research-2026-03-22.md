@@ -1,0 +1,354 @@
+# Package renaming / spoofed package investigation
+
+Date: 2026-03-22
+Repo: `/Users/danhimebauch/Developer/GameNative`
+
+## Scope
+
+Investigate whether GameNative can be safely renamed to another Android package / app ID (Antutu, Ludashi, PUBG, Wild Rift, Genshin, etc.), using:
+
+- the linked Discord general message and nearby discussion
+- related Discord discussion in `general`, `development`, and threads
+- current GameNative source tree and shipped assets
+- related GitHub issue/PR history where available
+
+## Search method
+
+### Discord
+- Linked message: `general` `1412756778159964201` / message `1485360145121804460`
+- Searched guild-wide for: `app.name`, `package name`, `appid`, `rename`, `hard coded`, `antutu`, `ludashi`, `pubg`, `wildrift`, `framegen`, `genshin`
+- Inspected these relevant threads/messages:
+  - `Package Naming chat` thread `1479449383027212451`
+  - `How to PR?` thread `1481326067858804756`
+  - `PR Keep/Kill thread` `1481270625657159821`
+  - linked general discussion on 2026-03-22
+
+### Code audit
+- Searched the repo for:
+  - `applicationId`, `namespace`, `app_name`
+  - hardcoded `app.gamenative`
+  - hardcoded `/data/data/app.gamenative`
+  - hardcoded launch actions / component names
+- Inspected compressed shipped assets for embedded `app.gamenative` paths
+- Reviewed related GitHub PR / issue:
+  - Issue `#618`: `Hardcoded /data/data/app.gamenative paths break variant builds`
+  - PR `#585`: `fix: replace hardcoded app ID paths with BuildConfig.APPLICATION_ID`
+
+## Discord findings
+
+### 1) Current user/dev sentiment: renaming is known-bad, not a new surprise
+
+Linked general discussion on 2026-03-22:
+- `1485360145121804460` — pepelespooder: “idk what theyve done but litterally as soon as you change the app.name it breaks everything”
+- `1485360212318748753` — “bionic works once renamed and like everything is relinked”
+- `1485360844031262771` — “and it still doesnt allow you to use glibc once the name is changed”
+- `1485361066119659662` — “i relinked the .so i even replaced the whole imagefs with my own server for download”
+- `1485361574238486730` — “So many things are hardlinked … nearly impossiblet unless you know the code inside and out”
+- `1485362831925842192` — “i just wanted to see why @max used the gamenative appid”
+- `1485363017993551872` — “20-30 hours of work relinking all the elfs and stuff like that”
+
+Older general messages line up with the same story:
+- `1485357995906043995` — “holy crap... i forgot how much changing the appid breaks stuff”
+- `1483521716159381665` — “renaming the app broke everything”
+- `1483521814306095154` — “I can see what Gamenative performance just uses the same appid”
+- `1483985629640659046` — aventrix warns some paths are hardcoded, so renaming/moving things breaks
+
+### 2) The package spoofing idea is explicitly tied to OEM performance unlocks
+
+From `Package Naming chat` (`1479449383027212451`):
+- `1479452828782297168` — the412banner says newer Ludashi builds no longer hardcode package naming and can be package-edited while keeping Antutu/Ludashi/PUBG/Genshin benefits
+- `1479453183687528601` — spacebubble confirms GameNative has references not just to app name, but files based on app name too
+- `1479453357948276788` — spacebubble says a “quick and dirty blanket package name” build is possible, but proper support needs a chunky refactor
+- `1479456533686259712` — the412banner explains the Antutu/PUBG spoof theory: OEMs may unlock more aggressive governors, scheduling, latency, or thermal behavior for benchmark/game package names
+- `1479465569261453322` / `1479465604296605839` — “package name killer controller” / “Testing further killed it”
+
+Related general messages:
+- `1479506419068703005` — packesl: changing package to `com.riotgames.wildrift` can unlock framegen / upscaling on some phones
+- `1466784119772938405` — user asks for PUBG/Genshin package version to enable frame interpolation
+- `1482992438317420594` — psycho_ch says they’ve seen normal performance using the Antutu package name
+
+### 3) Devs have already acknowledged hardcoded package constraints
+
+- `1479448700345647255` (general) — spacebubble: goal is “remove hard-coding appNames from the sourcecode and having dynamic resolution of the appName”
+- `1481328029673197779` (`How to PR?`) — “technical limitation regarding debug builds vs daily drive due to package-name hard-coded constraints”
+- `1481288598702657568` (`PR Keep/Kill thread`) — “It’s all quite hard-coded and causes a bunch of issues. So we need smarter ways to deal”
+
+### 4) Important wording clarification from Discord vs code
+
+The linked message says `app.name`, but the code audit strongly suggests the real breakage is **not** the display label string (`@string/app_name`).
+
+It is much more likely people are using “app.name” loosely to mean one of:
+- Android `applicationId`
+- package name
+- namespace / component names
+- absolute internal data path based on `app.gamenative`
+
+## Code audit
+
+## A. Changing the display label alone should be safe
+
+`app_name` / `login_app_name` are used for UI/labels, not core runtime identity:
+- `app/src/main/AndroidManifest.xml` → application / activity labels use `@string/app_name`
+- `app/src/main/java/app/gamenative/service/NotificationHelper.kt`
+- `app/src/main/java/app/gamenative/ui/screen/login/UserLoginScreen.kt`
+- `app/src/main/java/app/gamenative/ui/component/dialog/ProfileDialog.kt`
+
+I did **not** find runtime path logic keyed off `R.string.app_name`.
+
+So if someone literally only changes the launcher label, that should not be the thing “breaking everything”.
+
+## B. The repo still hardcodes `app.gamenative` in runtime-critical places
+
+`app/build.gradle.kts`:
+- `namespace = "app.gamenative"`
+- `applicationId = "app.gamenative"`
+- there is already a `release-gold` build type with `applicationIdSuffix = ".gold"`
+
+That suffix alone is a clue: variant app IDs are already a known use case, but the rest of the codebase is not consistently prepared for it.
+
+### Hardcoded absolute paths in source (runtime-relevant)
+
+`rg` found these direct `/data/data/app.gamenative` references in source:
+
+- `app/src/main/java/com/winlator/container/Container.java`
+  - `MEDIACONV_*` env vars
+  - `DEFAULT_DRIVES = ... E:/data/data/app.gamenative/storage`
+- `app/src/main/java/com/winlator/core/DXVKHelper.java`
+  - `DXVK_STATE_CACHE_PATH`
+- `app/src/main/java/com/winlator/core/WineUtils.java`
+  - E: drive repair path and storage path detection
+- `app/src/main/java/com/winlator/winhandler/WinHandler.java`
+  - controller shared-memory files: `gamepad.mem`
+- `app/src/main/java/com/winlator/xenvironment/components/BionicProgramLauncherComponent.java`
+  - same controller shared-memory paths
+- `app/src/main/cpp/extras/evshim.c`
+  - same `gamepad*.mem` path baked into native code
+
+This is enough by itself to explain:
+- controller breakage
+- E: drive issues
+- DXVK cache path breakage
+- mediaconv / helper path breakage
+
+### Hardcoded app identity strings in source
+
+- `app/src/main/AndroidManifest.xml`
+  - `<action android:name="app.gamenative.LAUNCH_GAME" />`
+- `app/src/main/java/app/gamenative/utils/IntentLaunchManager.kt`
+  - `ACTION_LAUNCH_GAME = "app.gamenative.LAUNCH_GAME"`
+- `app/src/main/java/app/gamenative/utils/ShortcutUtils.kt`
+  - same hardcoded action for pinned shortcuts
+- `app/src/main/java/app/gamenative/utils/IconSwitcher.kt`
+  - hardcoded component names:
+    - `app.gamenative.MainActivityAliasDefault`
+    - `app.gamenative.MainActivityAliasAlt`
+- service action constants are also package-scoped strings:
+  - `GOG_SYNC_LIBRARY`, `EPIC_SYNC_LIBRARY`, `AMAZON_SYNC_LIBRARY`, etc.
+
+This matters less than the absolute path problem, but it means package renaming is not centralized.
+
+### There is already an inconsistency in launch action handling
+
+- `IntentLaunchManager.kt` only accepts `app.gamenative.LAUNCH_GAME`
+- `MainActivity.kt` has an error path checking `${BuildConfig.APPLICATION_ID}.LAUNCH_GAME`
+- manifest still declares `app.gamenative.LAUNCH_GAME`
+
+That’s not the root cause of the big breakage, but it shows package identity handling is already split-brain.
+
+### Tests also assume the exact package name
+
+`app/src/androidTest/java/com/utkarshdalal/PluviaGoldberg/ExampleInstrumentedTest.kt`
+- asserts `appContext.packageName == "app.gamenative"`
+
+Not a runtime blocker, but another sign rename support is incomplete.
+
+## C. The really big finding: shipped binary assets also embed `app.gamenative`
+
+This is the part that makes simple APK/package editing fail even after Java/Kotlin changes.
+
+I scanned shipped compressed assets and found embedded `app.gamenative` paths in at least these archives:
+
+1. `app/src/main/assets/redirect.tzst`
+   - contains strings such as:
+     - `app.gamenative/files/imagefs`
+     - `/data/data/app.gamenative/files/imagefs/usr/tmp`
+     - `/data/data/app.gamenative/files/imagefs/preload_loaded.txt`
+     - `LD_PRELOAD=/data/data/app.gamenative/files/imagefs/libpluviagoldberg.so`
+
+2. `app/src/main/assets/graphics_driver/turnip-25.2.0.tzst`
+   - contains:
+     - `"library_path": "/data/data/app.gamenative/files/imagefs/usr/lib/libvulkan_freedreno.so"`
+
+3. `app/src/main/assets/graphics_driver/turnip-25.3.0.tzst`
+   - same pattern
+
+4. `app/src/main/assets/graphics_driver/vortek-2.0.tzst`
+   - contains:
+     - `"library_path": "/data/data/app.gamenative/files/imagefs/lib/libvulkan_vortek.so"`
+
+5. `app/src/main/assets/graphics_driver/vortek-2.1.tzst`
+   - contains:
+     - `"library_path": "/data/data/app.gamenative/files/imagefs/usr/lib/libvulkan_vortek.so"`
+
+6. `app/src/main/assets/box86_64/box64-0.3.4.tzst`
+   - contains:
+     - `/data/data/app.gamenative/files/imagefs/usr/lib/ld-linux-aarch64.so.1`
+
+7. `app/src/main/assets/box86_64/box64-0.3.6.tzst`
+   - same pattern
+
+8. `app/src/main/assets/box86_64/box64-0.3.8.tzst`
+   - same pattern
+
+This is the strongest evidence for the “relink all the ELFs / replace imagefs” complaints in Discord.
+
+Even if source code is cleaned up, these shipped assets can still pin the app to `app.gamenative`.
+
+## D. Existing GitHub history matches the same diagnosis
+
+### Issue #618
+`Hardcoded /data/data/app.gamenative paths break variant builds`
+
+Body summary:
+- several Java files hardcode `/data/data/app.gamenative`
+- breaks builds with different application IDs (debug suffixes, forks)
+
+### PR #585
+`fix: replace hardcoded app ID paths with BuildConfig.APPLICATION_ID`
+
+PR body explicitly called out that hardcoded paths break:
+- gamepad input
+- Wine E: drive mount
+- DXVK state cache
+- mediaconv dump/transcoded paths
+
+It also called out something extremely important:
+- `evshim.c` / bundled native pieces need rebuilds in the imagefs, otherwise gamepad input remains broken even if source changes are applied.
+
+That PR was later commented as superseded, but the current tree still clearly contains hardcoded `app.gamenative` source paths and multiple shipped asset archives with embedded paths.
+
+## E. One commit appears to have reintroduced / entrenched some of this
+
+`git blame` points many of the current hardcoded path lines to:
+- commit `20ebeaf0` — `Initial bionic changes (#191)`
+
+That commit introduced or reintroduced several of the current hardcoded path assumptions in:
+- `Container.java`
+- `WinHandler.java`
+- `BionicProgramLauncherComponent.java`
+- `evshim.c`
+
+So at least part of the current breakage is not accidental folklore — it is traceable to concrete code changes in the current history.
+
+## Known findings
+
+### Known from Discord
+- Users are actively trying package spoof variants for OEM performance unlocks (Antutu, PUBG, Ludashi, Wild Rift, Genshin).
+- Devs have already acknowledged package-name hardcoding as technical debt.
+- Users report controller breakage and broader failures after package renaming.
+- At least one user says bionic can be made to limp along after heavy relinking, but glibc still fails.
+
+### Known from code
+- Display label (`app_name`) is not the real problem.
+- Package/appId/path assumptions are hardcoded in source.
+- Package/appId/path assumptions are also hardcoded in shipped binary assets.
+- There is already repo history (issue/PR) documenting the same problem.
+
+## Hypotheses / likely implications
+
+### High confidence
+1. **Changing only the Android package/app ID is currently not safe.**
+   Too many runtime-critical paths still assume `app.gamenative`.
+
+2. **Simple APK editor/package-name spoofing is insufficient.**
+   The repo ships binary assets that still embed `app.gamenative` absolute paths.
+
+3. **Controller breakage is very plausibly explained by the current code/assets.**
+   `WinHandler.java`, `BionicProgramLauncherComponent.java`, and `evshim.c` all hardcode the shared `gamepad*.mem` location.
+
+4. **glibc failures likely extend beyond the Kotlin/Java tree.**
+   The source tree has fewer glibc-specific hardcodes than bionic, but the shipped archives (redirect, box64, graphics-driver bundles) still embed absolute paths. That matches the “relink all the ELFs / imagefs” complaints.
+
+### Lower confidence / needs deeper binary inspection
+1. There may be additional embedded `app.gamenative` paths in other binary assets not surfaced by quick `strings` scanning.
+2. Some glibc breakage may come from ELF interpreter / RPATH / loader assumptions that only show up after unpacking or launching the real runtime.
+3. Supporting side-by-side installs may need migration logic for persistent container metadata, not just path derivation.
+
+## Is there a path forward?
+
+## Yes, but it is a real project, not a one-line rename
+
+### Minimum credible path
+
+#### Phase 1 — source-level de-hardcoding
+Create a single canonical app path / identity helper and replace runtime hardcodes with values derived from:
+- `context.getFilesDir()` / `context.getDataDir()` / `context.packageName`
+- `ImageFs.find(context).getRootDir()`
+- `BuildConfig.APPLICATION_ID` only where a `Context` is genuinely unavailable
+
+At minimum this has to cover:
+- `Container.java`
+- `DXVKHelper.java`
+- `WineUtils.java`
+- `WinHandler.java`
+- `BionicProgramLauncherComponent.java`
+- `evshim.c`
+- launch actions / alias component handling (`IntentLaunchManager`, `ShortcutUtils`, `IconSwitcher`, manifest)
+
+#### Phase 2 — rebuild shipped binary assets with dynamic paths
+This is the part the Discord complaints are pointing at.
+
+At minimum the following assets need review/rebuild/repack:
+- `redirect.tzst`
+- affected `box64-*.tzst`
+- affected `turnip-*.tzst`
+- affected `vortek-*.tzst`
+- any imagefs/runtime bundles that still resolve library paths against `/data/data/app.gamenative/...`
+
+If this phase does not happen, forks/variants will still randomly fail even after Java/Kotlin cleanup.
+
+#### Phase 3 — migration / compatibility policy
+Decide whether the goal is:
+- **side-by-side dev/debug builds**, or
+- **OEM spoof package variants**, or
+- **both**
+
+Those are related, but not identical.
+
+You probably want:
+- one-time migration for old container drive strings / cached paths
+- possibly support for both legacy launch action and package-scoped launch action
+- explicit CI-generated variants instead of asking users to hand-edit APKs
+
+#### Phase 4 — test matrix
+Need real device/runtime validation for:
+- default package
+- suffixed debug/dev build
+- at least one spoof package build
+- bionic + glibc
+- controller input
+- graphics driver loading
+- front-end / external launch intents
+- clean install vs upgrade vs side-by-side install
+
+## Suggested product stance
+
+If the team wants a real path forward, I would avoid “random APK editor spoofing” entirely and instead support one of these deliberately:
+
+1. **dev/debug side-by-side package support** first (lowest-risk practical win)
+2. then optionally **CI-generated spoof variants** for benchmark/game package names as experimental builds
+
+That order matters. If side-by-side variant app IDs are not stable, Antutu/PUBG/Wild Rift/Genshin variants will be chaos.
+
+## Bottom line
+
+- **Changing the display app label is not the real issue.**
+- **Changing package/app ID absolutely still breaks real runtime paths in current GameNative.**
+- The breakage is not just folklore: it is directly visible in current source and in shipped binary assets.
+- There **is** a path forward, but it requires both:
+  - source refactoring, and
+  - rebuilding/repacking shipped runtime assets
+- So the honest answer is:
+  - **yes, there is a path forward**
+  - **no, it is not currently a “just rename the package” task**
+  - **and glibc likely stays broken until the binary/imagefs layer is cleaned up too**
