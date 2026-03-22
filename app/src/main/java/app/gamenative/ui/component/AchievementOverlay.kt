@@ -5,11 +5,15 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,20 +30,28 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
+import app.gamenative.PrefManager
 import app.gamenative.R
 import app.gamenative.ui.theme.PluviaTheme
 import app.gamenative.ui.util.AchievementNotification
 import app.gamenative.ui.util.AchievementNotificationManager
 import com.skydoves.landscapist.ImageOptions
 import com.skydoves.landscapist.coil.CoilImage
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
+
+private val AchievementOverlayMargin = 16.dp
 
 @Composable
 fun BoxScope.AchievementOverlay() {
@@ -57,16 +69,99 @@ fun BoxScope.AchievementOverlay() {
         }
     }
 
-    AnimatedVisibility(
-        visible = visible,
-        modifier = Modifier
-            .align(Alignment.BottomEnd)
-            .padding(16.dp),
-        enter = slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
-        exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut(),
-    ) {
-        current?.let { notification ->
-            AchievementNotificationContent(notification)
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val density = LocalDensity.current
+        val marginPx = with(density) { AchievementOverlayMargin.roundToPx() }.toFloat()
+        val containerWidthPx = with(density) { maxWidth.roundToPx() }
+        val containerHeightPx = with(density) { maxHeight.roundToPx() }
+
+        var notificationSize by remember { mutableStateOf(IntSize.Zero) }
+        var notificationOffset by remember { mutableStateOf<Offset?>(null) }
+
+        fun maxX(): Float = (containerWidthPx - notificationSize.width).coerceAtLeast(0).toFloat()
+
+        fun maxY(): Float = (containerHeightPx - notificationSize.height).coerceAtLeast(0).toFloat()
+
+        fun defaultOffset(): Offset = Offset(
+            x = (maxX() - marginPx).coerceAtLeast(0f),
+            y = (maxY() - marginPx).coerceAtLeast(0f),
+        )
+
+        fun persistOffset(offset: Offset) {
+            val maxOffsetX = maxX()
+            val maxOffsetY = maxY()
+            PrefManager.achievementOverlayXFraction = if (maxOffsetX > 0f) {
+                offset.x / maxOffsetX
+            } else {
+                0f
+            }
+            PrefManager.achievementOverlayYFraction = if (maxOffsetY > 0f) {
+                offset.y / maxOffsetY
+            } else {
+                0f
+            }
+        }
+
+        fun restoreOffset() {
+            if (containerWidthPx <= 0 || containerHeightPx <= 0 || notificationSize == IntSize.Zero) {
+                return
+            }
+
+            val maxOffsetX = maxX()
+            val maxOffsetY = maxY()
+            val defaultOffset = defaultOffset()
+            val savedX = PrefManager.achievementOverlayXFraction
+            val savedY = PrefManager.achievementOverlayYFraction
+
+            notificationOffset = Offset(
+                x = if (savedX in 0f..1f) maxOffsetX * savedX else defaultOffset.x,
+                y = if (savedY in 0f..1f) maxOffsetY * savedY else defaultOffset.y,
+            )
+        }
+
+        LaunchedEffect(containerWidthPx, containerHeightPx, notificationSize) {
+            restoreOffset()
+        }
+
+        val anchoredOffset = notificationOffset ?: defaultOffset()
+        val translation = anchoredOffset - defaultOffset()
+
+        AnimatedVisibility(
+            visible = visible,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(AchievementOverlayMargin)
+                .offset {
+                    IntOffset(
+                        x = translation.x.roundToInt(),
+                        y = translation.y.roundToInt(),
+                    )
+                }
+                .onSizeChanged { notificationSize = it }
+                .pointerInput(containerWidthPx, containerHeightPx, notificationSize) {
+                    detectDragGestures(
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            val currentOffset = notificationOffset ?: defaultOffset()
+                            notificationOffset = Offset(
+                                x = (currentOffset.x + dragAmount.x).coerceIn(0f, maxX()),
+                                y = (currentOffset.y + dragAmount.y).coerceIn(0f, maxY()),
+                            )
+                        },
+                        onDragEnd = {
+                            notificationOffset?.let(::persistOffset)
+                        },
+                        onDragCancel = {
+                            notificationOffset?.let(::persistOffset)
+                        },
+                    )
+                },
+            enter = slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
+            exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut(),
+        ) {
+            current?.let { notification ->
+                AchievementNotificationContent(notification)
+            }
         }
     }
 }

@@ -447,6 +447,20 @@ object PrefManager {
             setPref(PERFORMANCE_HUD_Y_FRACTION, value.coerceIn(-1f, 1f))
         }
 
+    private val ACHIEVEMENT_OVERLAY_X_FRACTION = floatPreferencesKey("achievement_overlay_x_fraction")
+    var achievementOverlayXFraction: Float
+        get() = getPref(ACHIEVEMENT_OVERLAY_X_FRACTION, -1f)
+        set(value) {
+            setPref(ACHIEVEMENT_OVERLAY_X_FRACTION, value.coerceIn(-1f, 1f))
+        }
+
+    private val ACHIEVEMENT_OVERLAY_Y_FRACTION = floatPreferencesKey("achievement_overlay_y_fraction")
+    var achievementOverlayYFraction: Float
+        get() = getPref(ACHIEVEMENT_OVERLAY_Y_FRACTION, -1f)
+        set(value) {
+            setPref(ACHIEVEMENT_OVERLAY_Y_FRACTION, value.coerceIn(-1f, 1f))
+        }
+
     private val LAUNCH_REAL_STEAM = booleanPreferencesKey("launch_real_steam")
     var launchRealSteam: Boolean
         get() = getPref(LAUNCH_REAL_STEAM, false)
