@@ -507,6 +507,12 @@ This is the strongest evidence so far that **glibc rename breakage is not just i
 
 I still could **not** find public source for the `redirect.tzst` preload libs used by current GameNative.
 
+Git history does at least narrow down when they entered this repo:
+- `app/src/main/assets/redirect.tzst` was introduced in commit `20ebeaf0` (`Initial bionic changes (#191)`)
+- `app/src/main/jniLibs/arm64-v8a/libredirect-bionic.so` first appeared earlier in commit `2df2b427` (`Progress - patched libvortekrenderer and now it doesn't crash but i get a black screen hehe`)
+
+But I still did not find corresponding checked-in source files in this repo history.
+
 Current binary evidence from `redirect.tzst`:
 - `libredirect.so` contains source filename string: `preload_replace.c`
 - `libredirect-bionic.so` contains source filename string: `preload_replace_bionic.c`
