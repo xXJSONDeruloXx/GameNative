@@ -352,3 +352,64 @@ That order matters. If side-by-side variant app IDs are not stable, Antutu/PUBG/
   - **yes, there is a path forward**
   - **no, it is not currently a “just rename the package” task**
   - **and glibc likely stays broken until the binary/imagefs layer is cleaned up too**
+
+## Follow-up: upstream-owner repo audit
+
+I checked repos under the upstream owner (`utkarshdalal`) to see which remaining hardcoded binaries are rebuildable from source.
+
+### Rebuildable from upstream-owner repos
+
+#### `utkarshdalal/box64`
+This repo does contain the Box64 source and Android packaging workflow.
+
+Strong evidence:
+- `.github/workflows/release.yml` explicitly runs:
+  - `patchelf --set-interpreter /data/data/com.winlator/files/imagefs/usr/lib/ld-linux-aarch64.so.1 ./box64`
+
+So the hardcoded interpreter path in the shipped `box64-*.tzst` assets is not mysterious — it is being baked in at packaging time and can be rebuilt/fixed from this repo.
+
+#### `utkarshdalal/bionic-vulkan-wrapper`
+This repo contains source for the wrapper / Vulkan-side pieces and ICD generation logic.
+
+Strong evidence:
+- `src/freedreno/vulkan/meson.build`
+  - generates `freedreno_icd.<arch>.json` via `vk_icd_gen.py`
+- `src/vulkan/wrapper/graphics_env_hooks.cpp`
+  - hardcodes:
+    - `/data/data/com.winlator.cmod/files/imagefs/usr/lib`
+    - `/data/data/com.micewine.emu/files/usr/lib`
+- `src/vulkan/wrapper/wrapper_instance.c`
+  - also logs / expects validation layers under `/data/data/com.winlator.cmod/files/imagefs/usr/lib/`
+
+So the remaining wrapper / ICD hardcoding is also rebuildable from upstream-owner source, but would need a package-aware patch before rebuilding.
+
+#### `utkarshdalal/vortek-patcher`
+This looks like a patcher for Vortek binaries, not the full original Vortek implementation.
+
+Useful, but not sufficient by itself to fully regenerate every Vortek-related shipped binary from first principles.
+
+### Not found in upstream-owner repos
+
+I did **not** find source for these remaining pieces in the upstream owner’s repos:
+- `libredirect.so`
+- `libredirect-bionic.so`
+- `redirect.tzst` build source / packaging source
+- any checked-in source for the old path-rewrite shim symbols like:
+  - `preload_replace_bionic.c`
+  - `old_pkg`
+  - `new_pkg`
+  - the `rewrite (openat): %s -> %s` style hooks seen in the shipped binary
+
+I also did **not** find checked-in evshim source in the upstream-owner repos besides what already exists in GameNative itself.
+
+### What that means
+
+- **Box64 can likely be rebuilt from `utkarshdalal/box64`.**
+- **The Vulkan wrapper / ICD artifacts can likely be rebuilt from `utkarshdalal/bionic-vulkan-wrapper`.**
+- **The redirect/path-rewrite libs do not appear to be rebuildable from repos under the upstream owner alone.**
+
+So if we want to finish the remaining binary cleanup, the next search area is probably **outside** the upstream owner namespace:
+- `coffincolors/winlator`
+- `brunodev85/winlator`
+- `leegao/bionic-vulkan-wrapper`
+- any repo that originally produced the redirect/path-rewrite preload libraries
