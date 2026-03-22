@@ -182,4 +182,238 @@ Based on Discord alone, my best current framing is:
 
 ---
 
-Code review notes will be added below in a follow-up commit so the Discord evidence and code-path analysis live in one file.
+## Code review
+
+Reviewed current repo code with focus on these files:
+- `app/src/main/java/app/gamenative/service/SteamService.kt`
+- `app/src/main/java/app/gamenative/MainActivity.kt`
+- `app/src/main/java/app/gamenative/ui/PluviaMain.kt`
+- `app/src/main/java/app/gamenative/PrefManager.kt`
+- `app/src/main/java/app/gamenative/utils/SteamUtils.kt`
+- `app/src/main/java/app/gamenative/utils/SteamTokenLogin.kt`
+
+## Relevant current code paths
+
+### 1) GameNative deliberately stops and restarts the Steam service during ordinary app lifecycle
+- `MainActivity.onStop()` sets `SteamService.autoStopWhenIdle = true`.
+- If there are no active operations, no login in progress, no import in progress, and no active game keepalive, it stops `SteamService`.
+- `PluviaMain` later starts the foreground service again when it sees Steam is not connected.
+
+What this means:
+- ordinary background/foreground use can produce repeated `stop -> reconnect -> auto-login` cycles.
+- This is **known behavior from code**, not a guess.
+- Whether this behavior is *too aggressive* and contributes to logout is a separate question.
+
+### 2) On service start, SteamService immediately reconnects to Steam
+`SteamService.onStartCommand()` creates a `SteamClient` using WebSocket transport and an OkHttp client with:
+- `pingInterval(15, TimeUnit.SECONDS)`
+- 10s connect timeout
+- 60s read timeout
+- 30s write timeout
+
+This lines up with the Discord/build note for PR `#771`.
+
+### 3) On low-level connection, SteamService auto-logs in whenever stored Steam creds exist
+`SteamService.onConnected()` does this:
+- resets reconnect state,
+- sets `isConnected = true`,
+- if `PrefManager.username` and `PrefManager.refreshToken` both exist, it calls `login(...)` automatically.
+
+So every reconnect attempt can become an auth attempt.
+
+### 4) Reconnect logic exists, but current checked-out code still has auth-churn risk
+Current `SteamService.onDisconnected()`:
+- marks Steam disconnected,
+- if not stopping and retry count not exhausted, schedules reconnect with backoff,
+- emits `SteamEvent.RemotelyDisconnected`,
+- later calls `connectToSteam()` again.
+
+Current `connectToSteam()`:
+- launches a coroutine,
+- calls `steamClient.connect()`,
+- waits 5 seconds,
+- if still not connected, marks endpoint bad and force-disconnects.
+
+Important nuance:
+- the current checked-out implementation has a `reconnectJob`, but **does not have a separate `connectJob` dedupe guard**.
+- I found older local commits/branches (`4470c548`, `01cffa6e`) that explored stronger reconnect/connect scheduling guards, but that stronger dedupe is **not** present in the currently checked-out code.
+
+I am **not** claiming this is the root cause by itself, but it is a believable place for reconnect churn / overlapping attempts to come from.
+
+### 5) There are two direct code paths that can turn an unexpected auth event into a full apparent logout
+
+#### 5a) `onLoggedOff()` + `EResult.LogonSessionReplaced`
+Current `SteamService.onLoggedOff()` does:
+- if `isLoggingOut`: perform normal logout duties,
+- else if `callback.result == EResult.LogonSessionReplaced`: call `performLogOffDuties()` and stop the service,
+- else if `callback.result == EResult.LoggedInElsewhere`: emit force-close-app event and reconnect,
+- else: reconnect.
+
+This is a **known, direct, current code path** where an unexpected session replacement becomes a real GameNative logout.
+
+That matters because `performLogOffDuties()` clears Steam-side persisted state via `clearUserData()`, which calls:
+- `PrefManager.clearSteamSessionPreferences()`
+- database cleanup for Steam library/license/download metadata.
+
+#### 5b) `onLoggedOn()` clears user data on any non-OK login result
+This is another important current behavior.
+
+In `SteamService.onLoggedOn()`:
+- `EResult.OK` => success path,
+- `EResult.TryAnotherCM` => reconnect,
+- `else` => `clearUserData()`, mark login failed, reconnect.
+
+That means **any non-OK login result other than `TryAnotherCM` clears stored Steam session data**.
+
+This is a strong code-level finding.
+It means a transient or recoverable auth/login failure after a reconnect can be escalated by GameNative into a full apparent logout.
+
+I cannot prove from code alone which exact non-OK result users are hitting in the wild, but the escalation behavior itself is real and current.
+
+## What is known vs guessed from code review
+
+### High-confidence findings
+These are not guesses.
+
+1. **Unexpected `LogonSessionReplaced` currently causes GameNative to clear Steam session state.**
+   - This is an explicit code path in `onLoggedOff()`.
+
+2. **Any non-OK logged-on result (other than `TryAnotherCM`) currently clears Steam session state.**
+   - This is an explicit code path in `onLoggedOn()`.
+
+3. **Backgrounding the app can frequently stop the Steam service, and later foregrounding can restart it and auto-login again.**
+   - This is explicit lifecycle behavior across `MainActivity` and `PluviaMain`.
+
+4. **PR `#903` / current `clearSteamSessionPreferences()` mainly fixes collateral damage to app-wide settings, not the underlying unexpected Steam logout.**
+   - It preserves app-wide preferences better than the old blanket clear, but still removes Steam session/account state.
+
+5. **PR `#771` / current 15-second ping interval clearly targeted a real disconnect problem.**
+   - That is supported by both code and Discord build notes.
+
+### Medium-confidence hypotheses
+These are plausible, but still hypotheses.
+
+1. **Auth churn is probably part of the real-world problem.**
+   - Why I think so:
+     - Discord reports cluster around sleep/resume, backgrounding, reconnect, Wi‑Fi loss, and opening the app later.
+     - Current lifecycle/service logic creates repeated reconnect + auto-login opportunities.
+     - Current code escalates certain auth failures/session replacements into full logout.
+   - Why I am not calling it proven:
+     - I do not yet have runtime logs showing the exact callback/result sequence from affected devices.
+
+2. **The app may be too eager to convert a transient Steam-side auth wobble into a full logout.**
+   - This is partly known because the clearing behavior exists.
+   - The part that remains a hypothesis is which Steam result codes are most commonly causing it in the field.
+
+3. **Lack of connect-attempt dedupe may worsen reconnect churn.**
+   - Plausible.
+   - Not proven without logs showing overlapping connection attempts.
+
+### Low-confidence / scenario-specific hypotheses
+1. **Real Steam client mode may explain a subset of `LogonSessionReplaced` cases.**
+   - `SteamTokenLogin` writes login data for launching real Steam in-container.
+   - If users run in-container real Steam plus GameNative's service client against the same account, session replacement would not be surprising.
+   - I would only treat this as a subset explanation, not the broad main bug, because many Discord reports do not mention this mode.
+
+## Best current root-cause read
+
+### What I think is the most solid answer right now
+The best code-backed answer I can give is:
+
+- **The immediate mechanism for at least some of these unexpected logouts is not mysterious:** GameNative has explicit code paths that clear Steam session state when it receives certain Steam auth/session events.
+- The two biggest ones are:
+  1. `LoggedOffCallback(result = LogonSessionReplaced)`
+  2. `LoggedOnCallback(result = anything non-OK except TryAnotherCM)`
+
+### What I cannot honestly claim yet
+I cannot honestly say which upstream Steam event/result is the dominant trigger across all user reports.
+
+The leading possibilities are:
+- session replacement caused by auth churn/reconnect churn,
+- transient login failures after reconnect that GameNative handles too destructively,
+- a smaller subset caused by real-Steam dual-client/session interactions.
+
+Those are **informed hypotheses**, not confirmed root cause.
+
+## Existing code that already looks like an obvious mitigation
+
+I found an existing local branch/commit that appears directly relevant:
+- Branch: `fix/steam-session-replaced-save-loss`
+- Commit: `2bebae485a6ed9882ce9c18e66c689817dfd2a14`
+- Subject: `fix: preserve steam state on unexpected session replacement`
+
+What it changes:
+- On unexpected `EResult.LogonSessionReplaced`, it does **not** call `performLogOffDuties()`.
+- Instead it preserves cached Steam credentials/library state and emits a disconnected event.
+
+My assessment:
+- **This looks like a strong mitigation.**
+- It would not prove or fix the upstream trigger for session replacement.
+- But it would stop GameNative from turning that event into a much more destructive full apparent logout.
+
+So:
+- as a **mitigation**, this looks high-confidence and obvious.
+- as a **root-cause fix**, it is not enough by itself.
+
+## Most obvious next fixes / follow-ups
+
+### 1) Stop treating unexpected `LogonSessionReplaced` as a destructive full logout
+Confidence: **high**
+
+Recommendation:
+- merge/adapt the behavior from `2bebae48`.
+
+Reason:
+- This directly matches one known bad current code path.
+- Even if it does not remove the upstream Steam event, it should significantly reduce user-visible pain.
+
+### 2) Stop clearing persisted Steam session data on every generic non-OK login result
+Confidence: **high**
+
+Recommendation:
+- narrow the `onLoggedOn()` failure handling.
+- Do not immediately call `clearUserData()` for every non-OK result.
+- Only clear persisted auth state for results that really prove the stored credentials are unusable.
+
+Reason:
+- Current behavior looks too destructive.
+- This is one of the clearest code smells I found in relation to the reported symptom.
+
+### 3) Add instrumentation before making stronger causal claims
+Confidence: **high**
+
+Recommendation:
+- log/telemetry around:
+  - `LoggedOffCallback.result`
+  - `LoggedOnCallback.result`
+  - whether app was backgrounded/resumed recently
+  - whether network changed recently
+  - whether `container.isLaunchRealSteam` was active
+  - count/timing of reconnect and login attempts
+
+Reason:
+- This is the fastest way to separate:
+  - idle disconnects,
+  - reconnect churn,
+  - auth failure escalation,
+  - real-Steam dual-session issues.
+
+### 4) Revisit lifecycle/auth churn after data is collected
+Confidence: **medium**
+
+Possible directions:
+- keep `SteamService` alive longer across short background periods,
+- add login cooldown/debounce after resume/network regain,
+- add explicit connect-attempt dedupe if logs show overlap.
+
+Reason:
+- plausible contributor,
+- but I would still label this as a follow-up investigation path, not a proven fix.
+
+## Bottom line
+
+My honest read:
+- **Known from Discord:** users really are being unexpectedly logged out of Steam, often around sleep/resume/reconnect/backgrounding.
+- **Known from code:** GameNative currently has explicit paths that convert certain Steam session/auth events into a destructive logout by clearing persisted Steam session state.
+- **Best obvious mitigation:** preserve state on unexpected `LogonSessionReplaced` and stop blanket-clearing Steam session data on generic non-OK login results.
+- **Still a hypothesis, not a proven fact:** the deeper upstream trigger is probably auth/reconnect churn, but that needs logs to confirm.
