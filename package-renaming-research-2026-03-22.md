@@ -408,8 +408,155 @@ I also did **not** find checked-in evshim source in the upstream-owner repos bes
 - **The Vulkan wrapper / ICD artifacts can likely be rebuilt from `utkarshdalal/bionic-vulkan-wrapper`.**
 - **The redirect/path-rewrite libs do not appear to be rebuildable from repos under the upstream owner alone.**
 
-So if we want to finish the remaining binary cleanup, the next search area is probably **outside** the upstream owner namespace:
+So I expanded the search outside the upstream owner namespace.
+
+## Follow-up: external repo source mapping
+
+I checked these additional repos:
 - `coffincolors/winlator`
 - `brunodev85/winlator`
+- `pipetto-crypto/winlator`
 - `leegao/bionic-vulkan-wrapper`
-- any repo that originally produced the redirect/path-rewrite preload libraries
+- `bylaws/libadrenotools`
+- `ganyao114/libadrenotools`
+
+### Source origins I could positively identify
+
+#### 1) `libevshim.so`
+This one is now clearly sourced.
+
+Found in:
+- `coffincolors/winlator`
+  - `app/src/main/cpp/winlator/evshim.c`
+  - `app/src/main/cpp/CMakeLists.txt` builds `evshim`
+
+It hardcodes:
+- `/data/data/com.winlator.cmod/files/imagefs/tmp/gamepad%s.mem`
+
+That matches the binary currently shipped in multiple Winlator-derived trees.
+
+#### 2) `wrapper.tzst` / `wrapper-leegao.tzst`
+These archives are a combination of:
+- **wrapper runtime source** from `bionic-vulkan-wrapper`
+- **hook/helper libs** from `libadrenotools`
+
+From current GameNative assets, `wrapper.tzst` contains:
+- `usr/lib/libvulkan_wrapper.so`
+- `usr/lib/libadrenotools.so`
+- `usr/lib/libhook_impl.so`
+- `usr/lib/libmain_hook.so`
+- `usr/lib/libfile_redirect_hook.so`
+- `usr/lib/libgsl_alloc_hook.so`
+- `usr/share/vulkan/icd.d/wrapper_icd.aarch64.json`
+
+##### `libvulkan_wrapper.so`
+Mapped to:
+- `utkarshdalal/bionic-vulkan-wrapper`
+- `leegao/bionic-vulkan-wrapper`
+
+Relevant source files:
+- `src/vulkan/wrapper/wrapper_instance.c`
+- `src/vulkan/wrapper/graphics_env_hooks.cpp`
+
+These contain hardcoded package paths like:
+- `/data/data/com.winlator.cmod/files/imagefs/usr/lib`
+- `/data/data/com.micewine.emu/files/usr/lib`
+
+##### `libmain_hook.so`, `libfile_redirect_hook.so`, `libgsl_alloc_hook.so`, `libhook_impl.so`
+Mapped to:
+- `bylaws/libadrenotools`
+- `ganyao114/libadrenotools`
+
+Relevant source files:
+- `src/hook/main_hook.c`
+- `src/hook/file_redirect_hook.c`
+- `src/hook/gsl_alloc_hook.c`
+- `src/hook/hook_impl.cpp`
+- `src/hook/CMakeLists.txt`
+
+So the helper libs inside wrapper archives are rebuildable from public source.
+
+#### 3) Box64 assets
+Mapped to:
+- `utkarshdalal/box64`
+- also historically mirrored in Winlator repos as packaged artifacts
+
+Strongest evidence remains:
+- `utkarshdalal/box64/.github/workflows/release.yml`
+  - runs `patchelf --set-interpreter /data/data/com.winlator/files/imagefs/usr/lib/ld-linux-aarch64.so.1 ./box64`
+
+This explains the hardcoded interpreter path found in packaged `box64-*.tzst` binaries.
+
+#### 4) GLIBC-side hardcoded runtime paths
+Mapped to:
+- `utkarshdalal/wine-custom`
+
+This repo contains multiple hardcoded app-specific Android paths in source and packaging patches, including:
+- `/data/data/app.gamenative/files/imagefs/...`
+- `/data/data/com.utkarshdalal.PluviaGoldberg/files/usr/...`
+
+Examples found in:
+- `server/request.c`
+- `dlls/ntdll/unix/server.c`
+- `programs/winebrowser/main.c`
+- many `packages/*` patch files
+
+This is the strongest evidence so far that **glibc rename breakage is not just in GameNative Java/Kotlin/assets** — it is also upstream in the custom Wine source/patch layer.
+
+### Still unresolved / not found in searched public repos
+
+I still could **not** find public source for the `redirect.tzst` preload libs used by current GameNative.
+
+Current binary evidence from `redirect.tzst`:
+- `libredirect.so` contains source filename string: `preload_replace.c`
+- `libredirect-bionic.so` contains source filename string: `preload_replace_bionic.c`
+- `libredirect-bionic.so` also exposes symbols / strings:
+  - `old_pkg`
+  - `new_pkg`
+  - `open_common`
+  - `is_event_node`
+  - `rewrite (openat): %s -> %s`
+- `libredirect.so` contains:
+  - `pluviagoldberg_on_load`
+  - `libpluviagoldberg.so`
+  - `preload_loaded.txt`
+
+I searched:
+- upstream owner repos
+- major external Winlator forks above
+- GitHub code search via `gh`
+
+and did **not** find a public repo containing:
+- `preload_replace.c`
+- `preload_replace_bionic.c`
+- `pluviagoldberg_on_load`
+- the exact rewrite-hook source matching those binaries
+
+### Current best map of the remaining binary problem
+
+- **Found / source-known**
+  - `libevshim.so` → `coffincolors/winlator`
+  - wrapper Vulkan runtime → `bionic-vulkan-wrapper`
+  - wrapper hook libs → `libadrenotools`
+  - `box64` packaging/interpreter hardcoding → `utkarshdalal/box64`
+  - glibc hardcoded paths → `utkarshdalal/wine-custom`
+
+- **Not yet found publicly**
+  - `libredirect.so`
+  - `libredirect-bionic.so`
+  - the build source for `redirect.tzst`
+
+### Bottom line after the wider repo search
+
+At this point the remaining blockers are more precisely understood:
+
+1. **Bionic package-rename support is partially unblockable from public source**
+   - evshim source is public
+   - wrapper/hook sources are public
+   - box64 source/packaging is public
+
+2. **GLIBC package-rename support is definitely blocked by upstream custom Wine patches too**
+   - those patches are public, and they contain hardcoded app paths
+
+3. **One important preload/redirect layer is still source-missing in public repos searched so far**
+   - the `redirect.tzst` libs are still the main unresolved binary-source gap
