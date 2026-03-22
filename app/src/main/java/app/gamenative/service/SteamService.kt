@@ -232,6 +232,12 @@ class SteamService : Service(), IChallengeUrlChanged {
     private var licenses: List<License> = emptyList()
 
     private var retryAttempt = 0
+    private var lastNetworkEventSummary: String = "uninitialized"
+    private var lastNetworkEventAtMs: Long = 0L
+    private var lastConnectAttemptTrigger: String = "none"
+    private var lastConnectAttemptAtMs: Long = 0L
+    private var lastLoginAttemptOrigin: String = "none"
+    private var lastLoginAttemptAtMs: Long = 0L
 
     private val appPicsChannel = Channel<List<PICSRequest>>(
         capacity = 1_000,
@@ -301,6 +307,26 @@ class SteamService : Service(), IChallengeUrlChanged {
         private val PROTOCOL_TYPES = EnumSet.of(ProtocolTypes.WEB_SOCKET)
 
         internal var instance: SteamService? = null
+
+        @Volatile
+        private var lastAppLifecycleEvent: String = "unknown"
+
+        @Volatile
+        private var lastAppLifecycleAtMs: Long = 0L
+
+        fun noteAppLifecycle(event: String) {
+            lastAppLifecycleEvent = event
+            lastAppLifecycleAtMs = System.currentTimeMillis()
+            Timber.d(
+                "[SteamLifecycle] App event=%s foreground=%b keepAlive=%b autoStopWhenIdle=%b connected=%b loggedIn=%b",
+                event,
+                PluviaApp.isActivityInForeground,
+                keepAlive,
+                autoStopWhenIdle,
+                isConnected,
+                isLoggedIn,
+            )
+        }
 
         var cachedAchievements: List<app.gamenative.statsgen.Achievement>? = null
             private set
@@ -2286,6 +2312,7 @@ class SteamService : Service(), IChallengeUrlChanged {
             twoFactorAuth: String? = null,
             emailAuth: String? = null,
             clientId: Long? = null,
+            origin: String = "unspecified",
         ) {
             val steamUser = instance!!._steamUser!!
 
@@ -2304,6 +2331,17 @@ class SteamService : Service(), IChallengeUrlChanged {
 //                    """.trimIndent(),
 //                )
 //            }
+
+            instance?.recordLoginAttempt(origin)
+            Timber.i(
+                "Steam login requested (origin=%s, remember=%b, hasRefreshToken=%b, hasPassword=%b, hasAccessToken=%b) %s",
+                origin,
+                rememberSession,
+                refreshToken != null,
+                password != null,
+                accessToken != null,
+                instance?.buildSessionDiagnostics("login:requested") ?: "instance-unavailable",
+            )
 
             PrefManager.username = username
 
@@ -2376,6 +2414,7 @@ class SteamService : Service(), IChallengeUrlChanged {
                         accessToken = pollResult.accessToken,
                         refreshToken = pollResult.refreshToken,
                         rememberSession = rememberSession,
+                        origin = "credentials_auth_session",
                     )
                 } ?: run {
                     Timber.e("Could not logon: Failed to connect to Steam")
@@ -2468,6 +2507,7 @@ class SteamService : Service(), IChallengeUrlChanged {
                         username = authPollResult.accountName,
                         accessToken = authPollResult.accessToken,
                         refreshToken = authPollResult.refreshToken,
+                        origin = "qr_auth_session",
                     )
                 } ?: run {
                     Timber.e("Could not start QR logon: Failed to connect to Steam")
@@ -2507,6 +2547,7 @@ class SteamService : Service(), IChallengeUrlChanged {
             CoroutineScope(Dispatchers.Default).launch {
                 // isConnected = false
 
+                Timber.i("User requested Steam logout %s", instance?.buildSessionDiagnostics("logOut") ?: "instance-unavailable")
                 isLoggingOut = true
 
                 performLogOffDuties(clearCloudSyncState = true)
@@ -2517,6 +2558,11 @@ class SteamService : Service(), IChallengeUrlChanged {
         }
 
         private fun clearUserData(clearCloudSyncState: Boolean = false) {
+            Timber.w(
+                "Clearing persisted Steam user data (clearCloudSyncState=%b) %s",
+                clearCloudSyncState,
+                instance?.buildSessionDiagnostics("clearUserData") ?: "instance-unavailable",
+            )
             PrefManager.clearSteamSessionPreferences()
 
             clearDatabase(clearCloudSyncState = clearCloudSyncState)
@@ -2541,6 +2587,12 @@ class SteamService : Service(), IChallengeUrlChanged {
 
         private fun performLogOffDuties(clearCloudSyncState: Boolean = false) {
             val username = PrefManager.username
+            Timber.i(
+                "Performing Steam logoff duties for user=%s clearCloudSyncState=%b %s",
+                username,
+                clearCloudSyncState,
+                instance?.buildSessionDiagnostics("performLogOffDuties") ?: "instance-unavailable",
+            )
 
             clearUserData(clearCloudSyncState = clearCloudSyncState)
 
@@ -2918,9 +2970,22 @@ class SteamService : Service(), IChallengeUrlChanged {
 
         // pause downloads when WiFi/Ethernet connectivity changes
         connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        recordNetworkEvent("service_created")
         networkCallback = object : ConnectivityManager.NetworkCallback() {
-            override fun onLost(network: Network) = checkAndPauseDownloads()
-            override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) = checkAndPauseDownloads()
+            override fun onAvailable(network: Network) {
+                recordNetworkEvent("network_available")
+                checkAndPauseDownloads()
+            }
+
+            override fun onLost(network: Network) {
+                recordNetworkEvent("network_lost")
+                checkAndPauseDownloads()
+            }
+
+            override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+                recordNetworkEvent("network_capabilities_changed")
+                checkAndPauseDownloads()
+            }
 
             // query ConnectivityManager directly (not NetworkMonitor) to avoid
             // callback ordering race between our two separate registrations.
@@ -2970,6 +3035,7 @@ class SteamService : Service(), IChallengeUrlChanged {
 
         if (!isRunning) {
             Timber.i("Using server list path: $serverListPath")
+            Timber.i("SteamService starting fresh instance %s", buildSessionDiagnostics("onStartCommand:fresh"))
 
             val configuration = SteamConfiguration.create {
                 it.withProtocolTypes(PROTOCOL_TYPES)
@@ -3040,7 +3106,7 @@ class SteamService : Service(), IChallengeUrlChanged {
                 }
             }
 
-            connectToSteam()
+            connectToSteam(trigger = "service_startup")
         }
 
         val notification = notificationHelper.createForegroundNotification("Running...")
@@ -3068,37 +3134,154 @@ class SteamService : Service(), IChallengeUrlChanged {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun connectToSteam() {
+    private fun formatAge(ms: Long): String {
+        if (ms <= 0L) return "n/a"
+        return "${(System.currentTimeMillis() - ms).coerceAtLeast(0L)}ms ago"
+    }
+
+    private fun currentNetworkSummary(): String {
+        if (!::connectivityManager.isInitialized) return "connectivity-manager-uninitialized"
+        val activeNetwork = connectivityManager.activeNetwork ?: return "no-active-network"
+        val caps = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return "no-capabilities"
+        val transports = buildList {
+            if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) add("wifi")
+            if (caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) add("ethernet")
+            if (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) add("cellular")
+            if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) add("vpn")
+        }.ifEmpty { listOf("unknown") }.joinToString("+")
+        return buildString {
+            append("transports=")
+            append(transports)
+            append(", validated=")
+            append(caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED))
+            append(", internet=")
+            append(caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET))
+        }
+    }
+
+    private fun recordNetworkEvent(event: String) {
+        val summary = "$event (${currentNetworkSummary()})"
+        if (summary == lastNetworkEventSummary) return
+        lastNetworkEventSummary = summary
+        lastNetworkEventAtMs = System.currentTimeMillis()
+        Timber.d("[SteamConnectivity] %s", lastNetworkEventSummary)
+    }
+
+    private fun recordConnectAttempt(trigger: String) {
+        lastConnectAttemptTrigger = trigger
+        lastConnectAttemptAtMs = System.currentTimeMillis()
+    }
+
+    private fun recordLoginAttempt(origin: String) {
+        lastLoginAttemptOrigin = origin
+        lastLoginAttemptAtMs = System.currentTimeMillis()
+    }
+
+    private fun buildSessionDiagnostics(context: String): String =
+        buildString {
+            append("context=")
+            append(context)
+            append(", isRunning=")
+            append(isRunning)
+            append(", isConnected=")
+            append(isConnected)
+            append(", isLoggedIn=")
+            append(isLoggedIn)
+            append(", isStopping=")
+            append(isStopping)
+            append(", isLoggingOut=")
+            append(isLoggingOut)
+            append(", keepAlive=")
+            append(keepAlive)
+            append(", autoStopWhenIdle=")
+            append(autoStopWhenIdle)
+            append(", retryAttempt=")
+            append(retryAttempt)
+            append(", hasUsername=")
+            append(PrefManager.username.isNotEmpty())
+            append(", hasRefreshToken=")
+            append(PrefManager.refreshToken.isNotEmpty())
+            append(", appForeground=")
+            append(PluviaApp.isActivityInForeground)
+            append(", lastAppEvent=")
+            append(lastAppLifecycleEvent)
+            append(" (")
+            append(formatAge(lastAppLifecycleAtMs))
+            append(")")
+            append(", lastNetworkEvent=")
+            append(lastNetworkEventSummary)
+            append(" (")
+            append(formatAge(lastNetworkEventAtMs))
+            append(")")
+            append(", lastConnectAttempt=")
+            append(lastConnectAttemptTrigger)
+            append(" (")
+            append(formatAge(lastConnectAttemptAtMs))
+            append(")")
+            append(", lastLoginAttempt=")
+            append(lastLoginAttemptOrigin)
+            append(" (")
+            append(formatAge(lastLoginAttemptAtMs))
+            append(")")
+        }
+
+    private fun shouldClearUserDataForLoggedOnFailure(result: EResult): Boolean = when (result) {
+        EResult.InvalidPassword,
+        EResult.IllegalPassword,
+        EResult.PasswordUnset,
+        EResult.AccountLogonDenied,
+        EResult.AccountLogonDeniedNoMail,
+        EResult.AccountLogonDeniedVerifiedEmailRequired,
+        EResult.AccountLoginDeniedNeedTwoFactor,
+        EResult.InvalidLoginAuthCode,
+        EResult.ExpiredLoginAuthCode,
+        EResult.RequirePasswordReEntry,
+        EResult.ParentalControlRestricted,
+        EResult.CachedCredentialInvalid -> true
+        else -> false
+    }
+
+    private fun connectToSteam(trigger: String = "unspecified") {
+        recordConnectAttempt(trigger)
+        Timber.i("Connecting to Steam (trigger=%s) %s", trigger, buildSessionDiagnostics("connectToSteam:start"))
         CoroutineScope(Dispatchers.Default).launch {
-            // this call errors out if run on the main thread
-            steamClient!!.connect()
+            try {
+                // this call errors out if run on the main thread
+                steamClient!!.connect()
 
-            delay(5000)
+                delay(5000)
 
-            if (!isConnected) {
-                Timber.w("Failed to connect to Steam, marking endpoint bad and force disconnecting")
+                if (!isConnected) {
+                    Timber.w(
+                        "Failed to connect to Steam after 5s (trigger=%s) %s",
+                        trigger,
+                        buildSessionDiagnostics("connectToSteam:timeout"),
+                    )
 
-                try {
-                    steamClient!!.servers.tryMark(steamClient!!.currentEndpoint, PROTOCOL_TYPES, ServerQuality.BAD)
-                } catch (e: NullPointerException) {
-                    // I don't care
-                } catch (e: Exception) {
-                    Timber.e(e, "Failed to mark endpoint as bad:")
+                    try {
+                        steamClient!!.servers.tryMark(steamClient!!.currentEndpoint, PROTOCOL_TYPES, ServerQuality.BAD)
+                    } catch (e: NullPointerException) {
+                        // I don't care
+                    } catch (e: Exception) {
+                        Timber.e(e, "Failed to mark endpoint as bad:")
+                    }
+
+                    try {
+                        steamClient!!.disconnect()
+                    } catch (e: NullPointerException) {
+                        // I don't care
+                    } catch (e: Exception) {
+                        Timber.e(e, "There was an issue when disconnecting:")
+                    }
                 }
-
-                try {
-                    steamClient!!.disconnect()
-                } catch (e: NullPointerException) {
-                    // I don't care
-                } catch (e: Exception) {
-                    Timber.e(e, "There was an issue when disconnecting:")
-                }
+            } catch (e: Exception) {
+                Timber.e(e, "connectToSteam failed (trigger=%s) %s", trigger, buildSessionDiagnostics("connectToSteam:exception"))
             }
         }
     }
 
     private suspend fun stop() {
-        Timber.i("Stopping Steam service")
+        Timber.i("Stopping Steam service %s", buildSessionDiagnostics("stop"))
         if (steamClient != null && steamClient!!.isConnected) {
             isStopping = true
 
@@ -3116,6 +3299,7 @@ class SteamService : Service(), IChallengeUrlChanged {
     }
 
     private fun clearValues() {
+        Timber.i("Clearing Steam service in-memory values %s", buildSessionDiagnostics("clearValues"))
         _loginResult = LoginResult.Failed
         isRunning = false
         isConnected = false
@@ -3147,6 +3331,7 @@ class SteamService : Service(), IChallengeUrlChanged {
 
     private fun reconnect() {
         notificationHelper.notify("Retrying...")
+        Timber.i("Forcing Steam reconnect %s", buildSessionDiagnostics("reconnect"))
 
         isConnected = false
 
@@ -3159,7 +3344,7 @@ class SteamService : Service(), IChallengeUrlChanged {
     // region [REGION] callbacks
     @Suppress("UNUSED_PARAMETER", "unused")
     private fun onConnected(callback: ConnectedCallback) {
-        Timber.i("Connected to Steam")
+        Timber.i("Connected to Steam %s", buildSessionDiagnostics("onConnected"))
 
         reconnectJob?.cancel()
         retryAttempt = 0
@@ -3169,12 +3354,16 @@ class SteamService : Service(), IChallengeUrlChanged {
 
         if (PrefManager.username.isNotEmpty() && PrefManager.refreshToken.isNotEmpty()) {
             isAutoLoggingIn = true
+            Timber.i("Stored Steam credentials found, attempting auto-login %s", buildSessionDiagnostics("onConnected:auto_login"))
 
             login(
                 username = PrefManager.username,
                 refreshToken = PrefManager.refreshToken,
                 rememberSession = true,
+                origin = "auto_reconnect",
             )
+        } else {
+            Timber.i("No stored Steam credentials available for auto-login %s", buildSessionDiagnostics("onConnected:no_auto_login"))
         }
 
         val event = SteamEvent.Connected(isAutoLoggingIn)
@@ -3182,7 +3371,11 @@ class SteamService : Service(), IChallengeUrlChanged {
     }
 
     private fun onDisconnected(callback: DisconnectedCallback) {
-        Timber.i("Disconnected from Steam. User initiated: ${callback.isUserInitiated}")
+        Timber.i(
+            "Disconnected from Steam. User initiated: %s %s",
+            callback.isUserInitiated,
+            buildSessionDiagnostics("onDisconnected"),
+        )
 
         isConnected = false
 
@@ -3190,20 +3383,21 @@ class SteamService : Service(), IChallengeUrlChanged {
             retryAttempt++
             val backoffMs = (1000L * minOf(1 shl (retryAttempt - 1), 60)).coerceAtMost(60_000L)
 
-            Timber.w("Attempting to reconnect (retry $retryAttempt) after ${backoffMs}ms")
+            Timber.w("Attempting to reconnect (retry %d) after %dms %s", retryAttempt, backoffMs, buildSessionDiagnostics("onDisconnected:retry_scheduled"))
 
             val event = SteamEvent.RemotelyDisconnected
             PluviaApp.events.emit(event)
 
             reconnectJob = scope.launch {
                 delay(backoffMs)
-                if (isRunning && !isStopping) connectToSteam()
+                if (isRunning && !isStopping) connectToSteam(trigger = "disconnect_retry_$retryAttempt")
             }
         } else {
             // only terminal when retries exhausted, not when user/system stopped the service
             val event = SteamEvent.Disconnected(isTerminal = !isStopping)
             PluviaApp.events.emit(event)
 
+            Timber.w("Steam disconnect deemed terminal=%b %s", !isStopping, buildSessionDiagnostics("onDisconnected:terminal"))
             clearValues()
 
             stopSelf()
@@ -3212,7 +3406,7 @@ class SteamService : Service(), IChallengeUrlChanged {
 
     @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
     private fun onLoggedOn(callback: LoggedOnCallback) {
-        Timber.i("Logged onto Steam: ${callback.result}")
+        Timber.i("Logged onto Steam: %s %s", callback.result, buildSessionDiagnostics("onLoggedOn"))
 
         if (userSteamId?.isValid == true) {
             if (PrefManager.steamUserAccountId != userSteamId!!.accountID.toInt()) {
@@ -3279,7 +3473,20 @@ class SteamService : Service(), IChallengeUrlChanged {
             }
 
             else -> {
-                clearUserData()
+                val shouldClearUserData = shouldClearUserDataForLoggedOnFailure(callback.result)
+                Timber.w(
+                    "Steam login failed with result=%s clearUserData=%b %s",
+                    callback.result,
+                    shouldClearUserData,
+                    buildSessionDiagnostics("onLoggedOn:failure"),
+                )
+
+                if (shouldClearUserData) {
+                    Timber.w("Clearing stored Steam session data due to definitive auth failure: %s", callback.result)
+                    clearUserData()
+                } else {
+                    Timber.w("Preserving stored Steam session data for non-definitive login failure: %s", callback.result)
+                }
 
                 _loginResult = LoginResult.Failed
 
@@ -3292,26 +3499,33 @@ class SteamService : Service(), IChallengeUrlChanged {
     }
 
     private fun onLoggedOff(callback: LoggedOffCallback) {
-        Timber.i("Logged off of Steam: ${callback.result}")
+        Timber.i("Logged off of Steam: %s %s", callback.result, buildSessionDiagnostics("onLoggedOff"))
 
         notificationHelper.notify("Disconnected...")
 
         if (isLoggingOut) {
+            Timber.i("Steam logout was user initiated; clearing Steam session state %s", buildSessionDiagnostics("onLoggedOff:user_logout"))
             performLogOffDuties(clearCloudSyncState = true)
 
             scope.launch { stop() }
         } else if (callback.result == EResult.LogonSessionReplaced) {
-            performLogOffDuties()
+            Timber.w(
+                "Steam session was replaced unexpectedly; preserving stored Steam state for diagnostics and recovery %s",
+                buildSessionDiagnostics("onLoggedOff:session_replaced"),
+            )
 
+            PluviaApp.events.emit(SteamEvent.Disconnected(isTerminal = false))
             scope.launch { stop() }
         } else if (callback.result == EResult.LoggedInElsewhere) {
             // received when a client runs an app and wants to forcibly close another
             // client running an app
+            Timber.w("Steam reports LoggedInElsewhere; requesting force-close flow %s", buildSessionDiagnostics("onLoggedOff:logged_in_elsewhere"))
             val event = SteamEvent.ForceCloseApp
             PluviaApp.events.emit(event)
 
             reconnect()
         } else {
+            Timber.w("Steam logged off for recoverable/non-user reason=%s; reconnecting %s", callback.result, buildSessionDiagnostics("onLoggedOff:reconnect"))
             reconnect()
         }
     }

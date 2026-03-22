@@ -417,3 +417,39 @@ My honest read:
 - **Known from code:** GameNative currently has explicit paths that convert certain Steam session/auth events into a destructive logout by clearing persisted Steam session state.
 - **Best obvious mitigation:** preserve state on unexpected `LogonSessionReplaced` and stop blanket-clearing Steam session data on generic non-OK login results.
 - **Still a hypothesis, not a proven fact:** the deeper upstream trigger is probably auth/reconnect churn, but that needs logs to confirm.
+
+## Branch implementation notes (2026-03-22)
+
+Implemented on branch `research/steam-logout-investigation`:
+
+1. **Preserve stored Steam state on unexpected `EResult.LogonSessionReplaced`**
+   - User-initiated logout still clears state.
+   - Unexpected session replacement now preserves stored Steam session/library state for recovery and diagnostics.
+
+2. **Narrow when non-OK login results clear persisted Steam session state**
+   - Current branch now only clears persisted Steam session state for a narrow set of high-confidence credential/auth failures such as invalid password/auth-code / explicit guard-style denial / cached credential invalidation.
+   - Other non-OK login results now preserve state and reconnect, which should reduce destructive incidental logout behavior.
+
+3. **Add targeted diagnostic logging to turn future reports into firmer evidence**
+   - app lifecycle breadcrumbs (`activity_resumed`, `activity_paused`, `activity_stopped`, `activity_destroyed`)
+   - network event breadcrumbs from `ConnectivityManager`
+   - connect attempt trigger logging
+   - login attempt origin logging
+   - richer diagnostics on:
+     - `onConnected`
+     - `onDisconnected`
+     - `onLoggedOn`
+     - `onLoggedOff`
+     - `clearUserData`
+     - `performLogOffDuties`
+     - `stop`
+     - `clearValues`
+
+4. **Validation**
+   - `./gradlew :app:compileDebugKotlin` passes on this branch.
+
+Planned next step:
+- load this build on-device,
+- let real-world undesirable logout cases happen,
+- pull logs,
+- update this document with callback/result sequences so more of the current hypotheses can be converted into fact-backed conclusions.

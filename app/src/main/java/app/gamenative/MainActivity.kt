@@ -267,6 +267,7 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
 
+        SteamService.noteAppLifecycle("activity_destroyed")
         PluviaApp.events.emit(AndroidEvent.ActivityDestroyed)
 
         PluviaApp.events.off<AndroidEvent.SetSystemUIVisibility, Unit>(onSetSystemUi)
@@ -315,6 +316,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         PluviaApp.isActivityInForeground = true
+        SteamService.noteAppLifecycle("activity_resumed")
         // Re-apply immersive mode to ensure fullscreen persists
         if (!desiredSystemUiVisible) {
             applyImmersiveMode()
@@ -359,6 +361,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         PluviaApp.isActivityInForeground = false
+        SteamService.noteAppLifecycle("activity_paused")
         if (hasReadyGameLifecycleState("pause")) {
             when {
                 PluviaApp.isNeverSuspendMode() -> {
@@ -382,6 +385,7 @@ class MainActivity : ComponentActivity() {
     // Add cleanup when app is backgrounded
     override fun onStop() {
         super.onStop()
+        SteamService.noteAppLifecycle("activity_stopped")
         orientationSensorListener?.disable()
         orientationSensorListener = null
         // enable auto-stop behavior if backgrounded
