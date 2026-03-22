@@ -4114,6 +4114,11 @@ private fun extractGraphicsDriverFiles(
                     rootDir,
                 )
             }
+            patchVulkanIcdLibraryPath(
+                imageFs,
+                "freedreno_icd.aarch64.json",
+                imageFs.libDir.path + "/libvulkan_freedreno.so",
+            )
         } else if (graphicsDriver == "virgl") {
             envVars.put("GALLIUM_DRIVER", "virpipe")
             envVars.put("VIRGL_NO_READBACK", "true")
@@ -4142,6 +4147,11 @@ private fun extractGraphicsDriverFiles(
                 TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, context.assets, "graphics_driver/vortek-2.1.tzst", rootDir)
                 TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, context.assets, "graphics_driver/zink-22.2.5.tzst", rootDir)
             }
+            patchVulkanIcdLibraryPath(
+                imageFs,
+                "vortek_icd.aarch64.json",
+                imageFs.libDir.path + "/libvulkan_vortek.so",
+            )
         } else if (graphicsDriver == "adreno" || graphicsDriver == "sd-8-elite") {
             val assetZip = if (graphicsDriver == "adreno") "Adreno_${adrenoVersion}_adpkg.zip" else "SD8Elite_${sd8EliteVersion}.zip"
 
@@ -4184,6 +4194,11 @@ private fun extractGraphicsDriverFiles(
                 TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, context.assets, "graphics_driver/vortek-2.1.tzst", rootDir)
                 TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, context.assets, "graphics_driver/zink-22.2.5.tzst", rootDir)
             }
+            patchVulkanIcdLibraryPath(
+                imageFs,
+                "vortek_icd.aarch64.json",
+                imageFs.libDir.path + "/libvulkan_vortek.so",
+            )
         }
     } else {
         var adrenoToolsDriverId: String? = ""
@@ -4348,6 +4363,21 @@ private fun extractSteamFiles(
         imageFs.getRootDir(),
         onExtractFileListener,
     );
+}
+
+private fun patchVulkanIcdLibraryPath(imageFs: ImageFs, fileName: String, libraryPath: String) {
+    val icdFile = File(imageFs.shareDir, "vulkan/icd.d/$fileName")
+    if (!icdFile.exists()) return
+
+    runCatching {
+        val updated = icdFile.readText().replace(
+            Regex("\"library_path\"\\s*:\\s*\"[^\"]+\""),
+            "\"library_path\": \"$libraryPath\"",
+        )
+        icdFile.writeText(updated)
+    }.onFailure { e ->
+        Timber.w(e, "Failed to patch Vulkan ICD path for $fileName")
+    }
 }
 
 private fun readZipManifestNameFromAssets(context: Context, assetName: String): String? {

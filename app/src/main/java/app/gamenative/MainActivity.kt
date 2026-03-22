@@ -253,7 +253,7 @@ class MainActivity : ComponentActivity() {
                     setPendingLaunchRequest(launchRequest)
                     Timber.d("[IntentLaunch]: Stored pending launch request for app ${launchRequest.appId}")
                 }
-            } else if (intent.action == "${BuildConfig.APPLICATION_ID}.LAUNCH_GAME") {
+            } else if (intent.action == app.gamenative.AppPaths.getLaunchGameAction()) {
                 // intent matched our action but failed to parse — tell the user
                 wasLaunchedViaExternalIntent = false
                 Timber.w("[IntentLaunch]: parseLaunchIntent returned null for LAUNCH_GAME intent")

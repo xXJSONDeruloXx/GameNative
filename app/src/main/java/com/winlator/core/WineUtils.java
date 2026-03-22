@@ -3,6 +3,7 @@ package com.winlator.core;
 import android.content.Context;
 import android.util.Log;
 
+import app.gamenative.AppPaths;
 import com.winlator.container.Container;
 import com.winlator.xenvironment.ImageFs;
 
@@ -29,28 +30,38 @@ public abstract class WineUtils {
         FileUtils.symlink(container.getRootDir().getPath() + "/../..", dosdevicesPath+"/z:");
 
 
-        // Auto-fix containers missing D: and E: drives
+        String expectedStoragePath = AppPaths.getStorageDir();
+        String legacyStoragePath = AppPaths.getLegacyAppDataDir() + "/storage";
+
+        // Auto-fix containers missing D: and E: drives and migrate legacy E: mappings.
         String currentDrives = container.getDrives();
-        if (!currentDrives.contains("D:") || !currentDrives.contains("E:")) {
+        String normalizedDrives = currentDrives;
+        if (!legacyStoragePath.equals(expectedStoragePath) && normalizedDrives.contains(legacyStoragePath)) {
+            normalizedDrives = normalizedDrives.replace(legacyStoragePath, expectedStoragePath);
+            Log.d("WineUtils", "Migrated legacy E: drive path to current app data dir");
+        }
+        if (!normalizedDrives.contains("D:") || !normalizedDrives.contains("E:")) {
             Log.d("WineUtils", "Container missing D: or E: drives, adding them...");
             String missingDrives = "";
-            if (!currentDrives.contains("D:")) {
+            if (!normalizedDrives.contains("D:")) {
                 missingDrives += "D:" + android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS);
             }
-            if (!currentDrives.contains("E:")) {
-                missingDrives += "E:/data/data/app.gamenative/storage";
+            if (!normalizedDrives.contains("E:")) {
+                missingDrives += "E:" + expectedStoragePath;
             }
-            String updatedDrives = missingDrives + currentDrives;
-            container.setDrives(updatedDrives);
+            normalizedDrives = missingDrives + normalizedDrives;
+        }
+        if (!normalizedDrives.equals(currentDrives)) {
+            container.setDrives(normalizedDrives);
             container.saveData();
-            Log.d("WineUtils", "Updated container drives to: " + updatedDrives);
+            Log.d("WineUtils", "Updated container drives to: " + normalizedDrives);
         }
 
         String gameDirectoryPath = null;
         for (String[] drive : container.drivesIterator()) {
             File linkTarget = new File(drive[1]);
             String path = linkTarget.getAbsolutePath();
-            if (!linkTarget.isDirectory() && path.endsWith("/app.gamenative/storage")) {
+            if (!linkTarget.isDirectory() && (path.endsWith("/storage") && (path.equals(expectedStoragePath) || path.equals(legacyStoragePath)))) {
                 linkTarget.mkdirs();
                 FileUtils.chmod(linkTarget, 0771);
             }
@@ -64,7 +75,7 @@ public abstract class WineUtils {
 
         // Create Steam symlink if we found the game directory
         if (gameDirectoryPath != null) {
-            // Extract game name from path like "/data/data/app.gamenative/Steam/steamapps/common/GameName"
+            // Extract game name from the real app storage path ending with /Steam/steamapps/common/GameName
             String gameName = new File(gameDirectoryPath).getName();
 
             // Create the Steam directory structure in C: drive

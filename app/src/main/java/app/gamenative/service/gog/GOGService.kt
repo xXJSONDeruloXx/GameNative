@@ -41,8 +41,8 @@ import timber.log.Timber
 class GOGService : Service() {
 
     companion object {
-        private const val ACTION_SYNC_LIBRARY = "app.gamenative.GOG_SYNC_LIBRARY"
-        private const val ACTION_MANUAL_SYNC = "app.gamenative.GOG_MANUAL_SYNC"
+        private val ACTION_SYNC_LIBRARY = app.gamenative.AppPaths.getScopedAction("GOG_SYNC_LIBRARY")
+        private val ACTION_MANUAL_SYNC = app.gamenative.AppPaths.getScopedAction("GOG_MANUAL_SYNC")
         private const val SYNC_THROTTLE_MILLIS = 15 * 60 * 1000L // 15 minutes
 
         private var instance: GOGService? = null

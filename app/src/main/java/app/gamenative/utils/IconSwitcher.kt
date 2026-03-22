@@ -1,6 +1,5 @@
 package app.gamenative.utils
 
-import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
 
@@ -9,14 +8,8 @@ object IconSwitcher {
     fun applyLauncherIcon(context: Context, useAltIcon: Boolean) {
         val packageManager = context.packageManager
 
-        val defaultAlias = ComponentName(
-            context,
-            "app.gamenative.MainActivityAliasDefault",
-        )
-        val altAlias = ComponentName(
-            context,
-            "app.gamenative.MainActivityAliasAlt",
-        )
+        val defaultAlias = app.gamenative.AppPaths.getDefaultLauncherAlias(context)
+        val altAlias = app.gamenative.AppPaths.getAltLauncherAlias(context)
 
         val defaultState = if (useAltIcon)
             PackageManager.COMPONENT_ENABLED_STATE_DISABLED

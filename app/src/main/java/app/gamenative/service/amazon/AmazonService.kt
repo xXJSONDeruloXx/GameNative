@@ -65,8 +65,8 @@ class AmazonService : Service() {
     private val activeDownloadPaths = ConcurrentHashMap<String, String>()
 
     companion object {
-        private const val ACTION_SYNC_LIBRARY = "app.gamenative.AMAZON_SYNC_LIBRARY"
-        private const val ACTION_MANUAL_SYNC = "app.gamenative.AMAZON_MANUAL_SYNC"
+        private val ACTION_SYNC_LIBRARY = app.gamenative.AppPaths.getScopedAction("AMAZON_SYNC_LIBRARY")
+        private val ACTION_MANUAL_SYNC = app.gamenative.AppPaths.getScopedAction("AMAZON_MANUAL_SYNC")
         private const val SYNC_THROTTLE_MILLIS = 15 * 60 * 1000L // 15 minutes
         private var instance: AmazonService? = null
 

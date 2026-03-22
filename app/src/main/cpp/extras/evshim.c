@@ -166,13 +166,21 @@ static void initialize_all_pads(void)
     if (players > MAX_GAMEPADS) players = MAX_GAMEPADS;
 
 
+    const char *data_dir = getenv("EVSHIM_DATA_DIR");
+    if (!data_dir || !*data_dir) data_dir = "/data/data/app.gamenative";
+
     /* per-player setup */
     for (int i = 0; i < players; ++i) {
 
-        char path[256];
-        snprintf(path, sizeof path,
-                 "/data/data/app.gamenative/files/imagefs/tmp/gamepad%s.mem",
+        char path[512];
+        int written = snprintf(path, sizeof path,
+                 "%s/files/imagefs/tmp/gamepad%s.mem",
+                 data_dir,
                  (i == 0) ? "" : (char[2]){'0' + i, '\0'});
+        if (written < 0 || written >= (int)sizeof(path)) {
+            LOGE("P%d: path truncated, skipping\n", i);
+            continue;
+        }
 
         /* open once – store for reader + writer */
         read_fd  [i] = open(path, O_RDONLY);

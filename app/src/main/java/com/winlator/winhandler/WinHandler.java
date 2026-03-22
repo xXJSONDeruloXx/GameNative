@@ -2,6 +2,8 @@ package com.winlator.winhandler;
 
 import android.content.Context;
 import android.content.Intent;
+
+import app.gamenative.AppPaths;
 import android.net.Uri;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
@@ -520,7 +522,7 @@ public class WinHandler {
         try {
             this.localhost = InetAddress.getLocalHost();
             // Player 1 (currentController) gets the original non-numbered file
-            String p1_mem_path = "/data/data/app.gamenative/files/imagefs/tmp/gamepad.mem";
+            String p1_mem_path = AppPaths.getImageFsGamepadMemPath(activity, 1);
             File p1_memFile = new File(p1_mem_path);
             p1_memFile.getParentFile().mkdirs();
             try (RandomAccessFile raf = new RandomAccessFile(p1_memFile, "rw")) {
@@ -530,7 +532,7 @@ public class WinHandler {
                 Log.i(TAG, "Successfully created and mapped gamepad file for Player 1");
             }
             for (int i = 0; i < extraGamepadBuffers.length; i++) {
-                String extra_mem_path = "/data/data/app.gamenative/files/imagefs/tmp/gamepad" + (i + 1) + ".mem";
+                String extra_mem_path = AppPaths.getImageFsGamepadMemPath(activity, i + 2);
                 File extra_memFile = new File(extra_mem_path);
                 try (RandomAccessFile raf = new RandomAccessFile(extra_memFile, "rw")) {
                     raf.setLength(64);

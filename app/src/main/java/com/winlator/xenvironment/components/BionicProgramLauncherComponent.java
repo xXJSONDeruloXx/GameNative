@@ -49,6 +49,7 @@ import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.List;
 
+import app.gamenative.AppPaths;
 import app.gamenative.PluviaApp;
 import app.gamenative.events.AndroidEvent;
 import app.gamenative.service.SteamService;
@@ -180,28 +181,21 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
 
         final int MAX_PLAYERS = 1; // old static method
 
+        Context context = environment.getContext();
+        ImageFs imageFs = ImageFs.find(context);
+
         // Get the number of enabled players directly from ControllerManager.
         final int enabledPlayerCount = MAX_PLAYERS;
         for (int i = 0; i < enabledPlayerCount; i++) {
-            String memPath;
-            if (i == 0) {
-                // Player 1 uses the original, non-numbered path that is known to work.
-                memPath = "/data/data/app.gamenative/files/imagefs/tmp/gamepad.mem";
-            } else {
-                // Players 2, 3, 4 use a 1-based index.
-                memPath = "/data/data/app.gamenative/files/imagefs/tmp/gamepad" + i + ".mem";
-            }
-
+            String memPath = AppPaths.getImageFsGamepadMemPath(context, i + 1);
             File memFile = new File(memPath);
             memFile.getParentFile().mkdirs();
             try (RandomAccessFile raf = new RandomAccessFile(memFile, "rw")) {
                 raf.setLength(64);
             } catch (IOException e) {
-                Log.e("EVSHIM_HOST", "Failed to create mem file for player index "+i, e);
+                Log.e("EVSHIM_HOST", "Failed to create mem file for player index " + i, e);
             }
         }
-        Context context = environment.getContext();
-        ImageFs imageFs = ImageFs.find(context);
         File rootDir = imageFs.getRootDir();
 
         PrefManager.init(context);
@@ -289,17 +283,22 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
 
         String ld_preload = "";
         String sysvPath = imageFs.getLibDir() + "/libandroid-sysvshm.so";
-        String evshimPath = imageFs.getLibDir() + "/libevshim.so";
+        String nativeLibraryDir = context.getApplicationInfo().nativeLibraryDir;
+        String evshimPath = nativeLibraryDir + "/libevshim.so";
         String replacePath = imageFs.getLibDir() + "/libredirect-bionic.so";
 
         if (new File(sysvPath).exists()) ld_preload += sysvPath;
-
-
-        ld_preload += ":" + evshimPath;
-        ld_preload += ":" + replacePath;
+        if (new File(evshimPath).exists()) {
+            if (!ld_preload.isEmpty()) ld_preload += ":";
+            ld_preload += evshimPath;
+        }
+        if (new File(replacePath).exists()) {
+            if (!ld_preload.isEmpty()) ld_preload += ":";
+            ld_preload += replacePath;
+        }
 
         envVars.put("LD_PRELOAD", ld_preload);
-
+        envVars.put("EVSHIM_DATA_DIR", AppPaths.getAppDataDir(context));
         envVars.put("EVSHIM_SHM_NAME", "controller-shm0");
 
         // Check for specific shared memory libraries

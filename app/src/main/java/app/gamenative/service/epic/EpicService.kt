@@ -34,8 +34,8 @@ class EpicService : Service() {
     companion object {
         private var instance: EpicService? = null
 
-        private const val ACTION_SYNC_LIBRARY = "app.gamenative.EPIC_SYNC_LIBRARY"
-        private const val ACTION_MANUAL_SYNC = "app.gamenative.EPIC_MANUAL_SYNC"
+        private val ACTION_SYNC_LIBRARY = app.gamenative.AppPaths.getScopedAction("EPIC_SYNC_LIBRARY")
+        private val ACTION_MANUAL_SYNC = app.gamenative.AppPaths.getScopedAction("EPIC_MANUAL_SYNC")
         private const val SYNC_THROTTLE_MILLIS = 15 * 60 * 1000L // 15 minutes
 
         // Sync tracking variables
