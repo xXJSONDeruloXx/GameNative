@@ -732,3 +732,251 @@ At this point the remaining blockers are more precisely understood:
 
 3. **One important preload/redirect layer is still source-missing in public repos searched so far**
    - the `redirect.tzst` libs are still the main unresolved binary-source gap
+
+## Comparison: `MaxsTechReview/WinNative`
+
+I pulled down and inspected:
+- `https://github.com/MaxsTechReview/WinNative`
+- local clone: `/tmp/external-winnative/MaxsTechReview__WinNative`
+
+The most important thing about WinNative is **not** that it proves every arbitrary spoof-package build works perfectly; it is that it demonstrates a runtime architecture that is much less dependent on app-package-specific absolute paths than current GameNative.
+
+### Big signal: WinNative already decouples namespace from application ID
+
+From `app/build.gradle`:
+- `namespace 'com.winlator.cmod'`
+- `applicationId "com.winnative.cmod"`
+
+That means WinNative already ships with:
+- Java/Kotlin package / namespace rooted at `com.winlator.cmod`
+- Android-installed package ID rooted at `com.winnative.cmod`
+
+This is very strong evidence that **an app-ID rename is possible there without renaming the entire code namespace**.
+
+It also explains why some hardcoded `Class.forName("com.winlator.cmod...")` calls do **not** necessarily block app-ID renaming there: they are referring to the compiled class namespace, not the installed application ID.
+
+### Runtime path strategy is much more dynamic than current GameNative
+
+WinNative consistently derives runtime paths from `context.getFilesDir()` / `ImageFs.getRootDir()` instead of baking `/data/data/<package>` into normal launcher code.
+
+Examples:
+- `ImageFs.java`
+  - `ImageFs.find(context)` → `new File(context.getFilesDir(), "imagefs")`
+- `GuestProgramLauncherComponent.java`
+  - `TMPDIR`, `LD_LIBRARY_PATH`, `ANDROID_SYSVSHM_SERVER`, `FONTCONFIG_PATH`, `VK_LAYER_PATH`, etc. are all derived from `rootDir.getPath()` / `imageFs.getRootDir()`
+- `WinHandler.java`
+  - controller shared-memory files are created under:
+    - `activity.getFilesDir()/imagefs/tmp/gamepad*.mem`
+- `vulkan.c`
+  - driver paths are derived from `Context.getFilesDir()` and `AppUtils.getNativeLibDir(context)`
+
+This is the single biggest architectural difference vs the package-hardcoded parts I found in GameNative.
+
+### WinNative mostly avoids relying on redirect preload libs for the main runtime path
+
+There is a notable difference from current GameNative:
+
+- `ImageFsInstaller.java` **tries** to extract `redirect.tzst`, but it explicitly tolerates it being missing:
+  - logs `redirect.tzst not found or failed to extract; continuing without redirect libs`
+- in the checked-out repo snapshot, I did **not** find `app/src/main/assets/redirect.tzst`
+- `GuestProgramLauncherComponent.java` only references `libredirect.so` in the **shell command path** (`execShellCommand`)
+- the **main game launch path** in `execGuestProgram()` does **not** add `libredirect.so` / `libredirect-bionic.so` to `LD_PRELOAD`
+
+That suggests WinNative’s core runtime is designed to function **without making redirect preload shims a central dependency**.
+
+This is a very important pathfinding clue for GameNative:
+- if the runtime no longer depends on `redirect.tzst` for normal launches, then the source-missing redirect layer stops being a first-order blocker
+
+### WinNative replaces some redirect-style behavior with source-controlled runtime hooks
+
+#### 1) `libfakeinput.so` instead of opaque redirect logic for `/dev/input`
+
+WinNative builds `libfakeinput.so` from source:
+- `app/src/main/cpp/winlator/fakeinput.cpp`
+- `app/src/main/cpp/CMakeLists.txt`
+
+Launcher behavior:
+- `GuestProgramLauncherComponent.java` copies/extracts `libfakeinput.so` into imagefs
+- preloads it dynamically
+- sets:
+  - `FAKE_EVDEV_DIR=<imagefs>/dev/input`
+
+The source has a fallback hardcode:
+- `/data/data/com.termux/files/home/fake-input`
+
+but at runtime this is overridden by `FAKE_EVDEV_DIR`, so the active path is dynamic.
+
+This is a plausible replacement model for some of the input-node rewriting currently buried in GameNative’s opaque redirect layer.
+
+#### 2) `evshim` already supports dynamic data paths
+
+WinNative also ships source for `evshim.c`.
+
+Important details:
+- source reads `EVSHIM_DATA_PATH`
+- launcher can set:
+  - `EVSHIM_DATA_PATH`
+  - `EVSHIM_WIN_PATH`
+- fallback still hardcodes:
+  - `/data/data/com.winlator.cmod/files/imagefs/tmp`
+
+But in the current WinNative launcher snapshot:
+- `enableEvshim = false`
+
+So the fallback hardcode appears **present but inactive** in the default path.
+
+This again reinforces a broader lesson:
+- WinNative’s success does **not** come from every binary being perfectly de-hardcoded
+- it comes from avoiding activation of the fragile hardcoded fallback paths, and preferring dynamic env-driven ones
+
+### WinNative’s graphics stack gives concrete ideas for de-hardcoding binaries
+
+#### 1) Turnip ICDs use relative container paths, not app-package paths
+
+From `turnip-24.1.0.tzst`:
+- `"library_path": "/usr/lib/arm-linux-gnueabihf/libvulkan_freedreno.so"`
+- `"library_path": "/usr/lib/aarch64-linux-gnu/libvulkan_freedreno.so"`
+
+This is much better than current GameNative’s Turnip assets that embed:
+- `/data/data/app.gamenative/files/imagefs/...`
+
+So one obvious path forward for GameNative is:
+- rebuild/patch Turnip/Vulkan ICD assets to use **container-relative paths** like WinNative does
+- then the Android package name stops mattering for ICD resolution
+
+#### 2) Wrapper ICD uses a relative library name
+
+From WinNative `wrapper.tzst`:
+- `usr/share/vulkan/icd.d/wrapper_icd.aarch64.json`
+- contains:
+  - `"library_path": "libvulkan_wrapper.so"`
+
+Again, that is preferable to baking `/data/data/<package>/...` directly into the JSON.
+
+#### 3) Wrapper binary still has hardcoded package fallback strings — but appears to support env overrides
+
+I extracted `wrapper.tzst` and found `libvulkan_wrapper.so` still contains strings like:
+- `/data/data/com.winlator.cmod/files/imagefs/usr/lib`
+- `/data/data/com.winlator.cmod/files/imagefs/usr/cache`
+
+However, the same binary also exposes env/config knobs:
+- `WRAPPER_LAYER_PATH`
+- `WRAPPER_CACHE_PATH`
+- `WRAPPER_DISABLE_PLACED`
+
+And WinNative’s launcher sets:
+- `WRAPPER_LAYER_PATH=<rootDir>/usr/lib`
+- `WRAPPER_CACHE_PATH=<rootDir>/usr/var/cache`
+
+So the best interpretation is:
+- the wrapper binary still contains hardcoded fallback/default paths
+- but WinNative avoids being broken by them because the runtime passes **dynamic override env vars**
+
+This is probably the most useful binary-level lesson from WinNative for GameNative.
+
+**Implication for GameNative:**
+- even if a wrapper binary still contains old package strings, it may be enough to rebuild/use a variant that honors dynamic env vars and then set those env vars correctly at launch
+- a full byte-for-byte de-hardcode of every fallback string may not be required for practical rename support
+
+### Box64 assets are less package-bound than current GameNative’s
+
+From extracted WinNative Box64 assets:
+- I found Termux-ish / generic glibc paths such as:
+  - `/data/data/com.termux/files/usr/lib`
+  - `/data/data/com.termux/files/usr/tmp`
+  - `/lib/ld-linux-aarch64.so.1`
+- I did **not** find app-package-specific paths like:
+  - `/data/data/com.winnative.cmod/...`
+
+This is still imperfect / not pretty, but it is significantly better for app-ID renaming than the GameNative assets that pin directly to `app.gamenative`.
+
+So another clear path forward is:
+- rebuild GameNative’s Box64 assets toward **generic container / interpreter paths** rather than app-package-specific Android paths
+
+### Remaining hardcoded / rename-risky bits in WinNative
+
+WinNative is **not** fully clean.
+
+I found these relevant residual issues:
+
+#### 1) GOG service actions are still hardcoded
+`GOGService.kt` still uses:
+- `"com.winlator.cmod.GOG_SYNC_LIBRARY"`
+- `"com.winlator.cmod.GOG_MANUAL_SYNC"`
+
+So a further applicationId rename there would still need the same sort of action-centralization fix I already made in GameNative.
+
+#### 2) Reflection strings still reference the namespace
+Examples:
+- `SteamBridge.java`
+- `SteamClientManager.kt`
+- `Class.forName("com.winlator.cmod....")`
+
+But because WinNative already separates namespace from applicationId, these are not the same kind of blocker as `/data/data/<package>` hardcodes.
+
+#### 3) `evshim.c` and `fakeinput.cpp` still have fallback hardcodes
+- `evshim.c` fallback: `/data/data/com.winlator.cmod/files/imagefs/tmp`
+- `fakeinput.cpp` fallback: `/data/data/com.termux/files/home/fake-input`
+
+So WinNative is best understood as:
+- **dynamic-enough in the active path**
+- not perfectly de-hardcoded in every fallback path
+
+### What WinNative suggests as a practical path forward for GameNative
+
+#### High-confidence takeaways
+
+1. **Decouple app identity from runtime paths aggressively**
+   - WinNative consistently derives live paths from `context.getFilesDir()` / `imagefs rootDir`
+   - this is the model GameNative should keep moving toward
+
+2. **Prefer relative/container-local paths inside shipped assets**
+   - Turnip ICDs: `/usr/lib/...`
+   - wrapper ICD: `libvulkan_wrapper.so`
+   - these are much safer than `/data/data/<package>/...`
+
+3. **Prefer env-variable-driven binary configuration over package-specific baked paths**
+   - `WRAPPER_LAYER_PATH`
+   - `WRAPPER_CACHE_PATH`
+   - `FAKE_EVDEV_DIR`
+   - `EVSHIM_DATA_PATH`
+   - this is probably the cleanest way to neutralize fallback hardcodes without needing every binary source immediately
+
+4. **Reduce dependence on opaque redirect preload layers where possible**
+   - WinNative’s main runtime path appears to work without shipping/depending on `redirect.tzst`
+   - this is a strong signal that GameNative should try to shrink `redirect.tzst` from “core dependency” to “legacy compatibility layer”
+
+#### Concrete next steps implied by the WinNative comparison
+
+1. **Rebuild or patch GameNative graphics assets toward WinNative-style relative resolution**
+   - Turnip ICD JSONs → `/usr/lib/...`
+   - wrapper ICD JSONs → `libvulkan_wrapper.so`
+
+2. **Add wrapper env vars to GameNative launcher code**
+   - set `WRAPPER_LAYER_PATH`
+   - set `WRAPPER_CACHE_PATH`
+   - if supported by the wrapper build, this may avoid package-bound fallback paths without immediate binary surgery
+
+3. **Investigate using source-controlled input hooks instead of opaque redirect hooks**
+   - `libfakeinput.so` + `FAKE_EVDEV_DIR`
+   - `evshim` with env-driven paths where needed
+
+4. **Treat `redirect.tzst` as the main remaining blocker specifically because GameNative still depends on it more centrally than WinNative does**
+   - WinNative shows a plausible architecture where that dependency is minimized
+
+### Bottom line from the WinNative comparison
+
+`MaxsTechReview/WinNative` does **not** prove that every package/app-ID rename issue is solved everywhere.
+
+But it does provide a very useful demonstration that:
+- **applicationId can already differ from code namespace in a working fork**
+- **dynamic path derivation from `context.getFilesDir()` is enough to avoid a lot of rename pain**
+- **relative ICD/library paths plus env overrides can make shipped binaries far less package-sensitive**
+- **opaque redirect shims do not have to remain a central dependency in the main runtime path**
+
+So the strongest path forward for GameNative is probably **not** “find every remaining fallback string and hex-edit it forever.”
+
+It is more likely:
+- shift more of the runtime to WinNative-style dynamic rootDir/env-var plumbing
+- rebuild the graphics / box64 assets to use relative paths and env-aware binaries
+- then isolate the truly unavoidable remaining blocker to the still-missing `redirect.tzst` source / legacy GLIBC path-translation layer
