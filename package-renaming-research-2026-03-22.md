@@ -83,6 +83,81 @@ It is much more likely people are using “app.name” loosely to mean one of:
 - namespace / component names
 - absolute internal data path based on `app.gamenative`
 
+## Private DM findings with Utkarsh (follow-up)
+
+I also reviewed my Discord DM history with Utkarsh Dalal directly, because the public server discussion suggested there might have been private context around package renaming / fork behavior.
+
+### Scope / method
+
+- Identified DM channel with `Utkarsh Dalal` / `utkarshdalal` (`594531951432695809`)
+- Fetched full available message history from the DM channel via Discord API / Latchkey
+- Retrieved `856` messages spanning approximately:
+  - `2026-02-16` through `2026-03-21`
+- Searched message content and embed text for:
+  - `package`, `package name`, `rename`, `application id`, `app id`, `spoof`, `variant`, `suffix`
+  - `antutu`, `ludashi`, `pubg`, `wild rift`, `genshin`
+  - `app.gamenative`, `com.winlator`
+  - provenance-adjacent terms like `forks`, `Bruno`, `winlator-11`, `source`
+
+### What I did **not** find
+
+I did **not** find any direct text discussion in DMs that clearly says:
+- “package renaming is supported”
+- “package renaming is broken because of X”
+- “change the package name to Antutu/Ludashi/PUBG/Wild Rift/Genshin”
+- any direct `applicationId` / package-name implementation guidance
+
+So if there *was* package-renaming-specific DM discussion, it does **not** appear in the retained message text I could fetch and search.
+
+Possible reasons:
+- it may have happened in another DM thread/platform
+- it may have been older than the available DM history in this channel
+- it may have been discussed in screenshots / attachments / linked threads rather than plain message text
+- it may have been paraphrased from public Discord rather than directly discussed in DM
+
+### What I **did** find that still matters to this investigation
+
+#### 1) There is clear DM concern about forks passing off GameNative work as original
+
+- `2026-03-10` — Utkarsh: “so that no \"forks\" can pass off our code as original”
+- `2026-03-12` — Utkarsh: “mostly was looking into forks passing off our in-development code as their original code”
+
+This is not a direct package-renaming discussion, but it is relevant background because the public package-spoof / Ludashi / Antutu discussion is entangled with downstream forks and repackaged builds.
+
+#### 2) “Ludashi” in DMs referred to a UI/effects PR, not package spoofing
+
+The DM hits for `ludashi` were about PR `#803`:
+- `Winlator ludashi effects`
+- described in DM as shader / brightness / contrast / gamma work
+
+So in the private DM context I searched, `ludashi` did **not** mean package-name spoofing; it referred to a visual-effects feature branch / PR.
+
+That is useful because it prevents over-reading the DM evidence.
+
+#### 3) Utkarsh directly confirmed some important runtime binaries were source-missing
+
+From the 2026-03-15 DM exchange about building `libwinlator.so` from source:
+- Utkarsh: “We didn't have the source”
+- Utkarsh: “Bruno didn't release it”
+- Utkarsh: “no, the source is not available”
+- Utkarsh: “we have a file called winlator-11 that is the built .so without the source”
+- Utkarsh: “and then just regular winlator.so as well i believe”
+
+This matters a lot for the current package-rename investigation because it independently supports the same broader conclusion from the code audit:
+- some critical runtime pieces in this ecosystem were imported as opaque binaries
+- not every hardcoded-path problem can be fixed only from the currently checked-in public source tree
+
+That does **not** prove `redirect.tzst` came from Bruno directly, but it does strengthen the general explanation for why some rename blockers remain hard to patch cleanly.
+
+### Best takeaway from the DM review
+
+- **No direct DM evidence found for package-renaming guidance itself**
+- **Yes, there is DM evidence that opaque / source-missing runtime binaries were part of the project history**
+- **Yes, there is DM evidence that fork/repackage concerns were on Utkarsh’s mind around the same timeframe**
+- **The DM `ludashi` references I found were about screen effects, not spoofed package names**
+
+So the DM review did not add a new root cause for package renaming, but it did add useful provenance context for the opaque binary problem.
+
 ## Code audit
 
 ## A. Changing the display label alone should be safe
