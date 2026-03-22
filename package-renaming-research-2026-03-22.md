@@ -538,6 +538,97 @@ and did **not** find a public repo containing:
 - `pluviagoldberg_on_load`
 - the exact rewrite-hook source matching those binaries
 
+### Redirect shim timeline / provenance hints
+
+Even though I still have not found the source, repo history gives a fairly strong provenance trail.
+
+#### GLIBC-side timeline
+
+- `e1f09f22` (`It works!`, 2025-05-17)
+  - `GlibcProgramLauncherComponent.java` starts setting:
+    - `LD_PRELOAD="libpluviagoldberg.so libandroid-sysvshm.so"`
+  - This is the earliest concrete repo-history evidence I found for the GLIBC preload shim.
+
+- `2e936d7e` (`Updated name of preload`, 2025-05-27)
+  - changes:
+    - `libpluviagoldberg.so` → `libredirect.so`
+  - This is the clearest in-repo hint that the current GLIBC redirect shim is a renamed / repackaged descendant of an older **PluviaGoldberg-specific preload library**.
+
+- `00889106` (`Run steamless on executable before running`, 2025-06-11)
+  - continues to preload `libredirect.so libandroid-sysvshm.so`
+  - confirms the renamed GLIBC shim remained part of the standard launch path.
+
+- `1f9018ca` (`fix(glibc): ... VirGL ... Library path fix`, 2026-03-09)
+  - still treats `libredirect.so` as operationally important
+  - commit message explicitly says VirGL on GLIBC depended on `libredirect.so` path translation and that preload failures broke socket discovery.
+
+#### Bionic-side timeline
+
+- `2df2b427` (`Progress - patched libvortekrenderer and now it doesn't crash but i get a black screen hehe`, 2025-07-15)
+  - first adds:
+    - `app/src/main/jniLibs/arm64-v8a/libredirect-bionic.so`
+  - this commit currently survives only on branch/ref `upstream/new_vortek`, which suggests the bionic redirect shim first appeared in an experimental Vortek/bionic work stream rather than landing directly as a standalone source addition.
+
+- `b548a30e` (`Initial bionic changes`, 2025-10-06)
+  - introduces `BionicProgramLauncherComponent.java`
+  - at this point the new bionic launcher is wiring `LD_PRELOAD`, but not yet clearly loading the redirect shim asset bundle.
+
+- `2c25981f` (`Got aarch64 proton working with LD_PRELOAD`, 2025-10-18)
+  - adds `imageFs.getLibDir() + "/libredirect-bionic.so"` to the bionic `LD_PRELOAD` chain
+  - this is the first clear launcher-side use of the bionic redirect shim.
+
+- `451ca4a1` (`Fixed wowbox64 for arm64ec bionic containers`, 2025-10-20)
+  - adds `app/src/main/assets/redirect.tzst`
+  - also adds `redirect.tzst` deployment wiring in `ImageFsInstaller`
+  - this is the first point where the redirect bundle is clearly shipped as an asset archive rather than just as a loose checked-in `.so`.
+
+- `20ebeaf0` (`Initial bionic changes (#191)`, 2025-10-23)
+  - lands the bionic stream into mainline history
+  - carries forward `redirect.tzst` and the bionic launcher integration.
+
+#### Later maintenance touches
+
+After the binaries landed, later commits mostly changed **how the app loads them**, not the binary payloads themselves. Notable examples:
+- `cd804388` (2026-03-04): adjusts bionic/glibc launcher `LD_PRELOAD` handling
+- `b23731ea` (2026-03-04): more launcher-side preload-path handling and comments about `libredirect.so`
+- `1f9018ca` (2026-03-09): switches GLIBC preload handling to absolute library paths for reliability
+
+So the binaries themselves look comparatively opaque/static, while the Java-side plumbing around them kept evolving.
+
+#### Strongest Pluvia / upstream provenance hints
+
+These are the strongest hints I found that the redirect shim was inherited or renamed from Pluvia/PluviaGoldberg-era work:
+
+1. **The old preload name was literally `libpluviagoldberg.so`.**
+   - Proven directly by commit `e1f09f22`.
+   - Commit `2e936d7e` then renames that preload to `libredirect.so`.
+
+2. **The current `libredirect.so` binary still contains PluviaGoldberg-era symbols/strings.**
+   - `pluviagoldberg_on_load`
+   - `[INIT] libpluviagoldberg.so loaded`
+   - `LD_PRELOAD=/data/data/app.gamenative/files/imagefs/libpluviagoldberg.so`
+   - `preload_loaded.txt`
+
+3. **Repo history shows broader Pluvia lineage and imports nearby.**
+   - history includes merge references to `https://github.com/utkarshdalal/PluviaGoldberg`
+   - branch/commit `upstream/fix-pathing-issue` is described as `pulled in fix-pathing-issue from pluvia`
+   - another upstream branch references `pull in improvements from https://github.com/oxters168/Pluvia/pull/275/files`
+
+4. **The repo itself still has substantial PluviaGoldberg naming residue.**
+   - package paths and tests under `com/utkarshdalal/PluviaGoldberg`
+   - older class/package naming in history
+
+#### Best current conclusion on provenance
+
+My current best explanation is:
+- the **GLIBC redirect shim** was very likely introduced first as a PluviaGoldberg-specific preload library (`libpluviagoldberg.so`)
+- it was later **renamed/repackaged** to `libredirect.so`
+- the **bionic redirect shim** (`libredirect-bionic.so`) appears to have been added later during experimental Vortek/bionic work
+- both were then bundled together into `redirect.tzst`
+- but the actual C source files (`preload_replace.c`, `preload_replace_bionic.c`) still do not appear in the public repos I searched
+
+So there is strong evidence of **inheritance/renaming**, but not yet a public source repo I can point to as the definitive origin.
+
 ### Current best map of the remaining binary problem
 
 - **Found / source-known**
