@@ -11,9 +11,39 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <pthread.h>
+#include <stdint.h>
 #include <unistd.h>
-#include <SDL2/SDL.h>
 #include <stdarg.h>
+
+/* Minimal SDL2 type forward declarations so this can be built without SDL headers. */
+typedef struct SDL_Joystick SDL_Joystick;
+typedef struct {
+  int major, minor, patch;
+} SDL_version;
+typedef struct SDL_VirtualJoystickDesc {
+  uint16_t version;
+  uint16_t type;
+  uint16_t naxes;
+  uint16_t nbuttons;
+  uint16_t nhats;
+  uint16_t vendor_id;
+  uint16_t product_id;
+  uint16_t padding;
+  uint32_t button_mask;
+  uint32_t axis_mask;
+  const char *name;
+  void *userdata;
+  void (*Update)(void *);
+  void (*SetPlayerIndex)(void *, int);
+  int (*Rumble)(void *, uint16_t, uint16_t);
+  int (*RumbleTriggers)(void *, uint16_t, uint16_t);
+  int (*SetLED)(void *, uint8_t, uint8_t, uint8_t);
+  int (*SendEffect)(void *, const void *, int);
+} SDL_VirtualJoystickDesc;
+
+#define SDL_VIRTUAL_JOYSTICK_DESC_VERSION 1
+#define SDL_JOYSTICK_TYPE_GAMECONTROLLER 1
+#define SDL_INIT_JOYSTICK 0x00000200
 
 static int g_debug_enabled = 0;
 
@@ -166,6 +196,7 @@ static void initialize_all_pads(void)
     if (players > MAX_GAMEPADS) players = MAX_GAMEPADS;
 
 
+    const char *data_path = getenv("EVSHIM_DATA_PATH");
     const char *data_dir = getenv("EVSHIM_DATA_DIR");
     if (!data_dir || !*data_dir) data_dir = "/data/data/app.gamenative";
 
@@ -173,10 +204,19 @@ static void initialize_all_pads(void)
     for (int i = 0; i < players; ++i) {
 
         char path[512];
-        int written = snprintf(path, sizeof path,
-                 "%s/files/imagefs/tmp/gamepad%s.mem",
-                 data_dir,
-                 (i == 0) ? "" : (char[2]){'0' + i, '\0'});
+        int written;
+        if (data_path && *data_path) {
+            written = snprintf(path, sizeof path,
+                     "%s/gamepad%s.mem",
+                     data_path,
+                     (i == 0) ? "" : (char[2]){'0' + i, '\0'});
+        }
+        else {
+            written = snprintf(path, sizeof path,
+                     "%s/files/imagefs/tmp/gamepad%s.mem",
+                     data_dir,
+                     (i == 0) ? "" : (char[2]){'0' + i, '\0'});
+        }
         if (written < 0 || written >= (int)sizeof(path)) {
             LOGE("P%d: path truncated, skipping\n", i);
             continue;
@@ -234,7 +274,7 @@ static int open_common(const char *path, int flags, va_list ap)
     if (is_event_node(path)) { errno = ENOENT; return -1; }
     if (!real_open) real_open = (open_f)dlsym(RTLD_NEXT, "open");
     mode_t mode = 0;
-    if (flags & O_CREAT) mode = va_arg(ap, mode_t);
+    if (flags & O_CREAT) mode = (mode_t)va_arg(ap, int);
     return real_open(path, flags, mode);
 }
 

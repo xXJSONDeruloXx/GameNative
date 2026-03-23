@@ -24,3 +24,19 @@ target_link_libraries(winlator
                       EGL
                       GLESv2
                       GLESv3)
+
+add_library(fakeinput SHARED
+            winlator/fakeinput.cpp)
+
+add_library(evshim SHARED
+            extras/evshim.c)
+
+target_compile_features(fakeinput PRIVATE cxx_std_17)
+target_compile_options(fakeinput PRIVATE -Wall -Wextra -fvisibility=hidden)
+target_link_libraries(fakeinput
+                      log
+                      dl)
+
+target_link_libraries(evshim
+                      log
+                      dl)

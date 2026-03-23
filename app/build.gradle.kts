@@ -1,5 +1,7 @@
-import java.util.Properties
+import org.gradle.api.GradleException
+import org.gradle.api.tasks.Sync
 import java.io.FileInputStream
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -24,6 +26,29 @@ val keystoreProperties: Properties? = if (keystorePropertiesFile.exists()) {
 val posthogApiKey: String = project.findProperty("POSTHOG_API_KEY") as String? ?: System.getenv("POSTHOG_API_KEY") ?: ""
 val posthogHost: String = project.findProperty("POSTHOG_HOST") as String? ?: System.getenv("POSTHOG_HOST") ?: "https://us.i.posthog.com"
 
+val androidNdkVersion = "22.1.7171670"
+val sdkPropertiesFile = rootProject.file("local.properties")
+val sdkProperties: Properties = Properties().apply {
+    if (sdkPropertiesFile.exists()) {
+        load(FileInputStream(sdkPropertiesFile))
+    }
+}
+val androidSdkDir = sdkProperties.getProperty("sdk.dir")
+    ?: System.getenv("ANDROID_SDK_ROOT")
+    ?: System.getenv("ANDROID_HOME")
+val androidNdkDir = listOfNotNull(
+    androidSdkDir?.let { file("$it/ndk/$androidNdkVersion") },
+    file("/opt/homebrew/share/android-commandlinetools/ndk/$androidNdkVersion"),
+    androidSdkDir?.let { file("$it/ndk-bundle") },
+).firstOrNull { it.exists() }
+val ninjaExecutable = listOf(
+    file("/opt/homebrew/bin/ninja"),
+    file("/usr/local/bin/ninja"),
+    file("/usr/bin/ninja"),
+).firstOrNull { it.exists() }
+val sourceBuiltJniLibsDir = layout.buildDirectory.dir("generated/sourceBuiltJniLibs")
+val sourceBuiltWinlatorDir = layout.buildDirectory.dir("native/winlator")
+
 room {
     schemaDirectory("$projectDir/schemas")
 }
@@ -33,7 +58,7 @@ android {
     compileSdk = 35
 
     // https://developer.android.com/ndk/downloads
-    ndkVersion = "22.1.7171670"
+    ndkVersion = androidNdkVersion
 
     signingConfigs {
         create("pluvia") {
@@ -155,6 +180,12 @@ android {
         buildConfig = true
     }
 
+    sourceSets {
+        getByName("main") {
+            jniLibs.setSrcDirs(listOf(sourceBuiltJniLibsDir.get().asFile))
+        }
+    }
+
     packaging {
         resources {
             excludes += "/DebugProbesKt.bin"
@@ -201,6 +232,83 @@ android {
     //         exclude(group = "junit", module = "junit")
     //     }
     // }
+}
+
+fun registerWinlatorBuildTask(taskName: String, abi: String) = tasks.register(taskName) {
+    inputs.dir("src/main/cpp")
+    outputs.files(
+        sourceBuiltWinlatorDir.map { it.file("$abi/libwinlator.so") },
+        sourceBuiltWinlatorDir.map { it.file("$abi/libfakeinput.so") },
+        sourceBuiltWinlatorDir.map { it.file("$abi/libevshim.so") },
+    )
+
+    doLast {
+        val ndkDir = androidNdkDir ?: throw GradleException(
+            "Android NDK not found. Set sdk.dir in local.properties or ANDROID_SDK_ROOT/ANDROID_HOME."
+        )
+        val buildDir = sourceBuiltWinlatorDir.get().dir(abi).asFile
+        val toolchainFile = ndkDir.resolve("build/cmake/android.toolchain.cmake")
+        buildDir.mkdirs()
+
+        exec {
+            val configureArgs = mutableListOf(
+                "cmake",
+                "-S", "src/main/cpp",
+                "-B", buildDir.absolutePath,
+                "-G", "Ninja",
+                "-DANDROID_ABI=$abi",
+                "-DANDROID_PLATFORM=26",
+                "-DCMAKE_TOOLCHAIN_FILE=${toolchainFile.absolutePath}",
+                "-DANDROID_NDK=${ndkDir.absolutePath}",
+            )
+            if (ninjaExecutable != null) {
+                configureArgs += "-DCMAKE_MAKE_PROGRAM=${ninjaExecutable.absolutePath}"
+            }
+            commandLine(configureArgs)
+        }
+        exec {
+            commandLine(
+                "cmake",
+                "--build",
+                buildDir.absolutePath,
+                "--target",
+                "winlator",
+                "fakeinput",
+                "evshim",
+            )
+        }
+    }
+}
+
+val buildWinlatorArm64FromSource = registerWinlatorBuildTask("buildWinlatorArm64FromSource", "arm64-v8a")
+val buildWinlatorArmeabiFromSource = registerWinlatorBuildTask("buildWinlatorArmeabiFromSource", "armeabi-v7a")
+
+val stageSourceBuiltWinlatorJniLibs = tasks.register<Sync>("stageSourceBuiltWinlatorJniLibs") {
+    dependsOn(buildWinlatorArm64FromSource, buildWinlatorArmeabiFromSource)
+    into(sourceBuiltJniLibsDir)
+
+    from("src/main/jniLibs") {
+        exclude(
+            "arm64-v8a/libwinlator.so",
+            "armeabi-v7a/libwinlator.so",
+            "arm64-v8a/libevshim.so",
+            "armeabi-v7a/libevshim.so",
+            "arm64-v8a/libfakeinput.so",
+            "armeabi-v7a/libfakeinput.so",
+        )
+    }
+    from(sourceBuiltWinlatorDir.map { it.dir("arm64-v8a") }) {
+        include("libwinlator.so", "libfakeinput.so", "libevshim.so")
+        into("arm64-v8a")
+    }
+    from(sourceBuiltWinlatorDir.map { it.dir("armeabi-v7a") }) {
+        include("libwinlator.so", "libfakeinput.so", "libevshim.so")
+        into("armeabi-v7a")
+    }
+}
+
+tasks.named("preBuild") {
+    dependsOn(stageSourceBuiltWinlatorJniLibs)
 }
 
 dependencies {

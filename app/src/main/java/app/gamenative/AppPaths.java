@@ -58,6 +58,14 @@ public final class AppPaths {
         return new File(ImageFs.find(context).getRootDir(), "tmp").getPath();
     }
 
+    public static String getImageFsDevInputDirPath(Context context) {
+        return new File(ImageFs.find(context).getRootDir(), "dev/input").getPath();
+    }
+
+    public static String getImageFsLdLinuxAarch64Path(Context context) {
+        return getAppDataDir(context) + "/files/imagefs/usr/lib/ld-linux-aarch64.so.1";
+    }
+
     public static String getImageFsGamepadMemPath(Context context, int playerIndex) {
         String suffix = playerIndex <= 1 ? "" : String.valueOf(playerIndex - 1);
         return getImageFsTmpPath(context) + "/gamepad" + suffix + ".mem";

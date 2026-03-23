@@ -203,8 +203,10 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
         boolean shareAndroidClipboard = PrefManager.getBoolean("share_android_clipboard", false);
         boolean enablePebLogs = PrefManager.getBoolean("enable_peb_logs", false);
 
-        // Always set this to defer handling to WineRequestComponent
-        envVars.put("WINE_OPEN_WITH_ANDROID_BROwSER", "1"); // Pipetto wine has a typo, so we need 2 envvar for it to work
+        EnvVars envVars = new EnvVars();
+
+        // Always set this to defer handling to WineRequestComponent.
+        envVars.put("WINE_OPEN_WITH_ANDROID_BROwSER", "1"); // Pipetto wine has a typo, so we need both env vars.
         envVars.put("WINE_OPEN_WITH_ANDROID_BROWSER", "1");
 
         if (shareAndroidClipboard) {
@@ -215,13 +217,9 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
             envVars.put("WINE_LOG_PEB_DATA", "1");
         }
 
-        EnvVars envVars = new EnvVars();
-
-        // Use the ControllerManager's dynamic count for the environment variable
+        // Use the ControllerManager's dynamic count for the environment variable.
         envVars.put("EVSHIM_MAX_PLAYERS", String.valueOf(enabledPlayerCount));
-        if (true) {
-            envVars.put("EVSHIM_SHM_ID", 1);
-        }
+        envVars.put("EVSHIM_SHM_ID", 1);
         addBox64EnvVars(envVars, enableBox86_64Logs);
         envVars.putAll(FEXCorePresetManager.getEnvVars(context, fexcorePreset));
 
@@ -233,7 +231,7 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
         if (envVars.get("BOX64_MMAP32").equals("1") && !wineInfo.isArm64EC())
             envVars.put("WRAPPER_DISABLE_PLACED", "1");
 
-        // Setting up essential environment variables for Wine
+        // Setting up essential environment variables for Wine.
         envVars.put("HOME", imageFs.home_path);
         envVars.put("USER", ImageFs.USER);
         envVars.put("TMPDIR", rootDir.getPath() + "/usr/tmp");
@@ -249,11 +247,12 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
         envVars.put("LD_LIBRARY_PATH", rootDir.getPath() + "/usr/lib" + ":" + "/system/lib64");
         envVars.put("ANDROID_SYSVSHM_SERVER", rootDir.getPath() + UnixSocketConfig.SYSVSHM_SERVER_PATH);
         envVars.put("FONTCONFIG_PATH", rootDir.getPath() + "/usr/etc/fonts");
-
         envVars.put("XDG_DATA_DIRS", rootDir.getPath() + "/usr/share");
         envVars.put("XDG_CONFIG_DIRS", rootDir.getPath() + "/usr/etc/xdg");
         envVars.put("GST_PLUGIN_PATH", rootDir.getPath() + "/usr/lib/gstreamer-1.0");
         envVars.put("VK_LAYER_PATH", rootDir.getPath() + "/usr/share/vulkan/implicit_layer.d" + ":" + rootDir.getPath() + "/usr/share/vulkan/explicit_layer.d");
+        envVars.put("WRAPPER_LAYER_PATH", rootDir.getPath() + "/usr/lib");
+        envVars.put("WRAPPER_CACHE_PATH", rootDir.getPath() + "/usr/var/cache");
         envVars.put("WINE_NO_DUPLICATE_EXPLORER", "1");
         envVars.put("PREFIX", rootDir.getPath() + "/usr");
         envVars.put("WINE_DISABLE_FULLSCREEN_HACK", "1");
@@ -273,7 +272,6 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
         if (connectivityManager.getActiveNetwork() != null) {
             ArrayList<InetAddress> dnsServers = new ArrayList<>(connectivityManager.getLinkProperties(connectivityManager.getActiveNetwork()).getDnsServers());
 
-            // Check if the dnsServers list is not empty before getting an item
             if (!dnsServers.isEmpty()) {
                 primaryDNS = dnsServers.get(0).toString().substring(1);
             }
@@ -283,14 +281,19 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
 
         String ld_preload = "";
         String sysvPath = imageFs.getLibDir() + "/libandroid-sysvshm.so";
-        String nativeLibraryDir = context.getApplicationInfo().nativeLibraryDir;
-        String evshimPath = nativeLibraryDir + "/libevshim.so";
+        File evshimFile = getBundledNativeLibrary(context, "libevshim.so");
+        File fakeinputFile = getBundledNativeLibrary(context, "libfakeinput.so");
         String replacePath = imageFs.getLibDir() + "/libredirect-bionic.so";
+        File fakeEvdevDir = ensureFakeEvdevDir(imageFs);
 
         if (new File(sysvPath).exists()) ld_preload += sysvPath;
-        if (new File(evshimPath).exists()) {
+        if (fakeinputFile != null && fakeinputFile.exists()) {
             if (!ld_preload.isEmpty()) ld_preload += ":";
-            ld_preload += evshimPath;
+            ld_preload += fakeinputFile.getAbsolutePath();
+        }
+        if (evshimFile != null && evshimFile.exists()) {
+            if (!ld_preload.isEmpty()) ld_preload += ":";
+            ld_preload += evshimFile.getAbsolutePath();
         }
         if (new File(replacePath).exists()) {
             if (!ld_preload.isEmpty()) ld_preload += ":";
@@ -298,20 +301,13 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
         }
 
         envVars.put("LD_PRELOAD", ld_preload);
+        envVars.put("FAKE_EVDEV_DIR", fakeEvdevDir.getAbsolutePath());
         envVars.put("EVSHIM_DATA_DIR", AppPaths.getAppDataDir(context));
+        envVars.put("EVSHIM_DATA_PATH", AppPaths.getImageFsTmpPath(context));
+        envVars.put("EVSHIM_WIN_PATH", "Z:\\tmp");
         envVars.put("EVSHIM_SHM_NAME", "controller-shm0");
 
-        // Check for specific shared memory libraries
-//        if ((new File(imageFs.getLibDir(), "libandroid-sysvshm.so")).exists()){
-//            ld_preload = imageFs.getLibDir() + "/libandroid-sysvshm.so";
-//        }
-
-        //String nativeDir = context.getApplicationInfo().nativeLibraryDir; // e.g. /data/app/…/lib/arm64
-
-        // Merge any additional environment variables from external sources
-        if (this.envVars != null) {
-            envVars.putAll(this.envVars);
-        }
+        mergeExternalEnvVars(envVars, ld_preload, fakeEvdevDir.getAbsolutePath());
         Log.d("BionicProgramLauncherComponent", "env vars are " + envVars.toString());
 
         String emulator = container.getEmulator();
@@ -468,6 +464,8 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
 
         envVars.put("LD_LIBRARY_PATH", rootDir.getPath() + "/usr/lib" + ":" + "/system/lib64");
         envVars.put("ANDROID_SYSVSHM_SERVER", rootDir.getPath() + UnixSocketConfig.SYSVSHM_SERVER_PATH);
+        envVars.put("WRAPPER_LAYER_PATH", rootDir.getPath() + "/usr/lib");
+        envVars.put("WRAPPER_CACHE_PATH", rootDir.getPath() + "/usr/var/cache");
         envVars.put("WINE_NO_DUPLICATE_EXPLORER", "1");
         envVars.put("PREFIX", rootDir.getPath() + "/usr");
         envVars.put("WINE_DISABLE_FULLSCREEN_HACK", "1");
@@ -476,15 +474,31 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
         String ld_preload = "";
         String sysvPath = imageFs.getLibDir() + "/libandroid-sysvshm.so";
         String replacePath = imageFs.getLibDir() + "/libredirect-bionic.so";
+        File fakeinputFile = getBundledNativeLibrary(context, "libfakeinput.so");
+        File evshimFile = getBundledNativeLibrary(context, "libevshim.so");
+        File fakeEvdevDir = ensureFakeEvdevDir(imageFs);
 
         if (new File(sysvPath).exists()) ld_preload += sysvPath;
-
-        ld_preload += ":" + replacePath;
+        if (fakeinputFile != null && fakeinputFile.exists()) {
+            if (!ld_preload.isEmpty()) ld_preload += ":";
+            ld_preload += fakeinputFile.getAbsolutePath();
+        }
+        if (evshimFile != null && evshimFile.exists()) {
+            if (!ld_preload.isEmpty()) ld_preload += ":";
+            ld_preload += evshimFile.getAbsolutePath();
+        }
+        if (new File(replacePath).exists()) {
+            if (!ld_preload.isEmpty()) ld_preload += ":";
+            ld_preload += replacePath;
+        }
 
         envVars.put("LD_PRELOAD", ld_preload);
+        envVars.put("FAKE_EVDEV_DIR", fakeEvdevDir.getAbsolutePath());
+        envVars.put("EVSHIM_DATA_PATH", AppPaths.getImageFsTmpPath(context));
+        envVars.put("EVSHIM_WIN_PATH", "Z:\\tmp");
 
         String emulator = container.getEmulator();
-        if (this.envVars != null) envVars.putAll(this.envVars);
+        mergeExternalEnvVars(envVars, ld_preload, fakeEvdevDir.getAbsolutePath());
         String finalCommand = getFinalCommand(winePath, emulator, envVars, imageFs.getBinDir(), command);
 
         File box64File = new File(rootDir, "/usr/bin/box64");

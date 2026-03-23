@@ -1,3 +1,12 @@
 [submodule "app/src/main/cpp/extras/adrenotools"]
 	path = app/src/main/cpp/extras/adrenotools
 	url = https://github.com/Pipetto-crypto/libadrenotools.git
+[submodule "third_party/bionic-vulkan-wrapper"]
+	path = third_party/bionic-vulkan-wrapper
+	url = https://github.com/utkarshdalal/bionic-vulkan-wrapper.git
+[submodule "third_party/box64"]
+	path = third_party/box64
+	url = https://github.com/utkarshdalal/box64.git
+[submodule "third_party/wine-custom"]
+	path = third_party/wine-custom
+	url = https://github.com/utkarshdalal/wine-custom.git

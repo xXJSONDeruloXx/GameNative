@@ -14,6 +14,7 @@ import com.winlator.contents.ContentProfile;
 import com.winlator.contents.ContentsManager;
 import com.winlator.core.Callback;
 import com.winlator.core.DefaultVersion;
+import com.winlator.core.ElfPatcher;
 import com.winlator.core.FileUtils;
 import com.winlator.core.GPUInformation;
 import com.winlator.core.envvars.EnvVars;
@@ -32,6 +33,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
 import java.util.List;
 
+import app.gamenative.AppPaths;
 import app.gamenative.PluviaApp;
 import app.gamenative.events.AndroidEvent;
 import app.gamenative.service.SteamService;
@@ -193,6 +195,8 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
         envVars.put("BOX64_LD_LIBRARY_PATH", imageFs.getRootDir().getPath() + "/usr/lib/x86_64-linux-gnu");
         envVars.put("ANDROID_SYSVSHM_SERVER", imageFs.getRootDir().getPath() + UnixSocketConfig.SYSVSHM_SERVER_PATH);
         envVars.put("FONTCONFIG_PATH", imageFs.getRootDir().getPath() + "/usr/etc/fonts");
+        envVars.put("WRAPPER_LAYER_PATH", imageFs.getRootDir().getPath() + "/usr/lib");
+        envVars.put("WRAPPER_CACHE_PATH", imageFs.getRootDir().getPath() + "/usr/var/cache");
 
         // LD_PRELOAD targets the native (ARM) dynamic linker. Since box64 is an ARM64 binary,
         // we must preload ARM64 libs from glibc64Dir (/usr/lib). 32-bit x86 Windows programs
@@ -203,21 +207,28 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
         File glibc64Dir = imageFs.getGlibc64Dir();
         File sysvshm64 = new File(glibc64Dir, "libandroid-sysvshm.so");
         File libredirect64 = new File(glibc64Dir, "libredirect.so");
+        File fakeinputFile = getBundledNativeLibrary(context, "libfakeinput.so");
+        File fakeEvdevDir = ensureFakeEvdevDir(imageFs);
 
-        if (sysvshm64.exists() || libredirect64.exists()) {
-            StringBuilder ldPreload = new StringBuilder();
-            if (libredirect64.exists()) ldPreload.append(libredirect64.getPath());
-            if (sysvshm64.exists()) {
-                if (ldPreload.length() > 0) ldPreload.append(" ");
-                ldPreload.append(sysvshm64.getPath());
-            }
+        StringBuilder ldPreload = new StringBuilder();
+        if (libredirect64.exists()) ldPreload.append(libredirect64.getPath());
+        if (sysvshm64.exists()) {
+            if (ldPreload.length() > 0) ldPreload.append(" ");
+            ldPreload.append(sysvshm64.getPath());
+        }
+        if (fakeinputFile != null && fakeinputFile.exists()) {
+            if (ldPreload.length() > 0) ldPreload.append(" ");
+            ldPreload.append(fakeinputFile.getAbsolutePath());
+        }
+        if (ldPreload.length() > 0) {
             Log.d("GlibcProgramLauncherComponent", "Setting LD_PRELOAD=" + ldPreload);
             envVars.put("LD_PRELOAD", ldPreload.toString());
         } else {
-            Log.w("GlibcProgramLauncherComponent", "Neither libredirect.so nor libandroid-sysvshm.so found in " + glibc64Dir.getPath());
+            Log.w("GlibcProgramLauncherComponent", "Neither libredirect.so, libandroid-sysvshm.so, nor libfakeinput.so found for GLIBC launch");
         }
+        envVars.put("FAKE_EVDEV_DIR", fakeEvdevDir.getAbsolutePath());
         envVars.put("WINEESYNC_WINLATOR", "1");
-        if (this.envVars != null) envVars.putAll(this.envVars);
+        mergeExternalEnvVars(envVars, envVars.get("LD_PRELOAD"), fakeEvdevDir.getAbsolutePath());
 
         String box64Path = rootDir.getPath() + "/usr/local/bin/box64";
 
@@ -254,7 +265,20 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
             Log.d("Extraction", "exctracting box64 with box64Version " + box64Version);
             TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, context.getAssets(), "box86_64/box64-" + box64Version + ".tzst", rootDir);
         }
+        patchBox64Interpreter(context, rootDir);
         PrefManager.putString("current_box64_version", box64Version);
+    }
+
+    private void patchBox64Interpreter(Context context, File rootDir) {
+        File box64File = new File(rootDir, "/usr/local/bin/box64");
+        if (!box64File.isFile()) {
+            return;
+        }
+
+        String interpreter = AppPaths.getImageFsLdLinuxAarch64Path(context);
+        if (!ElfPatcher.patchInterpreter(box64File, interpreter)) {
+            Log.w("GlibcProgramLauncherComponent", "Failed to patch box64 interpreter to current applicationId path");
+        }
     }
 
     private void addBox64EnvVars(EnvVars envVars, boolean enableLogs) {
@@ -304,27 +328,36 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
         envVars.put("BOX64_LD_LIBRARY_PATH", imageFs.getRootDir().getPath() + "/usr/lib/x86_64-linux-gnu");
         envVars.put("ANDROID_SYSVSHM_SERVER", imageFs.getRootDir().getPath() + UnixSocketConfig.SYSVSHM_SERVER_PATH);
         envVars.put("FONTCONFIG_PATH", imageFs.getRootDir().getPath() + "/usr/etc/fonts");
+        envVars.put("WRAPPER_LAYER_PATH", imageFs.getRootDir().getPath() + "/usr/lib");
+        envVars.put("WRAPPER_CACHE_PATH", imageFs.getRootDir().getPath() + "/usr/var/cache");
 
         // LD_PRELOAD targets the native ARM64 linker (see execGuestProgram for full explanation).
         // Only 64-bit ARM libs are relevant since box64 is the native process.
         File glibc64Dir = imageFs.getGlibc64Dir();
         File sysvshm64 = new File(glibc64Dir, "libandroid-sysvshm.so");
         File libredirect64 = new File(glibc64Dir, "libredirect.so");
+        File fakeinputFile = getBundledNativeLibrary(context, "libfakeinput.so");
+        File fakeEvdevDir = ensureFakeEvdevDir(imageFs);
 
-        if (sysvshm64.exists() || libredirect64.exists()) {
-            StringBuilder ldPreload = new StringBuilder();
-            if (libredirect64.exists()) ldPreload.append(libredirect64.getPath());
-            if (sysvshm64.exists()) {
-                if (ldPreload.length() > 0) ldPreload.append(" ");
-                ldPreload.append(sysvshm64.getPath());
-            }
+        StringBuilder ldPreload = new StringBuilder();
+        if (libredirect64.exists()) ldPreload.append(libredirect64.getPath());
+        if (sysvshm64.exists()) {
+            if (ldPreload.length() > 0) ldPreload.append(" ");
+            ldPreload.append(sysvshm64.getPath());
+        }
+        if (fakeinputFile != null && fakeinputFile.exists()) {
+            if (ldPreload.length() > 0) ldPreload.append(" ");
+            ldPreload.append(fakeinputFile.getAbsolutePath());
+        }
+        if (ldPreload.length() > 0) {
             Log.d("GlibcProgramLauncherComponent", "Shell LD_PRELOAD=" + ldPreload);
             envVars.put("LD_PRELOAD", ldPreload.toString());
         } else {
-            Log.w("GlibcProgramLauncherComponent", "Shell: neither libredirect.so nor libandroid-sysvshm.so found in " + glibc64Dir.getPath());
+            Log.w("GlibcProgramLauncherComponent", "Shell: neither libredirect.so, libandroid-sysvshm.so, nor libfakeinput.so found for GLIBC launch");
         }
+        envVars.put("FAKE_EVDEV_DIR", fakeEvdevDir.getAbsolutePath());
         envVars.put("WINEESYNC_WINLATOR", "1");
-        if (this.envVars != null) envVars.putAll(this.envVars);
+        mergeExternalEnvVars(envVars, envVars.get("LD_PRELOAD"), fakeEvdevDir.getAbsolutePath());
 
         String box64Path = rootDir.getPath() + "/usr/local/bin/box64";
 

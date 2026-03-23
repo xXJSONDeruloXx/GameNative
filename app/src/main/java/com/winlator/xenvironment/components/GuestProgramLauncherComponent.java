@@ -370,6 +370,65 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
         envVars.put("BOX64_NORCFILES", "1");
     }
 
+    protected static String mergePreloadValue(String baseValue, String overrideValue) {
+        if (overrideValue == null || overrideValue.isEmpty()) {
+            return baseValue == null ? "" : baseValue;
+        }
+        if (baseValue == null || baseValue.isEmpty()) {
+            return overrideValue;
+        }
+        if (overrideValue.equals(baseValue)) {
+            return baseValue;
+        }
+        return baseValue + ":" + overrideValue;
+    }
+
+    protected void mergeExternalEnvVars(EnvVars envVars, String protectedLdPreload, String protectedFakeEvdevDir) {
+        if (this.envVars == null) {
+            return;
+        }
+
+        String overrideLdPreload = this.envVars.get("LD_PRELOAD");
+        String overrideFakeEvdevDir = this.envVars.get("FAKE_EVDEV_DIR");
+
+        envVars.putAll(this.envVars);
+
+        if (protectedLdPreload != null && !protectedLdPreload.isEmpty()) {
+            envVars.put("LD_PRELOAD", mergePreloadValue(protectedLdPreload, overrideLdPreload));
+        }
+
+        if (protectedFakeEvdevDir != null && !protectedFakeEvdevDir.isEmpty()) {
+            envVars.put("FAKE_EVDEV_DIR", protectedFakeEvdevDir);
+        } else if (overrideFakeEvdevDir != null && !overrideFakeEvdevDir.isEmpty()) {
+            envVars.put("FAKE_EVDEV_DIR", overrideFakeEvdevDir);
+        }
+    }
+
+    protected static File ensureFakeEvdevDir(ImageFs imageFs) {
+        File devInputDir = new File(imageFs.getRootDir(), "dev/input");
+        if (!devInputDir.isDirectory() && !devInputDir.mkdirs()) {
+            return devInputDir;
+        }
+
+        File event0 = new File(devInputDir, "event0");
+        if (!event0.exists()) {
+            try {
+                event0.createNewFile();
+            }
+            catch (Exception ignored) {
+            }
+        }
+        return devInputDir;
+    }
+
+    protected static File getBundledNativeLibrary(Context context, String libraryName) {
+        String nativeLibraryDir = context.getApplicationInfo().nativeLibraryDir;
+        if (nativeLibraryDir == null || nativeLibraryDir.isEmpty()) {
+            return null;
+        }
+        return new File(nativeLibraryDir, libraryName);
+    }
+
     public void suspendProcess() {
         ProcessHelper.pauseAllWineProcesses();
     }
