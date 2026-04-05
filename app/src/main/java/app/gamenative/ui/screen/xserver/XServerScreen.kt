@@ -71,6 +71,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.gamenative.PluviaApp
 import app.gamenative.PrefManager
 import app.gamenative.data.GameSource
+import app.gamenative.ui.util.applyScreenEffectsConfig
+import app.gamenative.ui.util.loadScreenEffectsConfig
 import app.gamenative.gamefixes.GameFixesRegistry
 import app.gamenative.data.LaunchInfo
 import app.gamenative.data.LibraryItem
@@ -439,6 +441,12 @@ fun XServerScreen(
         performanceHudConfig = config
         persistPerformanceHudConfig(config)
         performanceHudView?.setConfig(config)
+    }
+
+    LaunchedEffect(xServerView?.renderer) {
+        xServerView?.renderer?.let { renderer ->
+            applyScreenEffectsConfig(renderer, loadScreenEffectsConfig())
+        }
     }
 
     fun restorePerformanceHudPosition() {

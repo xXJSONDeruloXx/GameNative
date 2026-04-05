@@ -300,6 +300,55 @@ object PrefManager {
             setPref(DRIVES, value)
         }
 
+    private val SCREEN_EFFECTS_BRIGHTNESS = floatPreferencesKey("screen_effects_brightness")
+    var screenEffectsBrightness: Float
+        get() = getPref(SCREEN_EFFECTS_BRIGHTNESS, 0f)
+        set(value) {
+            setPref(SCREEN_EFFECTS_BRIGHTNESS, value.coerceIn(-100f, 100f))
+        }
+
+    private val SCREEN_EFFECTS_CONTRAST = floatPreferencesKey("screen_effects_contrast")
+    var screenEffectsContrast: Float
+        get() = getPref(SCREEN_EFFECTS_CONTRAST, 0f)
+        set(value) {
+            setPref(SCREEN_EFFECTS_CONTRAST, value.coerceIn(-100f, 100f))
+        }
+
+    private val SCREEN_EFFECTS_GAMMA = floatPreferencesKey("screen_effects_gamma")
+    var screenEffectsGamma: Float
+        get() = getPref(SCREEN_EFFECTS_GAMMA, 1f)
+        set(value) {
+            setPref(SCREEN_EFFECTS_GAMMA, value.coerceIn(0.5f, 2.5f))
+        }
+
+    private val SCREEN_EFFECTS_ENABLE_TOON = booleanPreferencesKey("screen_effects_enable_toon")
+    var screenEffectsEnableToon: Boolean
+        get() = getPref(SCREEN_EFFECTS_ENABLE_TOON, false)
+        set(value) {
+            setPref(SCREEN_EFFECTS_ENABLE_TOON, value)
+        }
+
+    private val SCREEN_EFFECTS_ENABLE_FXAA = booleanPreferencesKey("screen_effects_enable_fxaa")
+    var screenEffectsEnableFXAA: Boolean
+        get() = getPref(SCREEN_EFFECTS_ENABLE_FXAA, false)
+        set(value) {
+            setPref(SCREEN_EFFECTS_ENABLE_FXAA, value)
+        }
+
+    private val SCREEN_EFFECTS_ENABLE_CRT = booleanPreferencesKey("screen_effects_enable_crt")
+    var screenEffectsEnableCRT: Boolean
+        get() = getPref(SCREEN_EFFECTS_ENABLE_CRT, false)
+        set(value) {
+            setPref(SCREEN_EFFECTS_ENABLE_CRT, value)
+        }
+
+    private val SCREEN_EFFECTS_ENABLE_NTSC = booleanPreferencesKey("screen_effects_enable_ntsc")
+    var screenEffectsEnableNTSC: Boolean
+        get() = getPref(SCREEN_EFFECTS_ENABLE_NTSC, false)
+        set(value) {
+            setPref(SCREEN_EFFECTS_ENABLE_NTSC, value)
+        }
+
     private val SHOW_FPS = booleanPreferencesKey("show_fps")
     var showFps: Boolean
         get() = getPref(SHOW_FPS, false)
