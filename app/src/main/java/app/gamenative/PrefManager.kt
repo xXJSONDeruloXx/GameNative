@@ -356,6 +356,13 @@ object PrefManager {
             setPref(SHOW_FPS, value)
         }
 
+    private val QUICK_MENU_LAST_TAB = intPreferencesKey("quick_menu_last_tab")
+    var quickMenuLastTab: Int
+        get() = getPref(QUICK_MENU_LAST_TAB, 0)
+        set(value) {
+            setPref(QUICK_MENU_LAST_TAB, value.coerceIn(0, 2))
+        }
+
     private val PERFORMANCE_HUD_COMPACT_MODE = booleanPreferencesKey("performance_hud_compact_mode")
     var performanceHudCompactMode: Boolean
         get() = getPref(PERFORMANCE_HUD_COMPACT_MODE, false)
