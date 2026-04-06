@@ -133,10 +133,6 @@ class PerformanceHudView(
     private var lastGoodGpuPercent: Int? = null
     private var lastGoodGpuTimeMs: Long = 0L
 
-    // ── Mali gpuinfo delta sampling (for devices without a utilisation sysfs node)
-    private var lastMaliGpuInfoMs: Long? = null
-    private var lastMaliGpuInfoWallMs: Long = 0L
-
     @Volatile
     private var rendererName: String? = null
 
@@ -662,36 +658,13 @@ class PerformanceHudView(
                 ?.let { return it }
         }
 
-        // 3. Mali: utilisation (present on some Mali drivers, e.g. Samsung/Exynos)
+        // 3. Mali: utilisation
         readFirstLine("/sys/class/misc/mali0/device/utilisation")
             ?.trim()
             ?.replace(Regex("[^0-9]"), "")
             ?.toIntOrNull()
             ?.coerceIn(0, 100)
             ?.let { return it }
-
-        // 4. Mali: delta of cumulative GPU-active ms from gpuinfo
-        //    Works on Unisoc/other Mali platforms that don't expose a utilisation node.
-        //    gpuinfo line 2 format: "mali0   <total_gpu_ms>"
-        readFirstLine("/sys/class/misc/mali0/device/gpuinfo", lineIndex = 1)
-            ?.trim()
-            ?.split(Regex("\\s+"))
-            ?.lastOrNull()
-            ?.toLongOrNull()
-            ?.let { gpuMs ->
-                val now = SystemClock.elapsedRealtime()
-                val prevMs = lastMaliGpuInfoMs
-                val prevWall = lastMaliGpuInfoWallMs
-                lastMaliGpuInfoMs = gpuMs
-                lastMaliGpuInfoWallMs = now
-                if (prevMs != null) {
-                    val wallDelta = now - prevWall
-                    if (wallDelta > 0L) {
-                        val gpuDelta = (gpuMs - prevMs).coerceAtLeast(0L)
-                        return ((gpuDelta * 100L) / wallDelta).toInt().coerceIn(0, 100)
-                    }
-                }
-            }
 
         return null
     }
@@ -770,11 +743,9 @@ class PerformanceHudView(
         return null
     }
 
-    private fun readFirstLine(path: String, lineIndex: Int = 0): String? {
+    private fun readFirstLine(path: String): String? {
         return try {
-            File(path).bufferedReader().useLines { lines ->
-                lines.drop(lineIndex).firstOrNull()
-            }
+            File(path).bufferedReader().use { it.readLine() }
         } catch (_: Exception) {
             null
         }
