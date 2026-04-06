@@ -1,5 +1,7 @@
 package app.gamenative.ui.component
 
+import android.app.ActivityManager
+import android.content.Context
 import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -44,6 +46,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Gamepad
 import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material3.HorizontalDivider
@@ -60,6 +64,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -81,7 +86,12 @@ import app.gamenative.ui.theme.PluviaTheme
 import app.gamenative.ui.util.adaptivePanelWidth
 import app.gamenative.utils.MathUtils.normalizedProgress
 import com.winlator.renderer.GLRenderer
+import com.winlator.winhandler.ProcessInfo
+import com.winlator.winhandler.WinHandler
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.roundToInt
 
 object QuickMenuAction {
@@ -97,6 +107,7 @@ private object QuickMenuTab {
     const val HUD = 0
     const val EFFECTS = 1
     const val CONTROLLER = 2
+    const val PROCESSES = 3
 }
 
 data class QuickMenuItem(
@@ -216,6 +227,7 @@ fun QuickMenu(
     onDismiss: () -> Unit,
     onItemSelected: (Int) -> Boolean,
     renderer: GLRenderer? = null,
+    winHandler: WinHandler? = null,
     isPerformanceHudEnabled: Boolean = false,
     performanceHudConfig: PerformanceHudConfig = PerformanceHudConfig(),
     onPerformanceHudConfigChanged: (PerformanceHudConfig) -> Unit = {},
@@ -271,6 +283,7 @@ fun QuickMenu(
     val selectedTabLabelResId = when (selectedTab) {
         QuickMenuTab.HUD -> R.string.performance_hud
         QuickMenuTab.EFFECTS -> R.string.screen_effects
+        QuickMenuTab.PROCESSES -> R.string.quick_menu_tab_processes
         else -> R.string.quick_menu_tab_controller
     }
 
@@ -280,9 +293,11 @@ fun QuickMenu(
     val controllerScrollState = rememberScrollState()
     val hudTabFocusRequester = remember { FocusRequester() }
     val controllerTabFocusRequester = remember { FocusRequester() }
+    val processesTabFocusRequester = remember { FocusRequester() }
     val hudItemFocusRequester = remember { FocusRequester() }
     val effectsItemFocusRequester = remember { FocusRequester() }
     val controllerItemFocusRequester = remember { FocusRequester() }
+    val processesItemFocusRequester = remember { FocusRequester() }
 
     BackHandler(enabled = isVisible) {
         onDismiss()
@@ -403,6 +418,15 @@ fun QuickMenu(
                                     modifier = Modifier.width(56.dp),
                                     focusRequester = controllerTabFocusRequester,
                                 )
+                                QuickMenuTabButton(
+                                    icon = Icons.Default.Memory,
+                                    contentDescriptionResId = R.string.quick_menu_tab_processes,
+                                    selected = selectedTab == QuickMenuTab.PROCESSES,
+                                    accentColor = PluviaTheme.colors.accentPurple,
+                                    onSelected = { selectedTab = QuickMenuTab.PROCESSES },
+                                    modifier = Modifier.width(56.dp),
+                                    focusRequester = processesTabFocusRequester,
+                                )
                             }
 
                             Spacer(modifier = Modifier.weight(1f))
@@ -492,6 +516,14 @@ fun QuickMenu(
                                         }
                                     }
 
+                                    QuickMenuTab.PROCESSES -> {
+                                        ProcessesQuickMenuTab(
+                                            winHandler = winHandler,
+                                            modifier = Modifier.fillMaxSize(),
+                                            firstItemFocusRequester = processesItemFocusRequester,
+                                        )
+                                    }
+
                                     else -> {
                                         Column(
                                             modifier = Modifier
@@ -536,6 +568,374 @@ fun QuickMenu(
         }
     }
 }
+
+@Composable
+private fun ProcessesQuickMenuTab(
+    winHandler: WinHandler?,
+    modifier: Modifier = Modifier,
+    firstItemFocusRequester: FocusRequester? = null,
+) {
+    val context = LocalContext.current
+    val accentColor = PluviaTheme.colors.accentCyan
+    val scrollState = rememberScrollState()
+
+    var processes by remember { mutableStateOf<List<ProcessInfo>>(emptyList()) }
+    var memoryInfo by remember { mutableStateOf<ActivityManager.MemoryInfo?>(null) }
+    var killConfirmProcess by remember { mutableStateOf<ProcessInfo?>(null) }
+
+    // Poll process list and memory while this tab is visible.
+    LaunchedEffect(winHandler) {
+        if (winHandler == null) return@LaunchedEffect
+
+        val previousListener = winHandler.getOnGetProcessInfoListener()
+        val lock = Any()
+        var pendingDeferred: CompletableDeferred<List<ProcessInfo>>? = null
+        var accumBuffer = mutableListOf<ProcessInfo>()
+        var expectedCount = 0
+
+        winHandler.setOnGetProcessInfoListener { index, count, processInfo ->
+            previousListener?.onGetProcessInfo(index, count, processInfo)
+            synchronized(lock) {
+                val d = pendingDeferred ?: return@setOnGetProcessInfoListener
+                if (d.isCompleted) return@setOnGetProcessInfoListener
+                if (count == 0) {
+                    d.complete(emptyList())
+                    return@setOnGetProcessInfoListener
+                }
+                if (index == 0) {
+                    accumBuffer = mutableListOf()
+                    expectedCount = count
+                }
+                if (processInfo != null) accumBuffer.add(processInfo)
+                if (accumBuffer.size >= expectedCount) d.complete(accumBuffer.toList())
+            }
+        }
+
+        try {
+            while (isActive) {
+                val deferred = CompletableDeferred<List<ProcessInfo>>()
+                synchronized(lock) { pendingDeferred = deferred }
+                winHandler.listProcesses()
+
+                val snapshot = withTimeoutOrNull(2_000) { deferred.await() }
+                if (snapshot != null) {
+                    processes = snapshot.sortedByDescending { it.memoryUsage }
+                }
+
+                val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+                val mi = ActivityManager.MemoryInfo()
+                am.getMemoryInfo(mi)
+                memoryInfo = mi
+
+                delay(1_500)
+            }
+        } finally {
+            winHandler.setOnGetProcessInfoListener(previousListener)
+        }
+    }
+
+    // Kill-confirm dialog
+    killConfirmProcess?.let { target ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { killConfirmProcess = null },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        winHandler?.killProcess(target.name)
+                        killConfirmProcess = null
+                    },
+                ) {
+                    Text(
+                        text = stringResource(R.string.processes_kill),
+                        color = PluviaTheme.colors.accentDanger,
+                    )
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { killConfirmProcess = null }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            },
+            title = {
+                Text(
+                    text = stringResource(R.string.processes_kill),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            },
+            text = {
+                Text(
+                    text = stringResource(R.string.processes_kill_confirm, target.name),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            containerColor = MaterialTheme.colorScheme.surface,
+        )
+    }
+
+    Column(
+        modifier = modifier
+            .verticalScroll(scrollState)
+            .focusGroup()
+            .padding(bottom = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        // System memory card
+        memoryInfo?.let { mi ->
+            val usedMem = mi.totalMem - mi.availMem
+            val usedGb = usedMem / (1024f * 1024 * 1024)
+            val totalGb = mi.totalMem / (1024f * 1024 * 1024)
+            val memPercent = ((usedMem.toFloat() / mi.totalMem) * 100).roundToInt()
+            val memProgress = (usedMem.toFloat() / mi.totalMem).coerceIn(0f, 1f)
+
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                accentColor.copy(alpha = 0.10f),
+                                accentColor.copy(alpha = 0.05f),
+                            ),
+                        ),
+                    )
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.processes_system_memory),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Text(
+                        text = "%.1f / %.1f GB · %d%%".format(usedGb, totalGb, memPercent),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = accentColor,
+                    )
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                LinearProgressIndicator(
+                    progress = { memProgress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(999.dp)),
+                    color = accentColor,
+                    trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        QuickMenuSectionHeader(
+            title = if (processes.isEmpty()) {
+                stringResource(R.string.quick_menu_tab_processes)
+            } else {
+                stringResource(R.string.processes_count, processes.size)
+            },
+        )
+
+        if (processes.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 16.dp),
+                contentAlignment = Alignment.TopStart,
+            ) {
+                Text(
+                    text = if (winHandler == null) {
+                        stringResource(R.string.processes_empty)
+                    } else {
+                        stringResource(R.string.main_loading)
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else {
+            processes.forEachIndexed { index, process ->
+                QuickMenuProcessRow(
+                    process = process,
+                    accentColor = accentColor,
+                    onBringToFront = { winHandler?.bringToFront(process.name) },
+                    onKill = { killConfirmProcess = process },
+                    focusRequester = if (index == 0) firstItemFocusRequester else null,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuickMenuProcessRow(
+    process: ProcessInfo,
+    accentColor: Color,
+    onBringToFront: () -> Unit,
+    onKill: () -> Unit,
+    modifier: Modifier = Modifier,
+    focusRequester: FocusRequester? = null,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    val dangerColor = PluviaTheme.colors.accentDanger
+    val shape = RoundedCornerShape(12.dp)
+    val processName = process.name + if (process.wow64Process) " *32" else ""
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 2.dp)
+            .then(
+                if (isFocused) {
+                    Modifier.border(
+                        BorderStroke(
+                            2.dp,
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primary,
+                                    MaterialTheme.colorScheme.tertiary,
+                                ),
+                            ),
+                        ),
+                        shape,
+                    )
+                } else {
+                    Modifier
+                },
+            )
+            .clip(shape)
+            .background(
+                if (isFocused) {
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            accentColor.copy(alpha = 0.12f),
+                            accentColor.copy(alpha = 0.04f),
+                        ),
+                    )
+                } else {
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f),
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.10f),
+                        ),
+                    )
+                },
+            )
+            .then(
+                if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier,
+            )
+            .focusable(interactionSource = interactionSource)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        // Process icon
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(
+                    if (isFocused) accentColor.copy(alpha = 0.18f)
+                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Default.Memory,
+                contentDescription = null,
+                tint = if (isFocused) accentColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+
+        // Name + PID
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = processName,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (isFocused) accentColor else MaterialTheme.colorScheme.onSurface,
+                fontWeight = if (isFocused) FontWeight.SemiBold else FontWeight.Medium,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+            Text(
+                text = stringResource(R.string.processes_pid, process.pid),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        // Memory usage
+        Text(
+            text = process.getFormattedMemoryUsage(),
+            style = MaterialTheme.typography.labelMedium,
+            color = if (isFocused) accentColor else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        // Actions
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            QuickMenuProcessActionButton(
+                icon = Icons.Default.OpenInFull,
+                contentDescription = stringResource(R.string.processes_bring_to_front),
+                tint = accentColor,
+                onClick = onBringToFront,
+            )
+            QuickMenuProcessActionButton(
+                icon = Icons.Default.Close,
+                contentDescription = stringResource(R.string.processes_kill),
+                tint = dangerColor,
+                onClick = onKill,
+            )
+        }
+    }
+}
+
+@Composable
+private fun QuickMenuProcessActionButton(
+    icon: ImageVector,
+    contentDescription: String,
+    tint: Color,
+    onClick: () -> Unit,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+
+    Box(
+        modifier = Modifier
+            .size(32.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(
+                if (isFocused) tint.copy(alpha = 0.18f)
+                else tint.copy(alpha = 0.08f),
+            )
+            .border(
+                width = if (isFocused) 2.dp else 1.dp,
+                color = if (isFocused) tint.copy(alpha = 0.7f) else tint.copy(alpha = 0.25f),
+                shape = RoundedCornerShape(8.dp),
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+            )
+            .focusable(interactionSource = interactionSource),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = if (isFocused) tint else tint.copy(alpha = 0.8f),
+            modifier = Modifier.size(16.dp),
+        )
+    }
+}
+
 
 @Composable
 private fun PerformanceHudQuickMenuTab(

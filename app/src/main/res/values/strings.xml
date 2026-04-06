@@ -263,6 +263,14 @@
     <string name="screen_effects_close">Close</string>
     <string name="quick_menu_tab_general">General</string>
     <string name="quick_menu_tab_controller">Controller</string>
+    <string name="quick_menu_tab_processes">Processes</string>
+    <string name="processes_system_memory">System Memory</string>
+    <string name="processes_empty">No processes found.</string>
+    <string name="processes_count">Processes · %d</string>
+    <string name="processes_pid">PID %d</string>
+    <string name="processes_bring_to_front">Bring to front</string>
+    <string name="processes_kill">Kill process</string>
+    <string name="processes_kill_confirm">End process \u201C%s\u201D?</string>
     <string name="performance_hud">Performance HUD</string>
     <string name="performance_hud_description">Show or hide the in-game overlay.</string>
     <string name="performance_hud_presets">Presets</string>
