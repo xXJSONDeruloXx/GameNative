@@ -15,6 +15,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
@@ -88,10 +89,11 @@ import app.gamenative.utils.MathUtils.normalizedProgress
 import com.winlator.renderer.GLRenderer
 import com.winlator.winhandler.ProcessInfo
 import com.winlator.winhandler.WinHandler
-import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.withContext
+import java.io.File
 import kotlin.math.roundToInt
 
 object QuickMenuAction {
@@ -580,57 +582,24 @@ private fun ProcessesQuickMenuTab(
     val scrollState = rememberScrollState()
 
     var processes by remember { mutableStateOf<List<ProcessInfo>>(emptyList()) }
+    var hasReceivedData by remember { mutableStateOf(false) }
     var memoryInfo by remember { mutableStateOf<ActivityManager.MemoryInfo?>(null) }
     var killConfirmProcess by remember { mutableStateOf<ProcessInfo?>(null) }
 
-    // Poll process list and memory while this tab is visible.
-    LaunchedEffect(winHandler) {
-        if (winHandler == null) return@LaunchedEffect
+    // Read processes directly from /proc — GameNative's winhandler.exe does not respond
+    // to the LIST_PROCESSES UDP request, so we bypass WinHandler entirely here.
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            val procs = withContext(Dispatchers.IO) { readWineProcesses() }
+            processes = procs
+            hasReceivedData = true
 
-        val previousListener = winHandler.getOnGetProcessInfoListener()
-        val lock = Any()
-        var pendingDeferred: CompletableDeferred<List<ProcessInfo>>? = null
-        var accumBuffer = mutableListOf<ProcessInfo>()
-        var expectedCount = 0
+            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            val mi = ActivityManager.MemoryInfo()
+            am.getMemoryInfo(mi)
+            memoryInfo = mi
 
-        winHandler.setOnGetProcessInfoListener { index, count, processInfo ->
-            previousListener?.onGetProcessInfo(index, count, processInfo)
-            synchronized(lock) {
-                val d = pendingDeferred ?: return@setOnGetProcessInfoListener
-                if (d.isCompleted) return@setOnGetProcessInfoListener
-                if (count == 0) {
-                    d.complete(emptyList())
-                    return@setOnGetProcessInfoListener
-                }
-                if (index == 0) {
-                    accumBuffer = mutableListOf()
-                    expectedCount = count
-                }
-                if (processInfo != null) accumBuffer.add(processInfo)
-                if (accumBuffer.size >= expectedCount) d.complete(accumBuffer.toList())
-            }
-        }
-
-        try {
-            while (isActive) {
-                val deferred = CompletableDeferred<List<ProcessInfo>>()
-                synchronized(lock) { pendingDeferred = deferred }
-                winHandler.listProcesses()
-
-                val snapshot = withTimeoutOrNull(2_000) { deferred.await() }
-                if (snapshot != null) {
-                    processes = snapshot.sortedByDescending { it.memoryUsage }
-                }
-
-                val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-                val mi = ActivityManager.MemoryInfo()
-                am.getMemoryInfo(mi)
-                memoryInfo = mi
-
-                delay(1_500)
-            }
-        } finally {
-            winHandler.setOnGetProcessInfoListener(previousListener)
+            delay(1_500)
         }
     }
 
@@ -641,7 +610,7 @@ private fun ProcessesQuickMenuTab(
             confirmButton = {
                 androidx.compose.material3.TextButton(
                     onClick = {
-                        winHandler?.killProcess(target.name)
+                        android.os.Process.sendSignal(target.pid, 15) // SIGTERM
                         killConfirmProcess = null
                     },
                 ) {
@@ -706,15 +675,23 @@ private fun ProcessesQuickMenuTab(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    Column {
+                        Text(
+                            text = stringResource(R.string.processes_system_memory),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        Text(
+                            text = "%.1f / %.1f GB".format(usedGb, totalGb),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     Text(
-                        text = stringResource(R.string.processes_system_memory),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.Medium,
-                    )
-                    Text(
-                        text = "%.1f / %.1f GB · %d%%".format(usedGb, totalGb, memPercent),
-                        style = MaterialTheme.typography.labelLarge,
+                        text = "%d%%".format(memPercent),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
                         color = accentColor,
                     )
                 }
@@ -734,14 +711,14 @@ private fun ProcessesQuickMenuTab(
         Spacer(modifier = Modifier.height(4.dp))
 
         QuickMenuSectionHeader(
-            title = if (processes.isEmpty()) {
+            title = if (!hasReceivedData) {
                 stringResource(R.string.quick_menu_tab_processes)
             } else {
                 stringResource(R.string.processes_count, processes.size)
             },
         )
 
-        if (processes.isEmpty()) {
+        if (!hasReceivedData) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -770,6 +747,68 @@ private fun ProcessesQuickMenuTab(
             }
         }
     }
+}
+
+private fun readWineProcesses(): List<ProcessInfo> {
+    val procDir = File("/proc")
+    val pidDirs = try {
+        procDir.listFiles { _, name -> name.all { it.isDigit() } } ?: return emptyList()
+    } catch (e: Exception) {
+        return emptyList()
+    }
+
+    val result = mutableListOf<ProcessInfo>()
+    for (pidDir in pidDirs) {
+        try {
+            val pid = pidDir.name.toIntOrNull() ?: continue
+
+            // Quick filter: skip non-wine/exe processes
+            val comm = try { File(pidDir, "comm").readText().trim() } catch (e: Exception) { continue }
+            if (!comm.contains("wine", ignoreCase = true) && !comm.endsWith("exe", ignoreCase = true)) continue
+
+            // Try to get the full process name from cmdline (wine64-preloader wraps the real .exe)
+            val name = try {
+                val bytes = File(pidDir, "cmdline").readBytes()
+                val args = mutableListOf<String>()
+                var start = 0
+                for (i in bytes.indices) {
+                    if (bytes[i] == 0.toByte()) {
+                        val s = String(bytes, start, i - start).trim()
+                        if (s.isNotBlank()) args.add(s)
+                        start = i + 1
+                    }
+                }
+                val exeArg = args.firstOrNull { it.endsWith(".exe", ignoreCase = true) }
+                    ?: args.firstOrNull { it.contains("wine", ignoreCase = true) }
+                    ?: args.firstOrNull()
+                exeArg
+                    ?.substringAfterLast('/')
+                    ?.substringAfterLast('\\')
+                    ?.ifBlank { comm }
+                    ?: comm
+            } catch (e: Exception) {
+                comm
+            }
+
+            // Read resident memory (VmRSS) from /proc/<pid>/status
+            val memBytes = try {
+                var vmRss = 0L
+                File(pidDir, "status").forEachLine { line ->
+                    if (line.startsWith("VmRSS:")) {
+                        vmRss = line.trim().split("\\s+".toRegex()).getOrNull(1)?.toLongOrNull() ?: 0L
+                    }
+                }
+                vmRss * 1024L
+            } catch (e: Exception) {
+                0L
+            }
+
+            result.add(ProcessInfo(pid, name, memBytes, 0, false))
+        } catch (e: Exception) {
+            // Process exited during enumeration
+        }
+    }
+    return result.sortedByDescending { it.memoryUsage }
 }
 
 @Composable
@@ -835,34 +874,16 @@ private fun QuickMenuProcessRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        // Process icon
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .clip(CircleShape)
-                .background(
-                    if (isFocused) accentColor.copy(alpha = 0.18f)
-                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Default.Memory,
-                contentDescription = null,
-                tint = if (isFocused) accentColor else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp),
-            )
-        }
-
         // Name + PID
-        Column(modifier = Modifier.weight(1f)) {
+        Column(modifier = Modifier.weight(1f).padding(end = 4.dp)) {
             Text(
                 text = processName,
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (isFocused) accentColor else MaterialTheme.colorScheme.onSurface,
                 fontWeight = if (isFocused) FontWeight.SemiBold else FontWeight.Medium,
                 maxLines = 1,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Clip,
+                modifier = Modifier.basicMarquee(),
             )
             Text(
                 text = stringResource(R.string.processes_pid, process.pid),

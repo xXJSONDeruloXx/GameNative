@@ -315,6 +315,10 @@ public class WinHandler {
         }
     }
 
+    public boolean isInitReceived() {
+        return initReceived;
+    }
+
     public OnGetProcessInfoListener getOnGetProcessInfoListener() {
         return onGetProcessInfoListener;
     }
