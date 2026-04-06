@@ -47,8 +47,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Gamepad
 import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.Launch
 import androidx.compose.material.icons.filled.Memory
-import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material3.HorizontalDivider
@@ -718,6 +718,20 @@ private fun ProcessesQuickMenuTab(
             },
         )
 
+        // Launch Task Manager — opens the Windows Task Manager inside Wine.
+        if (winHandler != null) {
+            QuickMenuItemRow(
+                item = QuickMenuItem(
+                    id = -1,
+                    icon = Icons.Default.Launch,
+                    labelResId = R.string.processes_launch_taskmgr,
+                    accentColor = PluviaTheme.colors.accentWarning,
+                ),
+                onClick = { winHandler.exec("taskmgr.exe") },
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+        }
+
         if (!hasReceivedData) {
             Box(
                 modifier = Modifier
@@ -726,11 +740,7 @@ private fun ProcessesQuickMenuTab(
                 contentAlignment = Alignment.TopStart,
             ) {
                 Text(
-                    text = if (winHandler == null) {
-                        stringResource(R.string.processes_empty)
-                    } else {
-                        stringResource(R.string.main_loading)
-                    },
+                    text = stringResource(R.string.main_loading),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -740,7 +750,6 @@ private fun ProcessesQuickMenuTab(
                 QuickMenuProcessRow(
                     process = process,
                     accentColor = accentColor,
-                    onBringToFront = { winHandler?.bringToFront(process.name) },
                     onKill = { killConfirmProcess = process },
                     focusRequester = if (index == 0) firstItemFocusRequester else null,
                 )
@@ -815,7 +824,6 @@ private fun readWineProcesses(): List<ProcessInfo> {
 private fun QuickMenuProcessRow(
     process: ProcessInfo,
     accentColor: Color,
-    onBringToFront: () -> Unit,
     onKill: () -> Unit,
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
@@ -901,12 +909,6 @@ private fun QuickMenuProcessRow(
 
         // Actions
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            QuickMenuProcessActionButton(
-                icon = Icons.Default.OpenInFull,
-                contentDescription = stringResource(R.string.processes_bring_to_front),
-                tint = accentColor,
-                onClick = onBringToFront,
-            )
             QuickMenuProcessActionButton(
                 icon = Icons.Default.Close,
                 contentDescription = stringResource(R.string.processes_kill),

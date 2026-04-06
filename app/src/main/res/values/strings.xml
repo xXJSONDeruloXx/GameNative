@@ -270,6 +270,7 @@
     <string name="processes_pid">PID %d</string>
     <string name="processes_bring_to_front">Bring to front</string>
     <string name="processes_kill">Kill process</string>
+    <string name="processes_launch_taskmgr">Launch Task Manager</string>
     <string name="processes_kill_confirm">End process \u201C%s\u201D?</string>
     <string name="performance_hud">Performance HUD</string>
     <string name="performance_hud_description">Show or hide the in-game overlay.</string>
