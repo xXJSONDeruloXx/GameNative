@@ -412,6 +412,13 @@ object PrefManager {
             setPref(PERFORMANCE_HUD_SHOW_GPU_USAGE_GRAPH, value)
         }
 
+    private val PERFORMANCE_HUD_SHOW_RENDERER = booleanPreferencesKey("performance_hud_show_renderer")
+    var performanceHudShowRenderer: Boolean
+        get() = getPref(PERFORMANCE_HUD_SHOW_RENDERER, false)
+        set(value) {
+            setPref(PERFORMANCE_HUD_SHOW_RENDERER, value)
+        }
+
     private val PERFORMANCE_HUD_BACKGROUND_OPACITY = floatPreferencesKey("performance_hud_background_opacity")
     var performanceHudBackgroundOpacity: Float
         get() = getPref(PERFORMANCE_HUD_BACKGROUND_OPACITY, 0.72f)

@@ -11,6 +11,7 @@ import android.graphics.Path
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.BatteryManager
+import android.os.SystemClock
 import android.text.TextUtils
 import android.text.format.DateFormat
 import android.util.TypedValue
@@ -105,6 +106,7 @@ class PerformanceHudView(
     private val cpuTempMetric = createMetricViews(MetricId.CPU_TEMP, 0xFFBDBDBD.toInt())
     private val gpuTempMetric = createMetricViews(MetricId.GPU_TEMP, 0xFFBDBDBD.toInt())
     private val batteryTempMetric = createMetricViews(MetricId.BATTERY_TEMP, 0xFFBDBDBD.toInt())
+    private val rendererMetric = createMetricViews(MetricId.RENDERER, 0xFFCE93D8.toInt())
 
     private val allMetrics = listOf(
         fpsMetric,
@@ -118,6 +120,7 @@ class PerformanceHudView(
         cpuTempMetric,
         gpuTempMetric,
         batteryTempMetric,
+        rendererMetric,
     )
 
     private val allTextRows = allMetrics.flatMap { listOf(it.stackedText, it.compactText) }
@@ -125,6 +128,13 @@ class PerformanceHudView(
 
     private var lastCpuTotal: Long? = null
     private var lastCpuIdle: Long? = null
+
+    // ── GPU load cache: hold last good value for up to 5 s to prevent N/A flickering
+    private var lastGoodGpuPercent: Int? = null
+    private var lastGoodGpuTimeMs: Long = 0L
+
+    @Volatile
+    private var rendererName: String? = null
 
     init {
         background = backgroundDrawable
@@ -136,6 +146,14 @@ class PerformanceHudView(
     }
 
     fun isCompactMode(): Boolean = isCompactMode
+
+    /**
+     * Set the renderer/translation-layer label shown in the HUD (e.g. "DXVK+Turnip").
+     * Pass null to hide the row regardless of config.
+     */
+    fun setRendererLabel(label: String?) {
+        rendererName = label
+    }
 
     fun setCompactMode(compactMode: Boolean) {
         if (isCompactMode == compactMode) {
@@ -299,6 +317,7 @@ class PerformanceHudView(
             clock = readClockText(),
             cpuTemp = readCpuTempC()?.let { "CPU TEMP ${it}°C" },
             gpuTemp = readGpuTempC()?.let { "GPU TEMP ${it}°C" },
+            renderer = rendererName?.let { "DRV $it" },
         )
     }
 
@@ -389,6 +408,7 @@ class PerformanceHudView(
         updateMetricText(clockMetric, snapshot.clock)
         updateMetricText(cpuTempMetric, snapshot.cpuTemp)
         updateMetricText(gpuTempMetric, snapshot.gpuTemp)
+        updateMetricText(rendererMetric, snapshot.renderer)
     }
 
     private fun updateMetricText(metric: MetricViews, text: String?) {
@@ -410,6 +430,7 @@ class PerformanceHudView(
             addMetricIfVisible(cpuTempMetric, config.showCpuTemperature)
             addMetricIfVisible(gpuTempMetric, config.showGpuTemperature)
             addMetricIfVisible(batteryTempMetric, config.showBatteryTemperature)
+            addMetricIfVisible(rendererMetric, config.showRenderer)
         }
 
         val signatures = visibleMetrics.map {
@@ -603,20 +624,66 @@ class PerformanceHudView(
         return (((totalDiff - idleDiff).coerceAtLeast(0L)) * 100L / totalDiff).toInt().coerceIn(0, 100)
     }
 
+    /**
+     * Try to read GPU load from multiple sysfs paths, in priority order:
+     *   1. Adreno busy/total ratio  (kgsl-3d0/gpubusy)
+     *   2. Adreno single-int %      (gpu_busy_percentage, devfreq/gpu_load)
+     *   3. Mali utilisation         (mali0/device/utilisation)
+     *
+     * Returns the raw percent on success, null if every path fails.
+     */
+    private fun tryReadGpuPercent(): Int? {
+        // 1. Adreno: ratio of busy ticks / total ticks
+        readFirstLine("/sys/class/kgsl/kgsl-3d0/gpubusy")?.let { raw ->
+            val parts = raw.trim().split(Regex("\\s+"))
+            if (parts.size >= 2) {
+                val busy = parts[0].toLongOrNull()
+                val total = parts[1].toLongOrNull()
+                if (busy != null && total != null && total > 0L) {
+                    return ((busy * 100L) / total).toInt().coerceIn(0, 100)
+                }
+            }
+        }
+
+        // 2. Adreno: single integer percentage
+        for (path in listOf(
+            "/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage",
+            "/sys/class/kgsl/kgsl-3d0/devfreq/gpu_load",
+        )) {
+            readFirstLine(path)
+                ?.trim()
+                ?.replace(Regex("[^0-9]"), "")
+                ?.toIntOrNull()
+                ?.coerceIn(0, 100)
+                ?.let { return it }
+        }
+
+        // 3. Mali: utilisation
+        readFirstLine("/sys/class/misc/mali0/device/utilisation")
+            ?.trim()
+            ?.replace(Regex("[^0-9]"), "")
+            ?.toIntOrNull()
+            ?.coerceIn(0, 100)
+            ?.let { return it }
+
+        return null
+    }
+
+    /**
+     * Read GPU load with a 5-second stale-value cache.
+     * Transient sysfs failures won't cause the GPU row to flicker to N/A.
+     */
     private fun readGpuUsagePercent(): Int? {
-        val raw = readFirstLine("/sys/class/kgsl/kgsl-3d0/gpubusy") ?: return null
-        val parts = raw.trim().split(Regex("\\s+"))
-        if (parts.size < 2) {
-            return null
+        val now = SystemClock.elapsedRealtime()
+        val fresh = tryReadGpuPercent()
+        return if (fresh != null) {
+            lastGoodGpuPercent = fresh
+            lastGoodGpuTimeMs = now
+            fresh
+        } else {
+            val cached = lastGoodGpuPercent
+            if (cached != null && (now - lastGoodGpuTimeMs) < GPU_CACHE_DURATION_MS) cached else null
         }
-
-        val busy = parts[0].toLongOrNull() ?: return null
-        val total = parts[1].toLongOrNull() ?: return null
-        if (total <= 0L) {
-            return null
-        }
-
-        return ((busy * 100L) / total).toInt().coerceIn(0, 100)
     }
 
     private fun readUsedRamText(): String {
@@ -961,6 +1028,7 @@ class PerformanceHudView(
 
     private companion object {
         const val UPDATE_INTERVAL_MS = 1_000L
+        const val GPU_CACHE_DURATION_MS = 5_000L
         const val MIN_BACKGROUND_OPACITY = 0.0f
         const val MAX_BACKGROUND_OPACITY = 1.0f
         const val MAX_RUNTIME_HOURS = 72.0

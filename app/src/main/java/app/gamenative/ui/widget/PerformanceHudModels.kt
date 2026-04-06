@@ -12,6 +12,7 @@ internal enum class MetricId {
     CLOCK,
     CPU_TEMP,
     GPU_TEMP,
+    RENDERER,
 }
 
 internal enum class GraphScaleMode {
@@ -41,6 +42,7 @@ internal data class HudSnapshot(
     val clock: String,
     val cpuTemp: String?,
     val gpuTemp: String?,
+    val renderer: String?,
 )
 
 internal data class HudAppearance(

@@ -396,6 +396,7 @@ fun XServerScreen(
             showFrameRateGraph = PrefManager.performanceHudShowFrameRateGraph,
             showCpuUsageGraph = PrefManager.performanceHudShowCpuUsageGraph,
             showGpuUsageGraph = PrefManager.performanceHudShowGpuUsageGraph,
+            showRenderer = PrefManager.performanceHudShowRenderer,
             backgroundOpacity = PrefManager.performanceHudBackgroundOpacity,
             colorIntensity = PrefManager.performanceHudColorIntensity,
             showTextOutline = PrefManager.performanceHudShowTextOutline,
@@ -429,6 +430,7 @@ fun XServerScreen(
         PrefManager.performanceHudShowFrameRateGraph = config.showFrameRateGraph
         PrefManager.performanceHudShowCpuUsageGraph = config.showCpuUsageGraph
         PrefManager.performanceHudShowGpuUsageGraph = config.showGpuUsageGraph
+        PrefManager.performanceHudShowRenderer = config.showRenderer
         PrefManager.performanceHudBackgroundOpacity = config.backgroundOpacity
         PrefManager.performanceHudColorIntensity = config.colorIntensity
         PrefManager.performanceHudShowTextOutline = config.showTextOutline
@@ -526,6 +528,7 @@ fun XServerScreen(
 
         targetLayout.addView(hud, layoutParams)
         performanceHudView = hud
+        hud.setRendererLabel(buildRendererLabel(xServerState.value.graphicsDriver, xServerState.value.dxwrapper))
         hud.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             if (!isDraggingPerformanceHud) restorePerformanceHudPosition()
         }
@@ -4495,4 +4498,26 @@ private fun setImagefsContainerVariant(context: Context, container: Container) {
     val containerVariant = container.containerVariant
     imageFs.createVariantFile(containerVariant)
     imageFs.createArchFile(container.wineVersion)
+}
+
+/**
+ * Build a short renderer label for the performance HUD from the container's
+ * graphics driver and D3D wrapper settings, e.g. "DXVK+Turnip" or "VKD3D+Vortek".
+ */
+private fun buildRendererLabel(graphicsDriver: String, dxwrapper: String): String {
+    val gpu = when {
+        graphicsDriver.contains("turnip", ignoreCase = true) -> "Turnip"
+        graphicsDriver.contains("virgl", ignoreCase = true) -> "VirGL"
+        graphicsDriver.contains("zink", ignoreCase = true) -> "Zink"
+        graphicsDriver == "vortek" || graphicsDriver == "adreno" || graphicsDriver == "sd-8-elite" -> "Vortek"
+        graphicsDriver.isNotBlank() -> graphicsDriver.replaceFirstChar { it.uppercase() }
+        else -> "GL"
+    }
+    val d3d = when {
+        dxwrapper.contains("vkd3d", ignoreCase = true) -> "VKD3D"
+        dxwrapper.contains("dxvk", ignoreCase = true) -> "DXVK"
+        dxwrapper.equals("d8vk", ignoreCase = true) -> "D8VK"
+        else -> ""
+    }
+    return if (d3d.isEmpty()) gpu else "$d3d+$gpu"
 }
