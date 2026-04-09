@@ -20,6 +20,7 @@ import android.view.WindowInsets
 import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.hardware.display.DisplayManager
 import android.hardware.input.InputManager
 import android.view.InputDevice
 import androidx.activity.ComponentActivity
@@ -42,6 +43,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -193,6 +195,7 @@ import java.util.Arrays
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.io.path.name
+import kotlin.math.roundToInt
 import kotlin.text.lowercase
 import com.winlator.PrefManager as WinlatorPrefManager
 
@@ -206,6 +209,28 @@ private val isExiting = AtomicBoolean(false)
 private const val EXIT_PROCESS_TIMEOUT_MS = 30_000L
 private const val EXIT_PROCESS_POLL_INTERVAL_MS = 1_000L
 private const val EXIT_PROCESS_RESPONSE_TIMEOUT_MS = 2_000L
+private const val DEFAULT_FPS_LIMITER_MAX_HZ = 60
+
+private fun detectMaxRefreshRateHz(context: Context, attachedView: View?): Int {
+    val display = attachedView?.display
+        ?: context.display
+        ?: ContextCompat.getSystemService(context, DisplayManager::class.java)?.getDisplay(Display.DEFAULT_DISPLAY)
+
+    val refreshRate = when {
+        display == null -> DEFAULT_FPS_LIMITER_MAX_HZ.toFloat()
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.M -> {
+            val supportedMax = display.supportedModes.maxOfOrNull { it.refreshRate } ?: display.refreshRate
+            if (supportedMax.isFinite() && supportedMax > 0f) supportedMax else display.refreshRate
+        }
+        else -> display.refreshRate
+    }
+
+    return refreshRate
+        .takeIf { it.isFinite() && it > 0f }
+        ?.roundToInt()
+        ?.coerceAtLeast(30)
+        ?: DEFAULT_FPS_LIMITER_MAX_HZ
+}
 
 private data class XServerViewReleaseBinding(
     val xServerView: XServerView,
@@ -505,6 +530,9 @@ fun XServerScreen(
     var hasInternalTouchpad by remember { mutableStateOf(false) }
     var hasUpdatedScreenGamepad by remember { mutableStateOf(false) }
     var isPerformanceHudEnabled by remember { mutableStateOf(PrefManager.showFps) }
+    val shouldTrackDisplayedFrames = remember { AtomicBoolean(false) }
+    var detectedMaxRefreshRateHz by remember { mutableIntStateOf(detectMaxRefreshRateHz(context, null)) }
+    var fpsLimiterValue by rememberSaveable { mutableIntStateOf(0) }
 
     fun loadPerformanceHudConfig(): PerformanceHudConfig {
         return PerformanceHudConfig(
@@ -565,6 +593,22 @@ fun XServerScreen(
         performanceHudConfig = config
         persistPerformanceHudConfig(config)
         performanceHudView?.setConfig(config)
+    }
+
+    fun applyFpsLimiter(limit: Int) {
+        val sanitizedLimit = if (limit <= 0) 0 else limit.coerceAtMost(detectedMaxRefreshRateHz)
+        fpsLimiterValue = sanitizedLimit
+        xServerView?.setFrameRateLimit(sanitizedLimit)
+    }
+
+    LaunchedEffect(xServerView) {
+        val detectedMax = detectMaxRefreshRateHz(context, xServerView)
+        detectedMaxRefreshRateHz = detectedMax
+        val clampedLimit = if (fpsLimiterValue <= 0) 0 else fpsLimiterValue.coerceAtMost(detectedMax)
+        if (clampedLimit != fpsLimiterValue) {
+            fpsLimiterValue = clampedLimit
+        }
+        xServerView?.setFrameRateLimit(clampedLimit)
     }
 
     fun restorePerformanceHudPosition() {
@@ -1487,8 +1531,14 @@ fun XServerScreen(
                 xServerToUse,
             ).apply {
                 xServerView = this
+                setFrameRateLimit(fpsLimiterValue)
                 val renderer = this.renderer
                 renderer.isCursorVisible = false
+                renderer.setOnFrameRenderedListener {
+                    if (shouldTrackDisplayedFrames.get()) {
+                        frameRating?.update()
+                    }
+                }
                 getxServer().renderer = renderer
                 PluviaApp.touchpadView = TouchpadView(context, getxServer(), PrefManager.getBoolean("capture_pointer_on_external_mouse", true))
                 frameLayout.addView(PluviaApp.touchpadView)
@@ -1602,11 +1652,6 @@ fun XServerScreen(
                             if (!xServerState.value.winStarted && window.isApplicationWindow()) {
                                 if (!container.isDisableMouseInput && !container.isTouchscreenMode) renderer?.setCursorVisible(true)
                                 xServerState.value.winStarted = true
-                            }
-                            if (window.id == frameRatingWindowId) {
-                                (context as? Activity)?.runOnUiThread {
-                                    frameRating?.update()
-                                }
                             }
                         }
 
@@ -2031,10 +2076,12 @@ fun XServerScreen(
             gameRoot = null
             removePerformanceHud()
             performanceHudHost = null
+            shouldTrackDisplayedFrames.set(false)
 
             val releaseBinding = view.tag as? XServerViewReleaseBinding
             releaseBinding?.let { binding ->
                 // Remove the WindowManager listener associated with the released AndroidView.
+                binding.xServerView.renderer.setOnFrameRenderedListener(null)
                 binding.xServerView.getxServer().windowManager.removeOnWindowModificationListener(binding.windowModificationListener)
                 if (PluviaApp.xServerView === binding.xServerView) {
                     PluviaApp.xServerView = null
@@ -2164,7 +2211,10 @@ fun XServerScreen(
             renderer = xServerView?.renderer,
             isPerformanceHudEnabled = isPerformanceHudEnabled,
             performanceHudConfig = performanceHudConfig,
+            fpsLimiterValue = fpsLimiterValue,
+            fpsLimiterMax = detectedMaxRefreshRateHz,
             onPerformanceHudConfigChanged = ::applyPerformanceHudConfig,
+            onFpsLimiterChanged = ::applyFpsLimiter,
             hasPhysicalController = hasPhysicalController,
             activeToggleIds = buildSet {
                 if (areControlsVisible) add(QuickMenuAction.INPUT_CONTROLS)
