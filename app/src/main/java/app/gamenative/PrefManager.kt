@@ -1188,4 +1188,16 @@ object PrefManager {
         get() = getPref(ACHIEVEMENT_NOTIFICATION_POSITION, "bottom_right")
         set(value) { setPref(ACHIEVEMENT_NOTIFICATION_POSITION, value) }
 
+    private val ACHIEVEMENT_SOUND_ENABLED = booleanPreferencesKey("achievement_sound_enabled")
+    var achievementSoundEnabled: Boolean
+        get() = getPref(ACHIEVEMENT_SOUND_ENABLED, true)
+        set(value) { setPref(ACHIEVEMENT_SOUND_ENABLED, value) }
+
+    // Persisted URI string for a user-selected custom achievement sound.
+    // Empty string means use the built-in default sound.
+    private val ACHIEVEMENT_SOUND_URI = stringPreferencesKey("achievement_sound_uri")
+    var achievementSoundUri: String
+        get() = getPref(ACHIEVEMENT_SOUND_URI, "")
+        set(value) { setPref(ACHIEVEMENT_SOUND_URI, value) }
+
 }

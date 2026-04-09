@@ -41,6 +41,8 @@ import com.skydoves.landscapist.ImageOptions
 import com.skydoves.landscapist.coil.CoilImage
 import kotlinx.coroutines.delay
 import app.gamenative.PrefManager
+import androidx.compose.ui.platform.LocalContext
+import app.gamenative.ui.util.AchievementSoundPlayer
 
 
 internal val ACHIEVEMENT_NOTIFICATION_POSITION: Map<String, Int> = mapOf(
@@ -55,10 +57,12 @@ fun BoxScope.AchievementOverlay() {
     var current by remember { mutableStateOf<AchievementNotification?>(null) }
     var visible by remember { mutableStateOf(false) }
 
+    val context = LocalContext.current
     LaunchedEffect(Unit) {
         AchievementNotificationManager.notifications.collect { notification ->
             current = notification
             visible = true
+            AchievementSoundPlayer.play(context)
             delay(4000)
             visible = false
             delay(500)

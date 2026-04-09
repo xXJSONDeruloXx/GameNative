@@ -75,6 +75,8 @@ import app.gamenative.utils.LocaleHelper
 import app.gamenative.service.epic.EpicAuthManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import kotlinx.coroutines.CoroutineScope
@@ -228,6 +230,72 @@ fun SettingsGroupInterface(
             },
             colors = settingsTileColorsAlt(),
         )
+
+        // Achievement sound toggle
+        var achievementSoundEnabled by rememberSaveable { mutableStateOf(PrefManager.achievementSoundEnabled) }
+        SettingsSwitch(
+            colors = settingsTileColorsAlt(),
+            title = { Text(text = stringResource(R.string.settings_achievement_sound_title)) },
+            subtitle = { Text(text = stringResource(R.string.settings_achievement_sound_subtitle)) },
+            state = achievementSoundEnabled,
+            onCheckedChange = {
+                achievementSoundEnabled = it
+                PrefManager.achievementSoundEnabled = it
+            },
+        )
+
+        // Custom achievement sound file picker (only shown when sound is enabled)
+        if (achievementSoundEnabled) {
+            var customSoundUri by rememberSaveable { mutableStateOf(PrefManager.achievementSoundUri) }
+            val soundPickerLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.OpenDocument(),
+            ) { uri ->
+                if (uri != null) {
+                    // Persist access so the URI survives app restarts
+                    context.contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                    )
+                    customSoundUri = uri.toString()
+                    PrefManager.achievementSoundUri = uri.toString()
+                }
+            }
+            SettingsMenuLink(
+                colors = settingsTileColorsAlt(),
+                title = { Text(text = stringResource(R.string.settings_achievement_sound_custom_title)) },
+                subtitle = {
+                    if (customSoundUri.isEmpty()) {
+                        Text(text = stringResource(R.string.settings_achievement_sound_default))
+                    } else {
+                        val displayName = remember(customSoundUri) {
+                            runCatching {
+                                val cursor = context.contentResolver.query(
+                                    Uri.parse(customSoundUri),
+                                    arrayOf(OpenableColumns.DISPLAY_NAME),
+                                    null, null, null,
+                                )
+                                cursor?.use { c ->
+                                    if (c.moveToFirst()) c.getString(0) else null
+                                }
+                            }.getOrNull() ?: customSoundUri.substringAfterLast('/')
+                        }
+                        Text(text = displayName ?: customSoundUri)
+                    }
+                },
+                onClick = { soundPickerLauncher.launch(arrayOf("audio/*")) },
+            )
+            // Clear button shown only when a custom sound is set
+            if (customSoundUri.isNotEmpty()) {
+                SettingsMenuLink(
+                    colors = settingsTileColorsAlt(),
+                    title = { Text(text = stringResource(R.string.settings_achievement_sound_custom_clear)) },
+                    onClick = {
+                        customSoundUri = ""
+                        PrefManager.achievementSoundUri = ""
+                    },
+                )
+            }
+        }
 
         SettingsSwitch(
             colors = settingsTileColorsAlt(),

@@ -660,6 +660,12 @@
     <string name="achievement_position_top_right">Top Right</string>
     <string name="achievement_position_bottom_left">Bottom Left</string>
     <string name="achievement_position_bottom_right">Bottom Right</string>
+    <string name="settings_achievement_sound_title">Achievement Sound</string>
+    <string name="settings_achievement_sound_subtitle">Play a sound when an achievement is unlocked</string>
+    <string name="settings_achievement_sound_custom_title">Custom Sound</string>
+    <string name="settings_achievement_sound_custom_subtitle">Tap to choose an audio file from storage</string>
+    <string name="settings_achievement_sound_custom_clear">Clear (use default)</string>
+    <string name="settings_achievement_sound_default">Default</string>
     <string name="allow_steam_updates">Allow Steam updates</string>
     <string name="allow_steam_updates_description">Updates Steam to the latest version. Significantly reduces performance.</string>
     <string name="steam_type">Steam Type</string>
