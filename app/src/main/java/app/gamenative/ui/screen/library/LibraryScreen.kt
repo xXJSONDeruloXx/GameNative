@@ -908,6 +908,7 @@ private fun LibraryScreenContent(
                             firstCarouselItemFocusRequester = carouselFocusRequester,
                             focusTargetListIndex = currentCarouselFocusTargetIndex(),
                             onFocusedIndexChanged = { carouselFocusTargetListIndex = it },
+                            isOverlayVisible = state.isOptionsPanelOpen || isSystemMenuOpen,
                         )
                     } else {
                         LibraryListPane(

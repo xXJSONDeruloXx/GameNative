@@ -35,6 +35,7 @@ internal fun LibraryDynamicBackdrop(
     appInfo: LibraryItem?,
     imageRefreshCounter: Long,
     modifier: Modifier = Modifier,
+    isOverlayVisible: Boolean = false,
 ) {
     val context = LocalContext.current
 
@@ -76,7 +77,10 @@ internal fun LibraryDynamicBackdrop(
                                 scaleX = 1.06f
                                 scaleY = 1.06f
                             }
-                            .blur(DYNAMIC_BACKDROP_BLUR_RADIUS),
+                            .then(
+                                if (isOverlayVisible) Modifier
+                                else Modifier.blur(DYNAMIC_BACKDROP_BLUR_RADIUS)
+                            ),
                         imageModel = { currentImageUrl },
                         imageOptions = ImageOptions(
                             contentScale = ContentScale.Crop,

@@ -88,6 +88,13 @@ private const val CAROUSEL_BADGE_RESERVED_HEIGHT = 0f
 private const val CAROUSEL_MOUSE_WHEEL_SCROLL_MULTIPLIER = 72f
 private const val CAROUSEL_MOUSE_DRAG_SLOP_PX = 8f
 
+/** Pre-computed transform for a single carousel item, derived from scroll position. */
+private data class CarouselItemTransform(
+    val scale: Float = 1f,
+    val rotationY: Float = 0f,
+    val translationX: Float = 0f,
+    val zOrder: Float = 10f,
+)
 
 private fun Modifier.carouselMouseInput(listState: LazyListState): Modifier =
     pointerInput(listState) {
@@ -210,6 +217,7 @@ internal fun LibraryCarouselPane(
     firstCarouselItemFocusRequester: FocusRequester? = null,
     focusTargetListIndex: Int? = null,
     onFocusedIndexChanged: (Int) -> Unit = {},
+    isOverlayVisible: Boolean = false,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val pullToRefreshState = rememberPullToRefreshState()
@@ -263,6 +271,72 @@ internal fun LibraryCarouselPane(
             layoutInfo.visibleItemsInfo.minByOrNull { itemInfo ->
                 abs(itemInfo.offset + itemInfo.size / 2f - viewportCenter)
             }?.index ?: -1
+        }
+    }
+
+    // Pre-compute all visible item transforms from layout info so the per-item
+    // graphicsLayer doesn't read listState.layoutInfo in the draw phase.
+    // This avoids re-executing heavy 3D transform math when unrelated state
+    // (e.g. isOptionsPanelOpen) triggers a carousel recomposition.
+    val itemTransforms by remember {
+        derivedStateOf {
+            val layoutInfo = listState.layoutInfo
+            val vc = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2f
+            val span = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset)
+                .toFloat().coerceAtLeast(1f)
+            val itemStepDistancePx = (carouselItemSlotWidthPx + carouselItemSpacingPx).coerceAtLeast(1f)
+            val firstVisibleIndex = layoutInfo.visibleItemsInfo.firstOrNull()?.index
+
+            val map = mutableMapOf<Int, CarouselItemTransform>()
+            for (vi in layoutInfo.visibleItemsInfo) {
+                val idx = vi.index
+                val ic = vi.offset + vi.size / 2f
+                val distanceFromCenter = ic - vc
+                val normalizedDistance = (distanceFromCenter / span).coerceIn(-1f, 1f)
+                val distanceInSteps = abs(distanceFromCenter) / itemStepDistancePx
+                val relativeToCenter = if (centeredIndex >= 0) idx - centeredIndex else 0
+                val direction = when {
+                    relativeToCenter < 0 -> 1f
+                    relativeToCenter > 0 -> -1f
+                    normalizedDistance < -0.03f -> 1f
+                    normalizedDistance > 0.03f -> -1f
+                    else -> 0f
+                }
+                val tiltMultiplier = when {
+                    distanceInSteps <= 1f -> distanceInSteps
+                    distanceInSteps <= 2f -> 1f + (distanceInSteps - 1f) * 0.2f
+                    else -> 1.2f + (distanceInSteps - 2f) * 0.15f
+                }.coerceAtMost(79f)
+                val tiltAngle = (CAROUSEL_TILT_ANGLE * tiltMultiplier).coerceAtMost(79f)
+                val scale = interpolateByDistance(
+                    distanceInSteps = distanceInSteps,
+                    centerValue = 1.04f,
+                    firstStepValue = 0.91f,
+                    secondStepValue = 0.86f,
+                    farValue = 0.8f,
+                )
+                val computedRotationY = direction * tiltAngle
+                val computedTranslationX = if (direction == 0f) {
+                    0f
+                } else {
+                    val tiltInfluence = if (CAROUSEL_TILT_ANGLE > 0.1f) tiltAngle / CAROUSEL_TILT_ANGLE else 1f
+                    val baseOffsetRatio = CAROUSEL_SIDE_OFFSET_RATIO + (distanceInSteps * CAROUSEL_STEP_OFFSET_RATIO)
+                    val baseShift = direction * cardWidthPx * baseOffsetRatio * tiltInfluence
+                    val edgeOffset = if (idx == 0 && firstVisibleIndex == 0) {
+                        firstTileOffsetPx
+                    } else {
+                        0f
+                    }
+                    baseShift + edgeOffset
+                }
+                map[idx] = CarouselItemTransform(
+                    scale = scale,
+                    rotationY = computedRotationY,
+                    translationX = computedTranslationX,
+                    zOrder = if (abs(relativeToCenter) == 0) 20f else (10f - abs(relativeToCenter)).coerceAtLeast(0f),
+                )
+            }
+            map
         }
     }
 
@@ -359,6 +433,7 @@ internal fun LibraryCarouselPane(
                     appInfo = settledBackdropItem,
                     imageRefreshCounter = state.imageRefreshCounter,
                     modifier = Modifier.fillMaxSize(),
+                    isOverlayVisible = isOverlayVisible,
                 )
 
                 if (state.appInfoList.isNotEmpty()) {
@@ -384,10 +459,7 @@ internal fun LibraryCarouselPane(
                             key = { listIndex -> state.appInfoList[listIndex].appId },
                         ) { listIndex ->
                             val item = state.appInfoList[listIndex]
-
-                            val relativeToCenter = if (centeredIndex >= 0) listIndex - centeredIndex else 0
-                            val stepsFromCenter = abs(relativeToCenter)
-                            val zOrder = if (stepsFromCenter == 0) 20f else (10f - stepsFromCenter).coerceAtLeast(0f)
+                            val transform = itemTransforms[listIndex] ?: CarouselItemTransform()
 
                             var isVisible by remember(item.appId) { mutableStateOf(false) }
 
@@ -411,7 +483,7 @@ internal fun LibraryCarouselPane(
 
                             Box(
                                 modifier = Modifier
-                                    .zIndex(zOrder)
+                                    .zIndex(transform.zOrder)
                                     .width(carouselItemSlotWidth)
                                     .height(itemContainerHeight),
                             ) {
@@ -421,65 +493,15 @@ internal fun LibraryCarouselPane(
                                         .padding(top = cardTopOverflow)
                                         .width(cardWidth)
                                         .height(cardHeight + badgeReservedHeight)
-                                        .graphicsLayer {
-                                            val layoutInfo = listState.layoutInfo
-                                            val vc = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2f
-                                            val span = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset)
-                                                .toFloat().coerceAtLeast(1f)
-                                            val vi = layoutInfo.visibleItemsInfo.firstOrNull { it.index == listIndex }
-                                            val ic = if (vi != null) vi.offset + vi.size / 2f else vc
-
-                                            val distanceFromCenter = ic - vc
-                                            val normalizedDistance = (distanceFromCenter / span).coerceIn(-1f, 1f)
-                                            val itemStepDistancePx = (carouselItemSlotWidthPx + carouselItemSpacingPx).coerceAtLeast(1f)
-                                            val distanceInSteps = abs(distanceFromCenter) / itemStepDistancePx
-
-                                            val direction = when {
-                                                relativeToCenter < 0 -> 1f
-                                                relativeToCenter > 0 -> -1f
-                                                normalizedDistance < -0.03f -> 1f
-                                                normalizedDistance > 0.03f -> -1f
-                                                else -> 0f
-                                            }
-
-                                            val tiltMultiplier = when {
-                                                distanceInSteps <= 1f -> distanceInSteps
-                                                distanceInSteps <= 2f -> 1f + (distanceInSteps - 1f) * 0.2f
-                                                else -> 1.2f + (distanceInSteps - 2f) * 0.15f
-                                            }.coerceAtMost(79f)
-                                            val tiltAngle = (CAROUSEL_TILT_ANGLE * tiltMultiplier).coerceAtMost(79f)
-
-                                            val scale = interpolateByDistance(
-                                                distanceInSteps = distanceInSteps,
-                                                centerValue = 1.04f,
-                                                firstStepValue = 0.91f,
-                                                secondStepValue = 0.86f,
-                                                farValue = 0.8f,
-                                            )
-
-                                            val computedRotationY = direction * tiltAngle
-                                            val computedTranslationX = if (direction == 0f) {
-                                                0f
-                                            } else {
-                                                val tiltInfluence = if (CAROUSEL_TILT_ANGLE > 0.1f) tiltAngle / CAROUSEL_TILT_ANGLE else 1f
-                                                val baseOffsetRatio = CAROUSEL_SIDE_OFFSET_RATIO + (distanceInSteps * CAROUSEL_STEP_OFFSET_RATIO)
-                                                val baseShift = direction * cardWidthPx * baseOffsetRatio * tiltInfluence
-                                                val edgeOffset = if (listIndex == 0 && layoutInfo.visibleItemsInfo.firstOrNull()?.index == 0) {
-                                                    firstTileOffsetPx
-                                                } else {
-                                                    0f
-                                                }
-                                                baseShift + edgeOffset
-                                            }
-
-                                            scaleX = scale
-                                            scaleY = scale
-                                            this.alpha = appItemAlpha
-                                            this.rotationY = computedRotationY
-                                            this.translationX = computedTranslationX
-                                            cameraDistance = cameraDistancePx
-                                            clip = false
-                                        },
+                                        .graphicsLayer(
+                                            scaleX = transform.scale,
+                                            scaleY = transform.scale,
+                                            alpha = appItemAlpha,
+                                            rotationY = transform.rotationY,
+                                            translationX = transform.translationX,
+                                            cameraDistance = cameraDistancePx,
+                                            clip = false,
+                                        ),
                                 ) {
                                     Box(
                                         modifier = Modifier
