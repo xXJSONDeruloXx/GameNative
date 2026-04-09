@@ -74,6 +74,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import app.gamenative.PrefManager
 import app.gamenative.R
 import app.gamenative.ui.data.PerformanceHudConfig
 import app.gamenative.ui.data.PerformanceHudSize
@@ -301,7 +302,7 @@ fun QuickMenu(
         )
     }
 
-    var selectedTab by rememberSaveable(isVisible) { mutableIntStateOf(QuickMenuTab.HUD) }
+    var selectedTab by rememberSaveable { mutableIntStateOf(PrefManager.quickMenuLastTab) }
     val selectedTabLabelResId = when (selectedTab) {
         QuickMenuTab.HUD -> R.string.performance_hud
         QuickMenuTab.EFFECTS -> R.string.screen_effects
@@ -331,7 +332,7 @@ fun QuickMenu(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.6f))
+                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0f))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
@@ -415,7 +416,10 @@ fun QuickMenu(
                                     contentDescriptionResId = R.string.performance_hud,
                                     selected = selectedTab == QuickMenuTab.HUD,
                                     accentColor = PluviaTheme.colors.accentPurple,
-                                    onSelected = { selectedTab = QuickMenuTab.HUD },
+                                    onSelected = {
+                                        selectedTab = QuickMenuTab.HUD
+                                        PrefManager.quickMenuLastTab = selectedTab
+                                    },
                                     modifier = Modifier.width(56.dp),
                                     focusRequester = hudTabFocusRequester,
                                 )
@@ -424,7 +428,10 @@ fun QuickMenu(
                                     contentDescriptionResId = R.string.screen_effects,
                                     selected = selectedTab == QuickMenuTab.EFFECTS,
                                     accentColor = PluviaTheme.colors.accentPurple,
-                                    onSelected = { selectedTab = QuickMenuTab.EFFECTS },
+                                    onSelected = {
+                                        selectedTab = QuickMenuTab.EFFECTS
+                                        PrefManager.quickMenuLastTab = selectedTab
+                                    },
                                     modifier = Modifier.width(56.dp),
                                     focusRequester = effectsTabFocusRequester,
                                 )
@@ -433,7 +440,10 @@ fun QuickMenu(
                                     contentDescriptionResId = R.string.quick_menu_tab_controller,
                                     selected = selectedTab == QuickMenuTab.CONTROLLER,
                                     accentColor = PluviaTheme.colors.accentPurple,
-                                    onSelected = { selectedTab = QuickMenuTab.CONTROLLER },
+                                    onSelected = {
+                                        selectedTab = QuickMenuTab.CONTROLLER
+                                        PrefManager.quickMenuLastTab = selectedTab
+                                    },
                                     modifier = Modifier.width(56.dp),
                                     focusRequester = controllerTabFocusRequester,
                                 )
@@ -564,7 +574,11 @@ fun QuickMenu(
         if (isVisible) {
             repeat(3) {
                 try {
-                    hudItemFocusRequester.requestFocus()
+                    when (selectedTab) {
+                        QuickMenuTab.HUD -> hudItemFocusRequester.requestFocus()
+                        QuickMenuTab.EFFECTS -> effectsItemFocusRequester.requestFocus()
+                        else -> controllerItemFocusRequester.requestFocus()
+                    }
                     return@LaunchedEffect
                 } catch (_: Exception) {
                     delay(80)

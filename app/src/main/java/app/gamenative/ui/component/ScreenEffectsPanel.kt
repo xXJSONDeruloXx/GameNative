@@ -66,15 +66,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.gamenative.R
 import app.gamenative.ui.theme.PluviaTheme
+import app.gamenative.ui.util.ScreenEffectsConfig
 import app.gamenative.ui.util.adaptivePanelWidth
+import app.gamenative.ui.util.applyScreenEffectsConfig
+import app.gamenative.ui.util.loadScreenEffectsConfig
+import app.gamenative.ui.util.persistScreenEffectsConfig
 import com.winlator.renderer.GLRenderer
-import com.winlator.renderer.effects.ColorEffect
-import com.winlator.renderer.effects.CRTEffect
-import com.winlator.renderer.effects.Effect
-import com.winlator.renderer.effects.FXAAEffect
-import com.winlator.renderer.effects.NTSCCombinedEffect
-import com.winlator.renderer.effects.ToonEffect
-import kotlin.math.abs
 
 private const val SCREEN_EFFECT_PERCENT_STEP = 5f
 private const val SCREEN_EFFECT_GAMMA_STEP = 0.1f
@@ -86,56 +83,42 @@ fun ScreenEffectsTabContent(
     firstItemFocusRequester: FocusRequester? = null,
     scrollState: ScrollState = rememberScrollState(),
 ) {
-    val composer = renderer.effectComposer
-    val initialColorEffect = composer.getEffect(ColorEffect::class.java)
+    val initialConfig = remember(renderer) { loadScreenEffectsConfig() }
 
     var brightness by remember(renderer) {
-        mutableFloatStateOf((initialColorEffect?.brightness ?: 0f) * 100f)
+        mutableFloatStateOf(initialConfig.brightness)
     }
     var contrast by remember(renderer) {
-        mutableFloatStateOf((initialColorEffect?.contrast ?: 0f) * 100f)
+        mutableFloatStateOf(initialConfig.contrast)
     }
     var gamma by remember(renderer) {
-        mutableFloatStateOf(initialColorEffect?.gamma ?: 1.0f)
+        mutableFloatStateOf(initialConfig.gamma)
     }
     var enableToon by remember(renderer) {
-        mutableStateOf(composer.getEffect(ToonEffect::class.java) != null)
+        mutableStateOf(initialConfig.enableToon)
     }
     var enableFXAA by remember(renderer) {
-        mutableStateOf(composer.getEffect(FXAAEffect::class.java) != null)
+        mutableStateOf(initialConfig.enableFXAA)
     }
     var enableCRT by remember(renderer) {
-        mutableStateOf(composer.getEffect(CRTEffect::class.java) != null)
+        mutableStateOf(initialConfig.enableCRT)
     }
     var enableNTSC by remember(renderer) {
-        mutableStateOf(composer.getEffect(NTSCCombinedEffect::class.java) != null)
+        mutableStateOf(initialConfig.enableNTSC)
     }
 
     LaunchedEffect(brightness, contrast, gamma, enableToon, enableFXAA, enableCRT, enableNTSC) {
-        val effects = mutableListOf<Effect>()
-
-        if (abs(brightness) > 0.001f || abs(contrast) > 0.001f || abs(gamma - 1.0f) > 0.001f) {
-            val colorEffect = ColorEffect()
-            colorEffect.brightness = brightness / 100f
-            colorEffect.contrast = contrast / 100f
-            colorEffect.gamma = gamma
-            effects += colorEffect
-        }
-
-        if (enableToon) {
-            effects += composer.getEffect(ToonEffect::class.java) ?: ToonEffect()
-        }
-        if (enableFXAA) {
-            effects += composer.getEffect(FXAAEffect::class.java) ?: FXAAEffect()
-        }
-        if (enableCRT) {
-            effects += composer.getEffect(CRTEffect::class.java) ?: CRTEffect()
-        }
-        if (enableNTSC) {
-            effects += composer.getEffect(NTSCCombinedEffect::class.java) ?: NTSCCombinedEffect()
-        }
-
-        composer.setEffects(effects)
+        val config = ScreenEffectsConfig(
+            brightness = brightness,
+            contrast = contrast,
+            gamma = gamma,
+            enableToon = enableToon,
+            enableFXAA = enableFXAA,
+            enableCRT = enableCRT,
+            enableNTSC = enableNTSC,
+        )
+        persistScreenEffectsConfig(config)
+        applyScreenEffectsConfig(renderer, config)
     }
 
     fun resetEffects() {
@@ -236,57 +219,43 @@ fun ScreenEffectsPanel(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val composer = renderer.effectComposer
-    val initialColorEffect = composer.getEffect(ColorEffect::class.java)
+    val initialConfig = remember(renderer) { loadScreenEffectsConfig() }
     val firstItemFocusRequester = remember { FocusRequester() }
 
     var brightness by remember(renderer) {
-        mutableFloatStateOf((initialColorEffect?.brightness ?: 0f) * 100f)
+        mutableFloatStateOf(initialConfig.brightness)
     }
     var contrast by remember(renderer) {
-        mutableFloatStateOf((initialColorEffect?.contrast ?: 0f) * 100f)
+        mutableFloatStateOf(initialConfig.contrast)
     }
     var gamma by remember(renderer) {
-        mutableFloatStateOf(initialColorEffect?.gamma ?: 1.0f)
+        mutableFloatStateOf(initialConfig.gamma)
     }
     var enableToon by remember(renderer) {
-        mutableStateOf(composer.getEffect(ToonEffect::class.java) != null)
+        mutableStateOf(initialConfig.enableToon)
     }
     var enableFXAA by remember(renderer) {
-        mutableStateOf(composer.getEffect(FXAAEffect::class.java) != null)
+        mutableStateOf(initialConfig.enableFXAA)
     }
     var enableCRT by remember(renderer) {
-        mutableStateOf(composer.getEffect(CRTEffect::class.java) != null)
+        mutableStateOf(initialConfig.enableCRT)
     }
     var enableNTSC by remember(renderer) {
-        mutableStateOf(composer.getEffect(NTSCCombinedEffect::class.java) != null)
+        mutableStateOf(initialConfig.enableNTSC)
     }
 
     LaunchedEffect(brightness, contrast, gamma, enableToon, enableFXAA, enableCRT, enableNTSC) {
-        val effects = mutableListOf<Effect>()
-
-        if (abs(brightness) > 0.001f || abs(contrast) > 0.001f || abs(gamma - 1.0f) > 0.001f) {
-            val colorEffect = ColorEffect()
-            colorEffect.brightness = brightness / 100f
-            colorEffect.contrast = contrast / 100f
-            colorEffect.gamma = gamma
-            effects += colorEffect
-        }
-
-        if (enableToon) {
-            effects += composer.getEffect(ToonEffect::class.java) ?: ToonEffect()
-        }
-        if (enableFXAA) {
-            effects += composer.getEffect(FXAAEffect::class.java) ?: FXAAEffect()
-        }
-        if (enableCRT) {
-            effects += composer.getEffect(CRTEffect::class.java) ?: CRTEffect()
-        }
-        if (enableNTSC) {
-            effects += composer.getEffect(NTSCCombinedEffect::class.java) ?: NTSCCombinedEffect()
-        }
-
-        composer.setEffects(effects)
+        val config = ScreenEffectsConfig(
+            brightness = brightness,
+            contrast = contrast,
+            gamma = gamma,
+            enableToon = enableToon,
+            enableFXAA = enableFXAA,
+            enableCRT = enableCRT,
+            enableNTSC = enableNTSC,
+        )
+        persistScreenEffectsConfig(config)
+        applyScreenEffectsConfig(renderer, config)
     }
 
     fun resetEffects() {
