@@ -387,7 +387,7 @@ fun ScreenEffectsPanel(
         mutableStateOf(initialConfig.enableFXAA)
     }
     var enableVivid by remember(renderer) {
-        mutableStateOf(composer.getEffect(VividEffect::class.java) != null)
+        mutableStateOf(initialConfig.enableVivid)
     }
     var enableCRT by remember(renderer) {
         mutableStateOf(initialConfig.enableCRT)
