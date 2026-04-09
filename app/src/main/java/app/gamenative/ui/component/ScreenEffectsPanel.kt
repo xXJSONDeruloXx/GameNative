@@ -79,6 +79,7 @@ import com.winlator.renderer.effects.Effect
 import com.winlator.renderer.effects.FSR1EasuEffect
 import com.winlator.renderer.effects.FSR1RcasEffect
 import com.winlator.renderer.effects.FXAAEffect
+import com.winlator.renderer.effects.VividEffect
 import com.winlator.renderer.effects.NTSCCombinedEffect
 import com.winlator.renderer.effects.ScalingModeEffect
 import com.winlator.renderer.effects.ToonEffect
@@ -181,6 +182,9 @@ fun ScreenEffectsTabContent(
     var enableFXAA by remember(renderer) {
         mutableStateOf(initialConfig.enableFXAA)
     }
+    var enableVivid by remember(renderer) {
+        mutableStateOf(composer.getEffect(VividEffect::class.java) != null)
+    }
     var enableCRT by remember(renderer) {
         mutableStateOf(initialConfig.enableCRT)
     }
@@ -196,6 +200,7 @@ fun ScreenEffectsTabContent(
         fsrSharpnessLevel,
         enableToon,
         enableFXAA,
+        enableVivid,
         enableCRT,
         enableNTSC,
     ) {
@@ -207,6 +212,7 @@ fun ScreenEffectsTabContent(
             fsrSharpnessLevel = fsrSharpnessLevel,
             enableToon = enableToon,
             enableFXAA = enableFXAA,
+            enableVivid = enableVivid,
             enableCRT = enableCRT,
             enableNTSC = enableNTSC,
         )
@@ -222,6 +228,7 @@ fun ScreenEffectsTabContent(
         fsrSharpnessLevel = SCREEN_EFFECT_FSR_DEFAULT_LEVEL
         enableToon = false
         enableFXAA = false
+        enableVivid = false
         enableCRT = false
         enableNTSC = false
     }
@@ -323,6 +330,12 @@ fun ScreenEffectsTabContent(
             onToggle = { enableFXAA = !enableFXAA },
         )
         ScreenEffectToggleRow(
+            title = stringResource(R.string.screen_effects_vivid),
+            subtitle = stringResource(R.string.screen_effects_vivid_description),
+            enabled = enableVivid,
+            onToggle = { enableVivid = !enableVivid },
+        )
+        ScreenEffectToggleRow(
             title = stringResource(R.string.screen_effects_crt),
             subtitle = stringResource(R.string.screen_effects_crt_description),
             enabled = enableCRT,
@@ -373,6 +386,9 @@ fun ScreenEffectsPanel(
     var enableFXAA by remember(renderer) {
         mutableStateOf(initialConfig.enableFXAA)
     }
+    var enableVivid by remember(renderer) {
+        mutableStateOf(composer.getEffect(VividEffect::class.java) != null)
+    }
     var enableCRT by remember(renderer) {
         mutableStateOf(initialConfig.enableCRT)
     }
@@ -380,13 +396,14 @@ fun ScreenEffectsPanel(
         mutableStateOf(initialConfig.enableNTSC)
     }
 
-    LaunchedEffect(brightness, contrast, gamma, enableToon, enableFXAA, enableCRT, enableNTSC) {
+    LaunchedEffect(brightness, contrast, gamma, enableToon, enableFXAA, enableVivid, enableCRT, enableNTSC) {
         val config = ScreenEffectsConfig(
             brightness = brightness,
             contrast = contrast,
             gamma = gamma,
             enableToon = enableToon,
             enableFXAA = enableFXAA,
+            enableVivid = enableVivid,
             enableCRT = enableCRT,
             enableNTSC = enableNTSC,
         )
@@ -400,6 +417,7 @@ fun ScreenEffectsPanel(
         gamma = 1.0f
         enableToon = false
         enableFXAA = false
+        enableVivid = false
         enableCRT = false
         enableNTSC = false
     }
@@ -577,6 +595,12 @@ fun ScreenEffectsPanel(
                         subtitle = stringResource(R.string.screen_effects_fxaa_description),
                         enabled = enableFXAA,
                         onToggle = { enableFXAA = !enableFXAA },
+                    )
+                    ScreenEffectToggleRow(
+                        title = stringResource(R.string.screen_effects_vivid),
+                        subtitle = stringResource(R.string.screen_effects_vivid_description),
+                        enabled = enableVivid,
+                        onToggle = { enableVivid = !enableVivid },
                     )
                     ScreenEffectToggleRow(
                         title = stringResource(R.string.screen_effects_crt),

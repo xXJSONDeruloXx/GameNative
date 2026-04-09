@@ -11,6 +11,7 @@ import com.winlator.renderer.effects.FXAAEffect
 import com.winlator.renderer.effects.NTSCCombinedEffect
 import com.winlator.renderer.effects.ScalingModeEffect
 import com.winlator.renderer.effects.ToonEffect
+import com.winlator.renderer.effects.VividEffect
 import kotlin.math.abs
 
 private const val SCREEN_EFFECT_SCALE_MODE_NONE = 0
@@ -24,6 +25,7 @@ data class ScreenEffectsConfig(
     val fsrSharpnessLevel: Int = 3,
     val enableToon: Boolean = false,
     val enableFXAA: Boolean = false,
+    val enableVivid: Boolean = false,
     val enableCRT: Boolean = false,
     val enableNTSC: Boolean = false,
 )
@@ -37,6 +39,7 @@ fun loadScreenEffectsConfig(): ScreenEffectsConfig {
         fsrSharpnessLevel = PrefManager.screenEffectsFsrSharpnessLevel,
         enableToon = PrefManager.screenEffectsEnableToon,
         enableFXAA = PrefManager.screenEffectsEnableFXAA,
+        enableVivid = PrefManager.screenEffectsEnableVivid,
         enableCRT = PrefManager.screenEffectsEnableCRT,
         enableNTSC = PrefManager.screenEffectsEnableNTSC,
     )
@@ -50,6 +53,7 @@ fun persistScreenEffectsConfig(config: ScreenEffectsConfig) {
     PrefManager.screenEffectsFsrSharpnessLevel = config.fsrSharpnessLevel
     PrefManager.screenEffectsEnableToon = config.enableToon
     PrefManager.screenEffectsEnableFXAA = config.enableFXAA
+    PrefManager.screenEffectsEnableVivid = config.enableVivid
     PrefManager.screenEffectsEnableCRT = config.enableCRT
     PrefManager.screenEffectsEnableNTSC = config.enableNTSC
 }
@@ -87,6 +91,9 @@ fun applyScreenEffectsConfig(renderer: GLRenderer, config: ScreenEffectsConfig) 
     }
     if (config.enableFXAA) {
         effects += composer.getEffect(FXAAEffect::class.java) ?: FXAAEffect()
+    }
+    if (config.enableVivid) {
+        effects += composer.getEffect(VividEffect::class.java) ?: VividEffect()
     }
     if (config.enableCRT) {
         effects += composer.getEffect(CRTEffect::class.java) ?: CRTEffect()

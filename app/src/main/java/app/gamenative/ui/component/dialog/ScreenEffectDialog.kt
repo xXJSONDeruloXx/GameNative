@@ -70,6 +70,9 @@ fun ScreenEffectDialog(
     var enableFXAA by remember(renderer) {
         mutableStateOf(initialConfig.enableFXAA)
     }
+    var enableVivid by remember(renderer) {
+        mutableStateOf(initialConfig.enableVivid)
+    }
     var enableCRT by remember(renderer) {
         mutableStateOf(initialConfig.enableCRT)
     }
@@ -77,13 +80,14 @@ fun ScreenEffectDialog(
         mutableStateOf(initialConfig.enableNTSC)
     }
 
-    LaunchedEffect(brightness, contrast, gamma, enableToon, enableFXAA, enableCRT, enableNTSC) {
+    LaunchedEffect(brightness, contrast, gamma, enableToon, enableFXAA, enableVivid, enableCRT, enableNTSC) {
         val config = ScreenEffectsConfig(
             brightness = brightness,
             contrast = contrast,
             gamma = gamma,
             enableToon = enableToon,
             enableFXAA = enableFXAA,
+            enableVivid = enableVivid,
             enableCRT = enableCRT,
             enableNTSC = enableNTSC,
         )
@@ -97,6 +101,7 @@ fun ScreenEffectDialog(
         gamma = 1.0f
         enableToon = false
         enableFXAA = false
+        enableVivid = false
         enableCRT = false
         enableNTSC = false
     }
@@ -213,6 +218,14 @@ fun ScreenEffectDialog(
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                         SettingsSwitch(
                             colors = settingsTileColorsAlt(),
+                            title = { Text(stringResource(R.string.screen_effects_vivid)) },
+                            subtitle = { Text(stringResource(R.string.screen_effects_vivid_description)) },
+                            state = enableVivid,
+                            onCheckedChange = { enableVivid = it },
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        SettingsSwitch(
+                            colors = settingsTileColors(),
                             title = { Text(stringResource(R.string.screen_effects_crt)) },
                             subtitle = { Text(stringResource(R.string.screen_effects_crt_description)) },
                             state = enableCRT,

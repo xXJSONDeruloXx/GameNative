@@ -335,6 +335,13 @@ object PrefManager {
             setPref(SCREEN_EFFECTS_ENABLE_FXAA, value)
         }
 
+    private val SCREEN_EFFECTS_ENABLE_VIVID = booleanPreferencesKey("screen_effects_enable_vivid")
+    var screenEffectsEnableVivid: Boolean
+        get() = getPref(SCREEN_EFFECTS_ENABLE_VIVID, false)
+        set(value) {
+            setPref(SCREEN_EFFECTS_ENABLE_VIVID, value)
+        }
+
     private val SCREEN_EFFECTS_ENABLE_CRT = booleanPreferencesKey("screen_effects_enable_crt")
     var screenEffectsEnableCRT: Boolean
         get() = getPref(SCREEN_EFFECTS_ENABLE_CRT, false)
