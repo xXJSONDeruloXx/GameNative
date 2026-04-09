@@ -349,6 +349,20 @@ object PrefManager {
             setPref(SCREEN_EFFECTS_ENABLE_NTSC, value)
         }
 
+    private val SCREEN_EFFECTS_SCALING_MODE = intPreferencesKey("screen_effects_scaling_mode")
+    var screenEffectsScalingMode: Int
+        get() = getPref(SCREEN_EFFECTS_SCALING_MODE, 0)
+        set(value) {
+            setPref(SCREEN_EFFECTS_SCALING_MODE, value)
+        }
+
+    private val SCREEN_EFFECTS_FSR_SHARPNESS_LEVEL = intPreferencesKey("screen_effects_fsr_sharpness_level")
+    var screenEffectsFsrSharpnessLevel: Int
+        get() = getPref(SCREEN_EFFECTS_FSR_SHARPNESS_LEVEL, 3)
+        set(value) {
+            setPref(SCREEN_EFFECTS_FSR_SHARPNESS_LEVEL, value)
+        }
+
     private val SHOW_FPS = booleanPreferencesKey("show_fps")
     var showFps: Boolean
         get() = getPref(SHOW_FPS, false)

@@ -1779,13 +1779,11 @@ fun XServerScreen(
                                 null
                             }
 
-                            val sharpnessEffect: String = container.getExtra("sharpnessEffect", "None")
-                            if (sharpnessEffect != "None") {
-                                val sharpnessLevel = container.getExtra("sharpnessLevel", "100").toDouble()
-                                val sharpnessDenoise = container.getExtra("sharpnessDenoise", "100").toDouble()
-                                vkbasaltConfig =
-                                    "effects=" + sharpnessEffect.lowercase(Locale.getDefault()) + ";" + "casSharpness=" + sharpnessLevel / 100 + ";" + "dlsSharpness=" + sharpnessLevel / 100 + ";" + "dlsDenoise=" + sharpnessDenoise / 100 + ";" + "enableOnLaunch=True"
-                            }
+                            vkbasaltConfig = buildVkBasaltConfig(
+                                effect = container.getExtra("sharpnessEffect", "None"),
+                                sharpnessLevel = container.getExtra("sharpnessLevel", "100").toIntOrNull() ?: 100,
+                                sharpnessDenoise = container.getExtra("sharpnessDenoise", "100").toIntOrNull() ?: 100,
+                            )
 
                             Timber.i("Doing things once")
                             val envVars = EnvVars()
@@ -4648,6 +4646,21 @@ private fun extractGraphicsDriverFiles(
             envVars.put("ENABLE_VKBASALT", "1")
             envVars.put("VKBASALT_CONFIG", vkbasaltConfig)
         }
+    }
+}
+
+private fun buildVkBasaltConfig(
+    effect: String,
+    sharpnessLevel: Int,
+    sharpnessDenoise: Int,
+): String {
+    val normalizedEffect = effect.trim().lowercase(Locale.getDefault())
+    val normalizedSharpness = sharpnessLevel.coerceIn(0, 100) / 100.0
+    val normalizedDenoise = sharpnessDenoise.coerceIn(0, 100) / 100.0
+    return when (normalizedEffect) {
+        "cas" -> "effects=cas;casSharpness=$normalizedSharpness;enableOnLaunch=True"
+        "dls" -> "effects=dls;dlsSharpness=$normalizedSharpness;dlsDenoise=$normalizedDenoise;enableOnLaunch=True"
+        else -> ""
     }
 }
 
