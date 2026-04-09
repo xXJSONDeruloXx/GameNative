@@ -40,6 +40,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Gamepad
@@ -72,6 +73,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import app.gamenative.PrefManager
@@ -82,6 +84,8 @@ import app.gamenative.ui.theme.PluviaTheme
 import app.gamenative.ui.util.adaptivePanelWidth
 import app.gamenative.utils.MathUtils.normalizedProgress
 import com.winlator.renderer.GLRenderer
+import com.winlator.winhandler.ProcessInfo
+import com.winlator.winhandler.WinHandler
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -98,6 +102,7 @@ private object QuickMenuTab {
     const val HUD = 0
     const val EFFECTS = 1
     const val CONTROLLER = 2
+    const val TOOLS = 3
 }
 
 data class QuickMenuItem(
@@ -248,6 +253,9 @@ fun QuickMenu(
     onDismiss: () -> Unit,
     onItemSelected: (Int) -> Boolean,
     renderer: GLRenderer? = null,
+    winHandler: WinHandler? = null,
+    wineProcesses: List<ProcessInfo> = emptyList(),
+    isWineProcessesLoading: Boolean = false,
     isPerformanceHudEnabled: Boolean = false,
     performanceHudConfig: PerformanceHudConfig = PerformanceHudConfig(),
     fpsLimiterValue: Int = 0,
@@ -306,6 +314,7 @@ fun QuickMenu(
     val selectedTabLabelResId = when (selectedTab) {
         QuickMenuTab.HUD -> R.string.performance_hud
         QuickMenuTab.EFFECTS -> R.string.screen_effects
+        QuickMenuTab.TOOLS -> R.string.task_manager
         else -> R.string.quick_menu_tab_controller
     }
 
@@ -315,9 +324,11 @@ fun QuickMenu(
     val controllerScrollState = rememberScrollState()
     val hudTabFocusRequester = remember { FocusRequester() }
     val controllerTabFocusRequester = remember { FocusRequester() }
+    val toolsTabFocusRequester = remember { FocusRequester() }
     val hudItemFocusRequester = remember { FocusRequester() }
     val effectsItemFocusRequester = remember { FocusRequester() }
     val controllerItemFocusRequester = remember { FocusRequester() }
+    val toolsItemFocusRequester = remember { FocusRequester() }
 
     BackHandler(enabled = isVisible) {
         onDismiss()
@@ -447,6 +458,15 @@ fun QuickMenu(
                                     modifier = Modifier.width(56.dp),
                                     focusRequester = controllerTabFocusRequester,
                                 )
+                                QuickMenuTabButton(
+                                    icon = Icons.Default.BarChart,
+                                    contentDescriptionResId = R.string.task_manager,
+                                    selected = selectedTab == QuickMenuTab.TOOLS,
+                                    accentColor = PluviaTheme.colors.accentPurple,
+                                    onSelected = { selectedTab = QuickMenuTab.TOOLS },
+                                    modifier = Modifier.width(56.dp),
+                                    focusRequester = toolsTabFocusRequester,
+                                )
                             }
 
                             Spacer(modifier = Modifier.weight(1f))
@@ -539,6 +559,17 @@ fun QuickMenu(
                                         }
                                     }
 
+                                    QuickMenuTab.TOOLS -> {
+                                        ToolsQuickMenuTab(
+                                            winHandler = winHandler,
+                                            processes = wineProcesses,
+                                            isLoadingProcesses = isWineProcessesLoading,
+                                            onDismiss = onDismiss,
+                                            firstItemFocusRequester = toolsItemFocusRequester,
+                                            modifier = Modifier.fillMaxSize(),
+                                        )
+                                    }
+
                                     else -> {
                                         Column(
                                             modifier = Modifier
@@ -583,6 +614,70 @@ fun QuickMenu(
                 } catch (_: Exception) {
                     delay(80)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ToolsQuickMenuTab(
+    winHandler: WinHandler?,
+    processes: List<ProcessInfo>,
+    isLoadingProcesses: Boolean,
+    onDismiss: () -> Unit,
+    firstItemFocusRequester: FocusRequester? = null,
+    modifier: Modifier = Modifier,
+) {
+    val scrollState = rememberScrollState()
+    val accentColor = PluviaTheme.colors.accentPurple
+    val item = QuickMenuItem(
+        id = -1,
+        icon = Icons.Default.BarChart,
+        labelResId = R.string.launch_task_manager,
+        accentColor = accentColor,
+        enabled = winHandler != null,
+    )
+
+    Column(
+        modifier = modifier
+            .verticalScroll(scrollState)
+            .focusGroup(),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        QuickMenuItemRow(
+            item = item,
+            onClick = {
+                winHandler?.exec("taskmgr.exe")
+                onDismiss()
+            },
+            focusRequester = firstItemFocusRequester,
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        QuickMenuSectionHeader(
+            title = stringResource(R.string.tools_wine_processes),
+            subtitle = if (isLoadingProcesses) {
+                stringResource(R.string.main_loading)
+            } else {
+                stringResource(R.string.tools_wine_processes_running, processes.size)
+            },
+        )
+
+        if (!isLoadingProcesses && processes.isEmpty()) {
+            Text(
+                text = stringResource(R.string.tools_wine_processes_empty),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
+        } else {
+            processes.forEach { process ->
+                QuickMenuReadOnlyValueRow(
+                    title = process.name,
+                    value = process.formattedMemoryUsage,
+                    accentColor = accentColor,
+                )
             }
         }
     }
@@ -1562,6 +1657,82 @@ private fun QuickMenuSwitch(
                 .size(22.dp)
                 .align(if (enabled) Alignment.CenterEnd else Alignment.CenterStart)
                 .background(Color.White, CircleShape),
+        )
+    }
+}
+
+@Composable
+private fun QuickMenuReadOnlyValueRow(
+    title: String,
+    value: String,
+    accentColor: Color,
+    modifier: Modifier = Modifier,
+    focusRequester: FocusRequester? = null,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    val shape = RoundedCornerShape(14.dp)
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 2.dp)
+            .clip(shape)
+            .background(
+                if (isFocused) {
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            accentColor.copy(alpha = 0.14f),
+                            accentColor.copy(alpha = 0.06f),
+                        ),
+                    )
+                } else {
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f),
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.10f),
+                        ),
+                    )
+                },
+            )
+            .then(
+                if (isFocused) {
+                    Modifier.border(
+                        width = 2.dp,
+                        color = accentColor.copy(alpha = 0.7f),
+                        shape = shape,
+                    )
+                } else {
+                    Modifier
+                }
+            )
+            .then(
+                if (focusRequester != null) {
+                    Modifier.focusRequester(focusRequester)
+                } else {
+                    Modifier
+                }
+            )
+            .focusable(interactionSource = interactionSource)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (isFocused) accentColor else MaterialTheme.colorScheme.onSurface,
+            fontWeight = if (isFocused) FontWeight.SemiBold else FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+
+        Text(
+            text = value,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (isFocused) accentColor else MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = if (isFocused) FontWeight.SemiBold else FontWeight.Medium,
         )
     }
 }
