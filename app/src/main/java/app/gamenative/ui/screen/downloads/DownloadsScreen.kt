@@ -101,13 +101,13 @@ private enum class DownloadsSection(
     val titleResId: Int,
     val icon: ImageVector,
 ) {
-    Downloads(
-        titleResId = R.string.settings_downloads_title,
-        icon = Icons.Default.Download,
-    ),
     Storage(
         titleResId = R.string.settings_storage_manage_title,
         icon = Icons.Default.Storage,
+    ),
+    Downloads(
+        titleResId = R.string.downloads_section_title,
+        icon = Icons.Default.Download,
     ),
 }
 
@@ -121,7 +121,7 @@ fun HomeDownloadsScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val storageManagerState = rememberContainerStorageManagerUiState()
     val scope = rememberCoroutineScope()
-    var selectedSectionIndex by rememberSaveable { mutableIntStateOf(DownloadsSection.Downloads.ordinal) }
+    var selectedSectionIndex by rememberSaveable { mutableIntStateOf(DownloadsSection.Storage.ordinal) }
     val sections = remember { DownloadsSection.values().toList() }
     val selectedSection = sections.getOrElse(selectedSectionIndex) { DownloadsSection.Downloads }
     var selectedLibraryItem by remember { mutableStateOf<LibraryItem?>(null) }
