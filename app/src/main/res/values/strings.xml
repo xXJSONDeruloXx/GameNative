@@ -636,6 +636,10 @@
     <string name="show_fps">Show FPS</string>
     <string name="portrait_mode">Portrait Mode</string>
     <string name="portrait_mode_description">For 8BitDo FlipPad/GameSir Pocket Taco type controllers</string>
+    <string name="backdrop_image">Backdrop Image</string>
+    <string name="backdrop_image_description">Optional custom image shown behind letterboxing. If unset, GameNative falls back to the game hero art when available.</string>
+    <string name="backdrop_image_selected">Custom image selected</string>
+    <string name="clear_backdrop_image">Clear backdrop image</string>
     <string name="remove_driver_confirmation">Are you sure you want to remove driver "%s"? This cannot be undone</string>
 
     <!-- Container Configuration: Steam Integration -->

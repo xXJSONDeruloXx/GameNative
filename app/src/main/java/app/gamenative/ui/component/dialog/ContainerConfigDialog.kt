@@ -2,7 +2,9 @@ package app.gamenative.ui.component.dialog
 
 import android.widget.Spinner
 import android.widget.ArrayAdapter
+import android.content.Intent
 import android.content.res.Configuration
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -832,6 +834,46 @@ fun ContainerConfigDialog(
             contract = ActivityResultContracts.RequestMultiplePermissions(),
         ) { }
 
+        val initialBackdropImageUri = initialConfig.backdropImageUri
+
+        fun releaseBackdropPermission(uriString: String) {
+            if (uriString.isBlank()) return
+            try {
+                context.contentResolver.releasePersistableUriPermission(
+                    Uri.parse(uriString),
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            } catch (_: SecurityException) {
+                // Ignore if no persisted grant exists for this Uri.
+            }
+        }
+
+        fun clearUnsavedBackdropPermission(currentUri: String) {
+            if (currentUri.isNotBlank() && currentUri != initialBackdropImageUri) {
+                releaseBackdropPermission(currentUri)
+            }
+        }
+
+        val backdropImagePickerLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenDocument(),
+        ) { uri ->
+            uri ?: return@rememberLauncherForActivityResult
+            val newUri = uri.toString()
+            val previousUri = config.backdropImageUri
+            if (previousUri.isNotBlank() && previousUri != initialBackdropImageUri && previousUri != newUri) {
+                releaseBackdropPermission(previousUri)
+            }
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            } catch (_: SecurityException) {
+                // Some providers don't support persistable permissions; best-effort only.
+            }
+            config = config.copy(backdropImageUri = newUri)
+        }
+
         val folderPicker = rememberCustomGameFolderPicker(
             onPathSelected = { path ->
                 SteamService.keepAlive = false
@@ -884,6 +926,18 @@ fun ContainerConfigDialog(
                 screenSizes[screenSizeIndex].split(" ")[0]
             }
             config = config.copy(screenSize = screenSize)
+        }
+
+        val dismissWithBackdropCleanup: () -> Unit = {
+            clearUnsavedBackdropPermission(config.backdropImageUri)
+            onDismissRequest()
+        }
+
+        val saveWithBackdropCleanup: () -> Unit = {
+            if (config.backdropImageUri != initialBackdropImageUri && initialBackdropImageUri.isNotBlank()) {
+                releaseBackdropPermission(initialBackdropImageUri)
+            }
+            onSave(config)
         }
 
         val onDismissCheck: () -> Unit = {
@@ -1016,6 +1070,7 @@ fun ContainerConfigDialog(
             gpuExtensions = gpuExtensions,
             inspectionMode = inspectionMode,
             isBionicVariant = isBionicVariant,
+            isDefaultConfig = default,
             nonDeletableDriveLetters = nonDeletableDriveLetters,
             availableDriveLetters = availableDriveLetters,
             launchManifestInstall = { entry, label, isDriver, expectedType, onInstalled ->
@@ -1031,6 +1086,13 @@ fun ContainerConfigDialog(
                 pendingDriveLetterRef.value = selectedDriveLetterRef.value
                 SteamService.keepAlive = true
                 folderPicker.launchPicker()
+            },
+            launchBackdropImagePicker = {
+                backdropImagePickerLauncher.launch(arrayOf("image/*"))
+            },
+            clearBackdropImage = {
+                clearUnsavedBackdropPermission(config.backdropImageUri)
+                config = config.copy(backdropImageUri = "")
             },
             getVersionsForDriver = { getVersionsForDriver() },
             getVersionsForBox64 = { getVersionsForBox64() },
@@ -1053,7 +1115,7 @@ fun ContainerConfigDialog(
             dismissBtnText = dismissDialogState.dismissBtnText,
             onDismissRequest = { dismissDialogState = MessageDialogState(visible = false) },
             onDismissClick = { dismissDialogState = MessageDialogState(visible = false) },
-            onConfirmClick = onDismissRequest,
+            onConfirmClick = dismissWithBackdropCleanup,
         )
 
         Dialog(
@@ -1084,7 +1146,7 @@ fun ContainerConfigDialog(
                             },
                             actions = {
                                 IconButton(
-                                    onClick = { onSave(config) },
+                                    onClick = saveWithBackdropCleanup,
                                     content = { Icon(Icons.Default.Save, null) },
                                 )
                             },

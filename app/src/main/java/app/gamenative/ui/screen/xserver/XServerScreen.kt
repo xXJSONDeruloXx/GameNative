@@ -3,7 +3,10 @@ package app.gamenative.ui.screen.xserver
 import android.app.Activity
 import android.content.Context
 import android.content.res.Configuration
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.drawable.BitmapDrawable
 import android.os.Build
 import android.util.Log
 import android.view.Display
@@ -78,6 +81,7 @@ import app.gamenative.data.SteamApp
 import app.gamenative.events.AndroidEvent
 import app.gamenative.events.SteamEvent
 import app.gamenative.ui.enums.Orientation
+import app.gamenative.ui.screen.library.components.getGridImageUrl
 import java.util.EnumSet
 import app.gamenative.externaldisplay.ExternalDisplayInputController
 import app.gamenative.externaldisplay.ExternalDisplaySwapController
@@ -86,6 +90,7 @@ import app.gamenative.service.AchievementWatcher
 import app.gamenative.service.SteamService
 import app.gamenative.service.amazon.AmazonService
 import app.gamenative.service.epic.EpicService
+import app.gamenative.service.gog.GOGApiClient
 import app.gamenative.service.gog.GOGCometAchievementWatcher
 import app.gamenative.service.gog.GOGCometManager
 import app.gamenative.service.gog.GOGService
@@ -101,6 +106,9 @@ import app.gamenative.utils.ExecutableSelectionUtils
 import app.gamenative.utils.PreInstallSteps
 import app.gamenative.utils.SteamTokenLogin
 import app.gamenative.utils.SteamUtils
+import coil.ImageLoader
+import coil.request.ImageRequest
+import coil.request.SuccessResult
 import com.posthog.PostHog
 import com.winlator.alsaserver.ALSAClient
 import com.winlator.container.Container
@@ -243,6 +251,102 @@ private fun buildEssentialProcessAllowlist(): Set<String> {
     return (essentialServices + CORE_WINE_PROCESSES).toSet()
 }
 
+private suspend fun resolveBackdropImageModels(
+    context: Context,
+    appId: String,
+    container: Container,
+    steamAppInfo: SteamApp?,
+): List<String> = withContext(Dispatchers.IO) {
+    val models = linkedSetOf<String>()
+
+    val userUri = container.getExtra("backdropImageUri", "").trim()
+    if (userUri.isNotEmpty()) {
+        models.add(userUri)
+        return@withContext models.toList()
+    }
+
+    val gameSource = ContainerUtils.extractGameSourceFromContainerId(appId)
+    val gameId = ContainerUtils.extractGameIdFromContainerId(appId)
+
+    when (gameSource) {
+        GameSource.STEAM -> {
+            steamAppInfo?.getHeroUrl()?.takeIf { it.isNotEmpty() }?.let(models::add)
+            steamAppInfo?.headerUrl?.takeIf { it.isNotEmpty() }?.let(models::add)
+        }
+
+        GameSource.CUSTOM_GAME -> {
+            val folderPath = CustomGameScanner.getFolderPathFromAppId(appId)
+            val libraryItem = folderPath?.let { CustomGameScanner.createLibraryItemFromFolder(it) }
+            if (libraryItem != null) {
+                val imageUrls = getGridImageUrl(context, libraryItem, app.gamenative.ui.enums.PaneType.GRID_HERO)
+                imageUrls.primary.takeIf { it.isNotEmpty() }?.let(models::add)
+                imageUrls.fallback.takeIf { it.isNotEmpty() }?.let(models::add)
+            }
+        }
+
+        GameSource.GOG -> {
+            runCatching {
+                GOGApiClient.getGameById(context, gameId.toString()).getOrNull()
+            }.getOrNull()?.let { gogGame ->
+                gogGame.imageUrl.takeIf { it.isNotEmpty() }?.let(models::add)
+                gogGame.iconUrl.takeIf { it.isNotEmpty() }?.let(models::add)
+            }
+        }
+
+        GameSource.EPIC -> {
+            EpicService.getEpicGameOf(gameId)?.let { epicGame ->
+                epicGame.artPortrait.takeIf { it.isNotEmpty() }?.let(models::add)
+                epicGame.artCover.takeIf { it.isNotEmpty() }?.let(models::add)
+                epicGame.artSquare.takeIf { it.isNotEmpty() }?.let(models::add)
+                epicGame.artLogo.takeIf { it.isNotEmpty() }?.let(models::add)
+            }
+        }
+
+        GameSource.AMAZON -> {
+            AmazonService.getAmazonGameByAppId(gameId)?.let { amazonGame ->
+                amazonGame.heroUrl.takeIf { it.isNotEmpty() }?.let(models::add)
+                amazonGame.artUrl.takeIf { it.isNotEmpty() }?.let(models::add)
+            }
+        }
+    }
+
+    models.toList()
+}
+
+private suspend fun loadBackdropBitmap(
+    context: Context,
+    imageModel: String,
+    targetWidth: Int,
+    targetHeight: Int,
+): Bitmap? = withContext(Dispatchers.IO) {
+    try {
+        val loader = ImageLoader(context)
+        val request = ImageRequest.Builder(context)
+            .data(imageModel)
+            .size(targetWidth.coerceAtLeast(1), targetHeight.coerceAtLeast(1))
+            .allowHardware(false)
+            .build()
+        val drawable = (loader.execute(request) as? SuccessResult)?.drawable ?: return@withContext null
+        when (drawable) {
+            is BitmapDrawable -> drawable.bitmap
+            else -> {
+                val width = drawable.intrinsicWidth.coerceAtLeast(1)
+                val height = drawable.intrinsicHeight.coerceAtLeast(1)
+                Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { bitmap ->
+                    val canvas = Canvas(bitmap)
+                    drawable.setBounds(0, 0, canvas.width, canvas.height)
+                    drawable.draw(canvas)
+                }
+            }
+        }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Timber.d(e, "Failed loading backdrop image model: $imageModel")
+        null
+    }
+}
+
 // TODO logs in composables are 'unstable' which can cause recomposition (performance issues)
 
 @Composable
@@ -345,6 +449,24 @@ fun XServerScreen(
         val result = mutableStateOf<XServerView?>(null)
         Timber.i("Remembering xServerView as $result")
         result
+    }
+
+    LaunchedEffect(xServerView, appId) {
+        val currentXServerView = xServerView ?: return@LaunchedEffect
+        val renderer = currentXServerView.renderer
+        val targetWidth = renderer.surfaceWidth.takeIf { it > 0 } ?: currentXServerView.width.takeIf { it > 0 } ?: context.resources.displayMetrics.widthPixels
+        val targetHeight = renderer.surfaceHeight.takeIf { it > 0 } ?: currentXServerView.height.takeIf { it > 0 } ?: context.resources.displayMetrics.heightPixels
+        val imageModels = resolveBackdropImageModels(context, appId, container, currentAppInfo)
+        var backdropBitmap: Bitmap? = null
+        for (imageModel in imageModels) {
+            backdropBitmap = loadBackdropBitmap(context, imageModel, targetWidth, targetHeight)
+            if (backdropBitmap != null) break
+        }
+        if (backdropBitmap != null) {
+            renderer.setBackdropBitmap(backdropBitmap)
+        } else {
+            renderer.clearBackdrop()
+        }
     }
 
     var swapInputOverlay: SwapInputOverlayView? by remember { mutableStateOf(null) }

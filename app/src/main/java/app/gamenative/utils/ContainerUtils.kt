@@ -298,6 +298,7 @@ object ContainerUtils {
             unpackFiles = container.isUnpackFiles(),
             suspendPolicy = container.suspendPolicy,
             portraitMode = container.isPortraitMode,
+            backdropImageUri = container.getExtra("backdropImageUri", ""),
             enableXInput = enableX,
             enableDInput = enableD,
             dinputMapperType = mapperType,
@@ -477,6 +478,7 @@ object ContainerUtils {
         container.setUnpackFiles(containerData.unpackFiles)
         container.setSuspendPolicy(containerData.suspendPolicy)
         container.setPortraitMode(containerData.portraitMode)
+        container.putExtra("backdropImageUri", containerData.backdropImageUri)
         if (previousUnpackFiles != containerData.unpackFiles && containerData.unpackFiles) {
             container.setNeedsUnpacking(true)
         }

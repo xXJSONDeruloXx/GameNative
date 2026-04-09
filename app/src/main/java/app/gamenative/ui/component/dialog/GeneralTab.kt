@@ -7,7 +7,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -30,6 +34,7 @@ import com.alorma.compose.settings.ui.SettingsSwitch
 import app.gamenative.ui.theme.settingsTileColors
 import app.gamenative.ui.theme.settingsTileColorsAlt
 import com.alorma.compose.settings.ui.SettingsGroup
+import com.alorma.compose.settings.ui.SettingsMenuLink
 import com.winlator.container.Container
 import com.winlator.container.ContainerData
 import com.winlator.core.DefaultVersion
@@ -303,6 +308,37 @@ fun GeneralTabContent(
             state = config.portraitMode,
             onCheckedChange = { state.config.value = config.copy(portraitMode = it) },
         )
+        if (!state.isDefaultConfig) {
+            SettingsMenuLink(
+                colors = settingsTileColors(),
+                title = { Text(text = stringResource(R.string.backdrop_image)) },
+                subtitle = {
+                    Text(
+                        text = if (config.backdropImageUri.isNotEmpty()) {
+                            stringResource(R.string.backdrop_image_selected)
+                        } else {
+                            stringResource(R.string.backdrop_image_description)
+                        },
+                    )
+                },
+                onClick = { state.launchBackdropImagePicker() },
+                action = if (config.backdropImageUri.isNotEmpty()) {
+                    {
+                        IconButton(
+                            onClick = { state.clearBackdropImage() },
+                            content = {
+                                Icon(
+                                    imageVector = Icons.Filled.Delete,
+                                    contentDescription = stringResource(R.string.clear_backdrop_image),
+                                )
+                            },
+                        )
+                    }
+                } else {
+                    null
+                },
+            )
+        }
         SettingsListDropdown(
             colors = settingsTileColors(),
             title = { Text(text = stringResource(R.string.audio_driver)) },
