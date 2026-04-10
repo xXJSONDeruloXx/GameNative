@@ -404,3 +404,158 @@ If we build this for real, I would start with:
 - label `GN-Lime`
 - bionic-first validation
 - glibc marked experimental until its runtime path stack is cleaned up
+
+---
+
+## Follow-up source-mapping research (2026-04-10)
+
+I did a second-pass source hunt focused on public repos under:
+- `https://github.com/utkarshdalal?tab=repositories`
+- upstream Pluvia: `https://github.com/oxters168/Pluvia`
+
+I cloned and scanned these repos locally under `/tmp/gn-research/`:
+- `utkarshdalal/box64`
+- `utkarshdalal/bionic-vulkan-wrapper`
+- `utkarshdalal/wine-custom`
+- `utkarshdalal/winlator-cmod`
+- `utkarshdalal/proton-wine`
+- `utkarshdalal/wine-9.2-custom`
+- `utkarshdalal/ziad-wine`
+- `utkarshdalal/gbe_fork`
+- `oxters168/Pluvia`
+
+### Confirmed source-backed pieces
+
+#### 1) Box64 hardcoding is source-visible and rebuildable
+
+In `utkarshdalal/box64`:
+- `.github/workflows/release.yml`
+  - contains:
+    - `patchelf --set-interpreter /data/data/com.winlator/files/imagefs/usr/lib/ld-linux-aarch64.so.1 ./box64`
+
+This is strong confirmation that the package-bound `PT_INTERP` path in shipped `box64-*.tzst` assets is not mysterious. It is being baked in during packaging and can be changed by rebuilding or repackaging.
+
+#### 2) The Vulkan wrapper / ICD path assumptions are source-visible and rebuildable
+
+In `utkarshdalal/bionic-vulkan-wrapper`:
+- `src/vulkan/wrapper/graphics_env_hooks.cpp`
+  - hardcodes:
+    - `/data/data/com.winlator.cmod/files/imagefs/usr/lib`
+    - `/data/data/com.micewine.emu/files/usr/lib`
+- `src/vulkan/wrapper/wrapper_instance.c`
+  - logs / expects validation layers under:
+    - `/data/data/com.winlator.cmod/files/imagefs/usr/lib/`
+- `src/freedreno/vulkan/meson.build` and `src/vulkan/wrapper/meson.build`
+  - show how ICD JSON artifacts are generated
+
+This means the wrapper / ICD issue is a **real source patch + rebuild task**, not an opaque binary dead-end.
+
+#### 3) GLIBC hardcoding is definitely upstream in `wine-custom`
+
+In `utkarshdalal/wine-custom`, I found live `app.gamenative` path assumptions in actual source files, not just Android app glue:
+
+- `server/request.c`
+  - `/data/data/app.gamenative/files/imagefs/tmp/.wine-%u`
+- `server/esync.c`
+  - `/data/data/app.gamenative/files/imagefs/tmp/wine-...-esync`
+- `dlls/ntdll/unix/server.c`
+  - `/data/data/app.gamenative/files/imagefs/tmp/.wine-%u/server-...`
+  - `symlink( "/data/data/app.gamenative/files/imagefs", "dosdevices/z:" )`
+- `programs/winebrowser/main.c`
+  - `/data/data/app.gamenative/files/imagefs/usr/bin/open`
+- `server/unicode.c`
+  - fallback NLS directories under `/data/data/app.gamenative/files/imagefs/usr/...`
+- `programs/winemenubuilder/winemenubuilder.c`
+  - app-specific share dirs under `/data/data/app.gamenative/files/imagefs/usr/...`
+
+I also found many older path patches under `packages/*` that still reference:
+- `/data/data/com.utkarshdalal.PluviaGoldberg/files/usr/...`
+
+Examples include patches for:
+- `pulseaudio`
+- `glib`
+- `Vulkan-Loader`
+- `mesa-vulkan-wrapper-adrenotools`
+- `xtrans`
+- `openssl`
+- `libarchive`
+- `libunbound`
+
+This is the clearest public-source evidence so far that **GLIBC rename breakage is upstream in the custom Wine / userspace stack itself**, not just in GameNative app code.
+
+### Important comparison against upstream Pluvia
+
+#### `oxters168/Pluvia` is mixed evidence
+
+Current `oxters168/Pluvia` has:
+- `app/build.gradle.kts`
+  - `namespace = "com.OxGames.Pluvia"`
+  - `applicationId = "com.OxGames.Pluvia"`
+  - `applicationIdSuffix = ".gold"`
+
+But it still contains at least one stale Winlator-era hardcode:
+- `app/src/main/java/com/winlator/container/Container.java`
+  - `E:/data/data/com.winlator/storage`
+
+So upstream Pluvia does **not** look fully package-decoupled either.
+
+#### However: older Pluvia box64 packaging looks more rename-friendly than current GameNative
+
+I unpacked `oxters168/Pluvia` asset:
+- `app/src/main/assets/box86_64/box64-0.2.9.tzst`
+
+Its ELF interpreter is:
+- `/lib/ld-linux-aarch64.so.1`
+
+That is much more rename-safe than current GameNative's package-bound interpreter path. So at some point in later Winlator/GameNative packaging, the GLIBC stack became **more app-ID-bound**, not less.
+
+This suggests a potentially better long-term direction:
+- rebuild `box64` with a generic interpreter strategy when possible, instead of hard-baking `/data/data/<package>/...` into the binary
+
+### What I did **not** find in the searched repos
+
+Despite searching the repos above, I still did **not** find public source for:
+- `libredirect.so`
+- `libredirect-bionic.so`
+- `redirect.tzst` build source
+- exact source files named in the shipped binaries such as:
+  - `preload_replace.c`
+  - `preload_replace_bionic.c`
+- binary strings previously observed in the shipped redirect libs, such as:
+  - `pluviagoldberg_on_load`
+  - `libpluviagoldberg.so`
+  - `preload_loaded.txt`
+
+I also did not find those redirect shim sources in the extra Utkarsh repos I scanned:
+- `proton-wine`
+- `wine-9.2-custom`
+- `ziad-wine`
+- `gbe_fork`
+- `winlator-cmod`
+- `oxters168/Pluvia`
+
+### Current feasibility read after the repo search
+
+#### Feasible / source-backed
+- **Bionic side-by-side support:** still looks feasible first
+- **Box64 cleanup:** feasible from public source (`utkarshdalal/box64`)
+- **Wrapper / ICD cleanup:** feasible from public source (`utkarshdalal/bionic-vulkan-wrapper`)
+- **Wine/custom userspace cleanup:** feasible in principle because source exists, but it is a much larger patch surface
+
+#### Still blocked / uncertain
+- **Full GLIBC parity for renamed package IDs:** still risky
+- **Redirect shim layer (`redirect.tzst`):** still the biggest unresolved opaque binary gap
+- **Drop-in spoof-package builds:** still not credible as a quick or safe path
+
+### Updated practical conclusion
+
+If the goal is a real `GN-Lime` fork, the evidence still points to:
+
+1. **Do a real source-built variant, not an APK-editor rename.**
+2. **Target bionic first.**
+3. **Treat glibc as experimental until at least box64 + wine-custom + redirect-layer issues are handled.**
+4. Prefer a short package name such as:
+   - `app.gnlime`
+5. Keep a distinction between:
+   - **source-known blockers** we can rebuild or patch
+   - **source-missing blockers** we may need to replace, reverse, or avoid
