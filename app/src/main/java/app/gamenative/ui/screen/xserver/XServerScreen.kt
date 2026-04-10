@@ -1565,6 +1565,12 @@ fun XServerScreen(
                             needsUnpacking = container.isNeedsUnpacking
                             Timber.i("First time boot: $firstTimeBoot")
 
+                            // Set up FakeInputWriter evdev path for zero-overhead controller input
+                            val devInputDir = File(imageFs.rootDir, "dev/input")
+                            devInputDir.mkdirs()
+                            handler.setFakeInputPath(devInputDir.absolutePath)
+                            Timber.i("FakeInputWriter path set: ${devInputDir.absolutePath}")
+
                             val wineVersion = container.wineVersion
                             Timber.i("Wine version is: $wineVersion")
                             val contentsManager = ContentsManager(context)

@@ -15,6 +15,7 @@ import com.winlator.core.StringUtils;
 import com.winlator.inputcontrols.ControllerManager;
 import com.winlator.inputcontrols.ControlsProfile;
 import com.winlator.inputcontrols.ExternalController;
+import com.winlator.inputcontrols.FakeInputWriter;
 import com.winlator.inputcontrols.GamepadState;
 import com.winlator.inputcontrols.TouchMouse;
 import com.winlator.math.XForm;
@@ -52,9 +53,16 @@ public class WinHandler {
     private static final String TAG = "WinHandler";
     private final ControllerManager controllerManager;
     public static final int MAX_PLAYERS = 1;
+    public static final int MAX_FAKE_INPUT_SLOTS = 4;
     private final MappedByteBuffer[] extraGamepadBuffers = new MappedByteBuffer[MAX_PLAYERS - 1];
     private final ExternalController[] extraControllers = new ExternalController[MAX_PLAYERS - 1];
     private MappedByteBuffer gamepadBuffer;
+
+    // FakeInputWriter (evdev) path
+    private String fakeInputBasePath;
+    private final FakeInputWriter[] fakeInputWriters = new FakeInputWriter[MAX_FAKE_INPUT_SLOTS];
+    private final java.util.Map<Integer, Integer> deviceToSlot = new java.util.HashMap<>();
+    private final java.util.Set<Integer> usedSlots = new java.util.HashSet<>();
     private static final short SERVER_PORT = 7947;
     private static final short CLIENT_PORT = 7946;
     private final ArrayDeque<Runnable> actions;
@@ -343,6 +351,7 @@ public class WinHandler {
 
     public void stop() {
         this.running = false;
+        closeFakeInputWriters();
         DatagramSocket datagramSocket = this.socket;
         if (datagramSocket != null) {
             datagramSocket.close();
@@ -669,6 +678,10 @@ public class WinHandler {
     }
 
     public void sendGamepadState() {
+        // --- FakeInputWriter (evdev) path: zero-overhead, direct to Wine ---
+        sendGamepadStateViaFakeInput(currentController);
+
+        // --- Legacy UDP path (kept as fallback) ---
         if (!this.initReceived || this.gamepadClients.isEmpty()) {
             return;
         }
@@ -693,6 +706,79 @@ public class WinHandler {
                 sendPacket(port);
             });
         }
+    }
+
+    /**
+     * Send gamepad state via FakeInputWriter (raw evdev events).
+     * Used for virtual gamepad (on-screen controls).
+     */
+    public void sendGamepadStateViaFakeInput(ExternalController controller) {
+        if (fakeInputBasePath == null) return;
+
+        ControlsProfile profile = inputControlsView != null ? inputControlsView.getProfile() : null;
+        boolean useVirtualGamepad = profile != null && profile.isVirtualGamepad()
+            && inputControlsView.isShowTouchscreenControls();
+
+        if (useVirtualGamepad) {
+            int slot = assignFakeInputSlot(-1);
+            if (slot >= 0 && fakeInputWriters[slot] != null) {
+                fakeInputWriters[slot].writeGamepadState(profile.getGamepadState());
+            }
+        } else if (controller != null) {
+            int slot = assignFakeInputSlot(controller.getDeviceId());
+            if (slot >= 0 && fakeInputWriters[slot] != null) {
+                fakeInputWriters[slot].writeGamepadState(controller.state);
+            }
+        }
+    }
+
+    public void setFakeInputPath(String path) {
+        if (path != null && !path.isEmpty()) {
+            this.fakeInputBasePath = path;
+            Log.d(TAG, "FakeInputWriter base path set: " + path);
+        }
+    }
+
+    private int assignFakeInputSlot(int deviceId) {
+        Integer existing = deviceToSlot.get(deviceId);
+        if (existing != null) return existing;
+
+        for (int slot = 0; slot < MAX_FAKE_INPUT_SLOTS; slot++) {
+            if (!usedSlots.contains(slot)) {
+                usedSlots.add(slot);
+                deviceToSlot.put(deviceId, slot);
+                if (fakeInputBasePath != null && fakeInputWriters[slot] == null) {
+                    fakeInputWriters[slot] = new FakeInputWriter(fakeInputBasePath, slot);
+                    fakeInputWriters[slot].open();
+                    Log.d(TAG, "Assigned device " + deviceId + " to fake input slot " + slot);
+                }
+                return slot;
+            }
+        }
+        Log.w(TAG, "No fake input slots available for device " + deviceId);
+        return -1;
+    }
+
+    private void releaseFakeInputSlot(int deviceId) {
+        Integer slot = deviceToSlot.remove(deviceId);
+        if (slot != null) {
+            if (fakeInputWriters[slot] != null) {
+                fakeInputWriters[slot].softRelease();
+            }
+            usedSlots.remove(slot);
+            Log.d(TAG, "Device " + deviceId + " released fake input slot: " + slot);
+        }
+    }
+
+    public void closeFakeInputWriters() {
+        for (int i = 0; i < MAX_FAKE_INPUT_SLOTS; i++) {
+            if (fakeInputWriters[i] != null) {
+                fakeInputWriters[i].destroy();
+                fakeInputWriters[i] = null;
+            }
+        }
+        deviceToSlot.clear();
+        usedSlots.clear();
     }
 
     public boolean onGenericMotionEvent(MotionEvent event) {
@@ -725,6 +811,15 @@ public class WinHandler {
             }
         }
         return handled;
+    }
+
+    // Called by PhysicalControllerHandler for virtual gamepad state updates
+    public void sendVirtualGamepadViaFakeInput(GamepadState state) {
+        if (fakeInputBasePath == null || state == null) return;
+        int slot = assignFakeInputSlot(-1); // -1 = virtual gamepad
+        if (slot >= 0 && fakeInputWriters[slot] != null) {
+            fakeInputWriters[slot].writeGamepadState(state);
+        }
     }
 
     public boolean onKeyEvent(KeyEvent event) {
@@ -868,6 +963,9 @@ public class WinHandler {
         sdlButtons[14] = state.dpad[1] ? (byte)1 : (byte)0;      // DPAD_RIGHT
         gamepadBuffer.put(sdlButtons);
         gamepadBuffer.put((byte)0); // Ignored HAT value
+
+        // Also write via FakeInputWriter for evdev path
+        sendVirtualGamepadViaFakeInput(state);
     }
 
     private void initializeAssignedControllers() {

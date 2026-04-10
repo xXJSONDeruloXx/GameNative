@@ -290,6 +290,7 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
         String ld_preload = "";
         String sysvPath = imageFs.getLibDir() + "/libandroid-sysvshm.so";
         String evshimPath = imageFs.getLibDir() + "/libevshim.so";
+        String fakeinputPath = imageFs.getLibDir() + "/libfakeinput.so";
         String replacePath = imageFs.getLibDir() + "/libredirect-bionic.so";
 
         if (new File(sysvPath).exists()) ld_preload += sysvPath;
@@ -298,8 +299,34 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
         ld_preload += ":" + evshimPath;
         ld_preload += ":" + replacePath;
 
+        // Copy libfakeinput.so to imagefs and add to LD_PRELOAD
+        try {
+            File fakeinputDest = new File(fakeinputPath);
+            File fakeinputSrc = new File(context.getApplicationInfo().nativeLibraryDir, "libfakeinput.so");
+            if (!fakeinputDest.exists() && fakeinputSrc.exists()) {
+                com.winlator.core.FileUtils.copy(fakeinputSrc, fakeinputDest);
+                Log.d("BionicProgramLauncher", "Copied libfakeinput.so to imagefs");
+            }
+            if (fakeinputDest.exists()) {
+                ld_preload += ":" + fakeinputPath;
+            }
+        } catch (Exception e) {
+            Log.e("BionicProgramLauncher", "Failed to copy libfakeinput.so: " + e.getMessage());
+        }
+
         envVars.put("LD_PRELOAD", ld_preload);
 
+        // Create dev/input directory with event files for libfakeinput.so
+        File devInputDir = new File(rootDir, "dev/input");
+        devInputDir.mkdirs();
+        for (int i = 0; i < 4; i++) {
+            File eventFile = new File(devInputDir, "event" + i);
+            if (!eventFile.exists()) {
+                try { eventFile.createNewFile(); } catch (IOException ignored) {}
+            }
+        }
+
+        envVars.put("FAKE_EVDEV_DIR", devInputDir.getAbsolutePath());
         envVars.put("EVSHIM_SHM_NAME", "controller-shm0");
 
         // Check for specific shared memory libraries
