@@ -825,3 +825,130 @@ The most defensible current story is:
 - **GN-Lime remains feasible** as a source-built side-by-side fork
 - **Bionic remains the right first target**
 - **GLIBC remains blocked partly by `wine-custom`, partly by `box64`, and partly by the opaque `redirect.tzst` layer**
+
+---
+
+## Follow-up: PR #191 review (`Initial bionic changes`) (2026-04-10)
+
+User pointed me at:
+- PR: `https://github.com/utkarshdalal/GameNative/pull/191`
+- example commit diffs inside the PR:
+  - `8dd63e4c575d07eeb44c98ded5a96d0e222b8879`
+  - `b2a32907c6fe75342814deab6c8e4a687db923ba`
+
+I reviewed the PR commit list and relevant patches.
+
+### PR structure
+
+PR #191:
+- title: `Initial bionic changes`
+- head branch: `add-bionic-containers`
+- squash-merged as:
+  - `20ebeaf06594fa86aa85450693a230a1edc2129b`
+- commit count on the PR branch: `27`
+
+### Most important result from reviewing the PR branch
+
+I do **not** see evidence that PR #191 ever carried the missing redirect shim source files in-tree.
+
+In particular, I did **not** find source files like:
+- `preload_replace.c`
+- `preload_replace_bionic.c`
+- a checked-in source directory for `libredirect.so`
+- a checked-in source directory for `libredirect-bionic.so`
+
+What the PR branch does show is:
+- launcher wiring for preloading redirect libs
+- asset extraction logic for `redirect.tzst`
+- but **not** the source code that produced those binaries
+
+### What the specific PR commits do
+
+#### `8dd63e4c` — early bionic/imagefs plumbing, not redirect source
+
+This commit mostly does variant/imagefs prep work:
+- `ImageFsInstaller.java`
+  - makes imagefs install variant-aware (`imagefs_gamenative.txz` vs `imagefs_bionic.txz`)
+  - adds `installWineFromAssets(...)`
+  - writes variant metadata via `imageFs.createVariantFile(containerVariant)`
+- `BionicProgramLauncherComponent.java`
+  - starts using `box64-<version>-bionic.tzst`
+  - temporarily comments out adding `evshim` to `LD_PRELOAD`
+- `GlibcProgramLauncherComponent.java`
+  - simplifies to `extractBox64Files()`
+  - removes `box86` handling from this path
+
+Important takeaway:
+- `8dd63e4c` is **not** where `redirect.tzst` appears
+- it does **not** reveal hidden redirect source
+
+#### `b2a32907` — container switching / boot fixes, not redirect source
+
+This commit only lightly touches the relevant files:
+- `ImageFsInstaller.java`
+  - uses `bionic_wine_entries`
+  - fixes `containerVariant.equals(Container.GLIBC)` style checks
+- `XServerScreen.kt`
+  - variant-related cleanup and comparisons
+
+Important takeaway:
+- `b2a32907` also does **not** reveal redirect source or hidden path-rewrite implementation
+
+#### `451ca4a1` — the actual `redirect.tzst` introduction point inside PR #191
+
+This is the first PR #191 commit where the redirect bundle itself appears.
+
+It adds:
+- `app/src/main/assets/redirect.tzst`
+- `ImageFsInstaller.installGuestLibs(...)`
+  - extracts `redirect.tzst` into `imagefs`
+  - chmods:
+    - `usr/lib/libredirect.so`
+    - `usr/lib/libredirect-bionic.so`
+
+Important takeaway:
+- inside PR #191, the redirect layer enters as a **binary bundle import**, not as source
+
+### A useful transient PR commit: `9310b59c`
+
+GitHub still exposes a PR-branch commit:
+- `9310b59c550fc3ebe110a74bcd6ed5964c974f3f`
+- message:
+  - `removed hardcoded com.winlator.cmod`
+
+From the patch, this commit only touched:
+- `app/src/main/java/com/winlator/container/Container.java`
+
+It replaced `com.winlator.cmod` hardcoded mediaconv paths with `app.gamenative` ones.
+
+So this is a real transient hardcoding-cleanup commit on the PR branch, but:
+- it is **not** redirect shim source
+- it is just another sign that the bionic work was migrating hardcoded Winlator CMOD paths over to GameNative paths during PR development
+
+### What PR #191 does **not** contain
+
+As far as I can tell from the reviewed commit list and patches, PR #191 does **not** contain the transient startup-hook implementation I found elsewhere:
+- no `NativeHooks` startup loader in `PluviaApp.kt`
+- no `System.loadLibrary("redirect_logging-bionic")`
+- no `NativeHooks.init()` app-start hook
+
+That startup hook belongs to:
+- `2df2b427` on `upstream/new_vortek`
+
+So the strongest transient source-ish clue for bionic redirect handling still lives **outside PR #191**, on the earlier `new_vortek` branch.
+
+### Bottom line from PR #191 review
+
+PR #191 helps pin this down more clearly:
+
+1. The PR shows **when** the redirect bundle got imported into the bionic line.
+2. The PR shows **how** GameNative started extracting and preloading those libs.
+3. But the PR still does **not** reveal the source code that built the redirect binaries.
+4. The only clearly transient redirect-related implementation detail that looks source-adjacent is still the older `upstream/new_vortek` path:
+   - loose `libredirect-bionic.so`
+   - loose `libredirect_logging-bionic.so`
+   - `NativeHooks` startup loader in `PluviaApp.kt`
+
+So if the goal is to pin down the hardcoding/source origin as tightly as possible:
+- **PR #191 is useful for the import/wiring timeline**
+- **`upstream/new_vortek` remains the most important transient branch for the bionic redirect implementation itself**
