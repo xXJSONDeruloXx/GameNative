@@ -796,10 +796,16 @@ The most defensible current story is:
 
 1. **GLIBC redirect support started first**, under the older preload identity `libpluviagoldberg.so`.
 2. That GLIBC preload was later **renamed** to `libredirect.so` in app-side launcher code.
-3. **Bionic redirect support arrived later**, first as loose xhook-based JNI libraries on `upstream/new_vortek`.
-4. Before bionic landed on mainline, those loose bionic libs were replaced by a **smaller packed bionic redirect shim** and bundled together with the GLIBC shim inside `redirect.tzst`.
-5. The bundle appears to have been **hand-assembled locally** and then committed as a binary asset.
-6. I still do **not** have a public source repo for either packed redirect shim.
+3. Before `redirect.tzst` ever existed, multiple GameNative branches were already assuming `libredirect.so` existed at runtime:
+   - `upstream/pull-in-pluvia-changes`
+   - `upstream/fix-pathing-issue`
+   - `upstream/new_vortek_winlator`
+   - `upstream/new_vortek`
+4. Since those branches predate `redirect.tzst`, the most likely explanation is that **GLIBC `libredirect.so` originally came from an imported imagefs/rootfs lineage**, not from a source file committed in GameNative.
+5. **Bionic redirect support arrived later**, first as loose xhook-based JNI libraries on `upstream/new_vortek`.
+6. Before bionic landed on mainline, those loose bionic libs were replaced by a **smaller packed bionic redirect shim** and bundled together with the GLIBC shim inside `redirect.tzst`.
+7. The bundle appears to have been **hand-assembled locally** and then committed as a binary asset.
+8. I still do **not** have a public source repo for either packed redirect shim.
 
 ### Feasibility implications for GN-Lime
 
