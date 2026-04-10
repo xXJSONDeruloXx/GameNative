@@ -958,3 +958,173 @@ PR #191 helps pin this down more clearly:
 So if the goal is to pin down the hardcoding/source origin as tightly as possible:
 - **PR #191 is useful for the import/wiring timeline**
 - **`upstream/new_vortek` remains the most important transient branch for the bionic redirect implementation itself**
+
+---
+
+## Follow-up: checking `longjunyu2/winlator`, `longjunyu2/weston`, `ajay9634/winlator-ajay`, and `termux-pacman/glibc-packages` (2026-04-10)
+
+User suspected the redirect or related hardcoding source might live in:
+- `longjunyu2/winlator`
+- `longjunyu2/weston`
+- `ajay9634/winlator-ajay`
+- `termux-pacman/glibc-packages`
+
+I checked all four.
+
+### `longjunyu2/winlator`
+
+This one was especially useful.
+
+#### Current code / history result
+
+I checked current tree plus file history via GitHub API.
+
+Important commit history:
+- `d80353d3` (2024-08-03) — `add glibc env support`
+  - adds `GlibcProgramLauncherComponent.java`
+- `7f5887dd` (2024-08-15)
+  - updates `imagefs.txz` and `imagefs_patches.tzst`
+- `5030bad4` (2024-08-29)
+  - updates `imagefs.txz` again
+
+#### Critical finding: longjunyu's GLIBC path does **not** use redirect libs in code
+
+In the `d80353d3` launcher patch, `GlibcProgramLauncherComponent.java` sets only:
+- `LD_PRELOAD = "libandroid-sysvshm.so"`
+
+I did **not** find:
+- `libredirect.so`
+- `libredirect-bionic.so`
+- `libpluviagoldberg.so`
+- `preload_replace.c`
+- `preload_replace_bionic.c`
+
+in the longjunyu codebase or its visible file history.
+
+#### I downloaded and inspected the actual longjunyu imagefs assets
+
+Using the raw/media GitHub URLs for commit `d80353d3`, I downloaded:
+- `app/src/main/assets/imagefs.txz` (~124 MB)
+- `app/src/main/assets/imagefs_patches.tzst` (~3.5 MB)
+
+Results:
+
+##### `imagefs.txz`
+- contains lots of hardcoded `/data/data/com.winlator/files/imagefs/...` strings
+- contains package-bound interpreter and library paths
+- **does not contain**:
+  - `libredirect`
+  - `pluviagoldberg`
+  - `preload_replace`
+  - `old_pkg`
+  - `new_pkg`
+- tar listing also shows **no redirect-related file names**
+
+##### `imagefs_patches.tzst`
+- contains:
+  - `usr/lib/libandroid-sysvshm.so`
+  - ALSA helper
+  - cursors
+  - fonts
+  - `winhandler.exe`
+  - `wfm.exe`
+- **does not contain** any redirect libs or related strings
+
+#### What this means
+
+`longjunyu2/winlator` looks like a strong source for the **older package-bound imagefs lineage** used in early GLIBC work, but **not** for the missing redirect shim source.
+
+Best current read:
+- longjunyu provided an imagefs/rootfs that was already hardcoded to `com.winlator`
+- GameNative later layered its own redirect/preload approach on top of that kind of lineage
+- but the actual `libredirect*` binaries do **not** appear to come directly from the visible longjunyu app repo or the inspected longjunyu imagefs assets
+
+### `longjunyu2/weston`
+
+I searched the repo for:
+- `libredirect`
+- `pluviagoldberg`
+- `com.winlator`
+- `/data/data/`
+
+Result:
+- no useful hits related to the redirect shim
+
+So `weston` does not currently look like the origin for this layer.
+
+### `ajay9634/winlator-ajay`
+
+This fork also appears to be in the longjunyu/older-Winlator family.
+
+Findings:
+- current code has no `libredirect*` or `pluviagoldberg` references
+- `GuestProgramLauncherComponent.java` only uses:
+  - `LD_PRELOAD = "libandroid-sysvshm.so"`
+- the current `imagefs_patches.tzst` is accessible and contains no redirect libs
+
+So this fork also points away from being the source of the missing redirect binaries.
+
+### `termux-pacman/glibc-packages`
+
+This repo does **not** contain the GameNative redirect libs either.
+
+I did **not** find:
+- `libredirect.so`
+- `libredirect-bionic.so`
+- `pluviagoldberg`
+- `preload_replace.c`
+- `preload_replace_bionic.c`
+
+However, it *is* very relevant architecturally.
+
+#### Why it matters
+
+This repo shows a cleaner source-level strategy for solving similar pathing problems:
+- patching glibc / box64 / mesa / xtrans / pulseaudio / glib paths at build time
+- using prefix macros like:
+  - `@TERMUX_PREFIX@`
+  - `@TERMUX_PREFIX_CLASSICAL@`
+- and in the CGCT pieces, even environment-driven prefix logic such as:
+  - `CGCT_APP_PREFIX`
+  - `CGCT_DEFAULT_PREFIX`
+
+Examples I found:
+- `gpkg/glibc/set-dirs.patch`
+  - patches `ld.so.preload` path to `@TERMUX_PREFIX@/etc/ld.so.preload`
+- `gpkg/box64/setdirs.patch`
+  - patches install paths and library lookup dirs
+- `gpkg/mesa/virgl-socket-path.patch`
+  - patches virgl socket path under a prefix-aware tmp dir
+- `gpkg/xtrans/xtrans-1.4.0_Xtranssock.c.patch`
+  - patches X11 socket paths to prefix-aware tmp dirs
+- `gpkg/libpulse/fix-paths.patch`
+  - patches machine-id and temp/runtime locations
+- `cgct/cgt/cgct-app-prefix.cc`
+  - supports a configurable app prefix via `CGCT_APP_PREFIX`
+
+#### Why this is useful for GN-Lime
+
+This repo does **not** solve the mystery of `redirect.tzst`, but it does suggest a better long-term architecture:
+- replace opaque preload path-rewrite hacks with **source-level prefix-aware builds** wherever possible
+- especially for glibc-side components
+
+### Updated interpretation after checking these repos
+
+The evidence now points more strongly to this picture:
+
+1. `longjunyu2/winlator` is a likely ancestor for the **hardcoded package-bound imagefs/rootfs style**.
+2. But it does **not** appear to be the source of the specific `libredirect*` binaries used by GameNative.
+3. `ajay9634/winlator-ajay` behaves similarly and also does not surface the redirect layer.
+4. `longjunyu2/weston` does not currently look relevant to redirect provenance.
+5. `termux-pacman/glibc-packages` is not the redirect source either, but it is a strong **design reference** for how to make glibc pathing configurable without opaque shims.
+
+### Practical takeaway
+
+This makes the redirect provenance story narrower:
+- the **underlying path hardcoding lineage** may well trace back through older Winlator / longjunyu imagefs roots
+- but the **actual redirect shim binaries** still look like a later, more local layer added in the GameNative/PluviaGoldberg-derived stream
+
+So the missing source is still most likely to be found in one of these places:
+- an older/private/local build workspace that never got published
+- a binary assembled from unpublished C sources during the `new_vortek` / bionic experimentation phase
+- or some imported rootfs/imagefs artifact outside the visible app repos we checked
