@@ -1580,3 +1580,57 @@ Guild: `1378308569287622737`. Searched for `decompil`, `hardcod`, `package name`
 3. **Our asset patcher already handles the binary layer** that everyone on Discord says is the hard part
 4. **We should NOT expect upstream to accept package-rename PRs** — Utkarsh explicitly declined for strategic reasons. GN-Lime should be a fork, not a PR.
 
+
+---
+
+## Resolution of remaining unknowns (2026-04-10)
+
+### The bionic wine socket/esync question — RESOLVED ✅
+
+**Previous concern**: Wine-bionic executables might have `app.gamenative` hardcoded in socket/esync paths (based on `wine-custom` source code inspection of `server/request.c`, `server/esync.c`, `dlls/ntdll/unix/server.c`).
+
+**Resolution**: Downloaded and scanned the ACTUAL compiled binaries:
+
+1. **Proton ARM64EC wineserver** (`proton-9.0-arm64ec.txz` from `downloads.gamenative.app`):
+   - Has `com.winlator.cmod` paths only (NOT `app.gamenative`)
+   - Caught by `libredirect-bionic.so` (old_pkg = com.winlator.cmod → new_pkg = app.gnlime)
+   - Socket/esync paths use RELATIVE format: `/wine-%lx-esync`, `%s/.wineserver/server-%s`
+   - NO `/data/data/` prefix in socket or esync paths
+
+2. **Proton x86_64 wineserver** (`proton-9.0-x86_64.txz`):
+   - Has `com.termux` paths (NOT `app.gamenative`)
+   - Not our package, no redirect needed
+
+3. **GLIBC wineserver** (`imagefs_gamenative.txz`):
+   - Has `com.winlator/files/rootfs` paths (NOT `app.gamenative`)
+   - Socket path: `/data/data/com.winlator/files/rootfs/tmp/.wine-%u` → caught by `libredirect.so`
+   - Esync: relative `/wine-%lx-esync` (no package prefix)
+   - BuildID `5b72efc190d06d72d9a9a13a2bbd0735d957d4fb` — same binary as VibeNative's
+
+4. **GLIBC ntdll.so** (`imagefs_gamenative.txz`):
+   - Server socket: `/data/data/com.winlator/files/rootfs/tmp/.wine-%u/server-%s` → caught by `libredirect.so`
+   - Esync: `/wine-%lx-esync` (relative, no prefix)
+
+**Key insight**: The `wine-custom` source code has `app.gamenative` in `server/request.c` etc., but the COMPILED binaries in the distributed imagefs have `com.winlator` paths. This means either:
+- The binaries were compiled from different source (pre-rename)
+- Or there's a build-time transformation step
+- The VibeNative binary diff confirms: same BuildID, different string content (com.winlator → app.vibenative via byte replacement)
+
+**Bottom line**: The compiled wine binaries NEVER have `app.gamenative` in socket/esync paths. They use `com.winlator` (GLIBC) or `com.winlator.cmod` (bionic Proton), both of which are caught by the appropriate redirect shim.
+
+### The GLIBC ld-linux/libc compiled-in defaults — ACCEPTABLE RISK ✅
+
+`ld-linux-aarch64.so.1` and `libc.so.6` in the GLIBC imagefs have `app.gamenative` compiled in as default paths for:
+- Dynamic linker cache: `/data/data/app.gamenative/files/imagefs/usr/etc/ld.so.cache`
+- Library search: `/data/data/app.gamenative/files/imagefs/usr/lib/`
+- Gconv modules: `/data/data/app.gamenative/files/imagefs/usr/lib/gconv`
+- Locale: `/data/data/app.gamenative/files/imagefs/usr/share/locale`
+
+These are **fallback defaults** that only matter if no explicit paths are set. In GameNative's runtime:
+- No `ld.so.cache` exists in the imagefs (confirmed)
+- `LD_LIBRARY_PATH` is set explicitly by the launcher components
+- `PT_INTERP` is patched to the correct `app.gnlime` path (Phase 1)
+- Games rarely need gconv/locale from the system fallback path
+
+**Verdict**: Acceptable risk. If encoding issues surface in testing, a targeted workaround can be added.
+
