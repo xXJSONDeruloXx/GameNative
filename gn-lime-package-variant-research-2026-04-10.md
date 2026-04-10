@@ -1331,3 +1331,112 @@ python3 tools/lime-asset-patcher/patch_assets.py --dry-run --verbose
 # Apply
 python3 tools/lime-asset-patcher/patch_assets.py
 ```
+
+---
+
+## VibeNative Imagefs Analysis (2026-04-10)
+
+**Repo**: `https://github.com/Pepelespooder/vibenative-imagefs`
+**Author**: Pepelespooder (also maintains a fork of `utkarshdalal/GameNative`, identical to upstream)
+**Commit**: `399ec3f` — single commit with all assets
+
+### What VibeNative ships
+
+| File | Size | Purpose |
+|------|------|---------|
+| `imagefs_vibenative.txz` | 161 MB | GLIBC imagefs (rebuilt wineserver) |
+| `imagefs_bionic_vibenative.txz` | 181 MB | Bionic imagefs (adrenotools hooks, NOT rebuilt) |
+| `imagefs_patches_vibenative.tzst` | 188 MB | Wineprefix + libredirect.so + evshim + sysvshm + SDL2 |
+| `proton-9.0-arm64ec.txz` | 76 MB | Proton ARM64EC wine build (com.winlator.cmod paths) |
+| `proton-9.0-x86_64.txz` | 56 MB | Proton x86_64 wine build (com.termux paths) |
+| `steam.tzst` | 196 MB | Steam Windows binaries |
+| `steam-token.tzst` | 11 KB | Steam token executable |
+| `experimental-drm-20260116.tzst` | 14 MB | Experimental DRM/Steam overlay |
+
+### VibeNative's approach: a hybrid of source rebuild + redirect
+
+#### GLIBC layer — wineserver rebuilt from source
+
+VibeNative **rebuilt the GLIBC wineserver from source** with `app.vibenative` hardcoded. Evidence:
+- The VN wineserver uses `/data/data/app.vibenative/files/imgs/` paths (NOT `com.winlator`)
+- The VN wineserver has **zero** `com.winlator` references
+- The VN wineserver uses `/files/imgs/` instead of `/files/imagefs/` — suggesting they changed the base path in their wine source
+- File date: `Mar 16 18:17` — rebuilt 2026-03-16
+
+The GLIBC `libredirect.so` (in both patches and imagefs) was binary-patched with a simple `gam` → `vib` byte replacement (confirmed: same 43344 bytes, exactly 7 three-byte changes, turning `app.gamenative` → `app.vibenative`). The redirect still maps `com.winlator/files/rootfs` → `app.vibenative/files/imagefs`.
+
+**KEY DISCREPANCY**: The wineserver uses `/files/imgs/` but the redirect maps to `/files/imagefs/`. This means:
+- The VN wineserver bypasses the redirect entirely (no `com.winlator` paths to intercept)
+- The wineserver directly writes to `/data/data/app.vibenative/files/imgs/`
+- Other GLIBC binaries with `com.winlator` paths still get caught by the redirect
+- The app code presumably extracts the imagefs to `/files/imgs/` instead of `/files/imagefs/`
+
+The `evshim.so` was also rebuilt from source (contains `/data/data/app.vibenative/files/imagefs/tmp`).
+
+#### Bionic layer — adrenotools hook system, NOT rebuilt
+
+VibeNative uses a **completely different bionic redirect mechanism** from GameNative:
+
+**GameNative**: `libredirect-bionic.so` (12 KB, custom preload_replace_bionic.c)
+- Hooks `openat`, `fstatat`, `ioctl`, `read`
+- Has `old_pkg`/`new_pkg` string pair: `com.winlator.cmod` → `app.gamenative`
+
+**VibeNative**: `libfile_redirect_hook.so` + `libhook_impl.so` (adrenotools-based)
+- Source: `../subprojects/libadrenotools/src/hook/file_redirect_hook.c`
+- Hooks `fopen` only
+- Uses XXXX/ZZZZ placeholder pattern (adrenotools convention)
+- `init_hook_param` receives the target package path at runtime from the app
+- The hook libs themselves have `com.winlator/files/imagefs` hardcoded
+- Also includes `libgsl_alloc_hook.so` for GPU memory allocation hooks
+
+**All bionic imagefs binaries still have `com.winlator` paths** — VibeNative did NOT rebuild any bionic components. The adrenotools hook system redirects `fopen` calls from `com.winlator` → target package at runtime.
+
+#### Proton wine builds — not rebuilt
+
+Proton ARM64EC wineserver has `com.winlator.cmod` paths (unchanged).
+Proton x86_64 wineserver has `com.termux` paths (unchanged).
+These rely on the redirect shim to work.
+
+### Comparison with GN-Lime
+
+| Aspect | GN-Lime (our plan) | VibeNative (actual) |
+|--------|--------------------|--------------------|
+| GLIBC box64 PT_INTERP | Binary patch in tzst | N/A (separate imagefs) |
+| GLIBC libredirect.so | Binary patch in redirect.tzst | Binary patch `gam→vib` in imagefs/patches |
+| GLIBC wineserver | Relies on redirect shim | **Rebuilt from source** |
+| Bionic redirect | libredirect-bionic.so (binary patch) | adrenotools libfile_redirect_hook + libhook_impl |
+| Bionic wine | Needs investigation | **Not rebuilt** (uses fopen hooks) |
+| App code changes | applicationId + path constants | **None** (identical fork) |
+| Side-by-side? | Yes (different app ID) | **No** (same app ID, replacement only) |
+
+### Critical insights for GN-Lime
+
+1. **VibeNative does NOT do side-by-side** — their GameNative fork is identical to upstream. They only change the imagefs files. The APK still has `applicationId = app.gamenative`. This means VibeNative is a **replacement** install, not a concurrent one.
+
+2. **The `/imgs/` vs `/imagefs/` path change** — VibeNative's wineserver uses `/files/imgs/` instead of `/files/imagefs/`. If the app code is unchanged, this path must come from the imagefs extraction code in the app, which would mean VN patches the APK too (but hasn't pushed those changes). OR they're using a fork that uses a different download URL that serves VN-branded imagefs files.
+
+3. **The adrenotools hook approach** is interesting for bionic — it's a different design than GameNative's `libredirect-bionic.so`. It hooks `fopen` instead of syscall-level `openat`. This is less complete (won't catch direct `openat` calls) but simpler and sourced from a public project (adrenotools).
+
+4. **VibeNative confirms the redirect binary-patching approach works** — they successfully patched `libredirect.so` with a simple `gam` → `vib` replacement. Our more sophisticated `app.gamenative` → `app.gnlime` replacement is even safer because it's shorter.
+
+5. **VibeNative did NOT solve the bionic wine problem** — their bionic imagefs still has `com.winlator` everywhere. They rely on the fopen hook to catch path lookups. This is the same problem space we identified — bionic wine executables (loaded separately from the imagefs) likely have `app.gamenative` paths that the fopen hook might not catch if they use `openat` directly.
+
+6. **Proton wine builds are an additional wrinkle** — VN ships Proton builds with `com.winlator.cmod` paths. These need the redirect shim to work, just like our GLIBC case.
+
+### What this means for our 100% path assessment
+
+VibeNative's real-world example **confirms** several things:
+- Binary patching `libredirect.so` works ✅
+- The wineserver needs source rebuild for GLIBC ✅ (VN did this)
+- The bionic side can use hooks instead of full rebuild ⚠️ (VN used adrenotools fopen hook, untested for our use case)
+
+**But VibeNative also shows us that side-by-side is NOT their goal** — they're a drop-in replacement. For GN-Lime to be truly side-by-side, we DO need the APK-level changes (applicationId, path constants, etc.) that VibeNative avoided.
+
+### Regarding GLIBC handling
+
+VibeNative **does NOT properly handle GLIBC renaming** in the way we need:
+1. They rebuilt wineserver from source (good for them, hard for us without build infrastructure)
+2. Their redirect still maps to `/files/imagefs/` but their wineserver uses `/files/imgs/` — potential inconsistency
+3. They didn't touch the GLIBC box64, vortek, turnip, or other APK-bundled assets (their repo only contains imagefs files)
+4. For GN-Lime side-by-side, we need to handle ALL of these, which our patcher does
+
