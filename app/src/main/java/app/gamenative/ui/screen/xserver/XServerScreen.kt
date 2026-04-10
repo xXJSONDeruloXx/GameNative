@@ -1566,10 +1566,16 @@ fun XServerScreen(
                             Timber.i("First time boot: $firstTimeBoot")
 
                             // Set up FakeInputWriter evdev path for zero-overhead controller input
-                            val devInputDir = File(imageFs.rootDir, "dev/input")
-                            devInputDir.mkdirs()
-                            handler.setFakeInputPath(devInputDir.absolutePath)
-                            Timber.i("FakeInputWriter path set: ${devInputDir.absolutePath}")
+                            val useEvdev = container.controllerInputMethod == Container.CONTROLLER_INPUT_EVDEV
+                            if (useEvdev) {
+                                val devInputDir = File(imageFs.rootDir, "dev/input")
+                                devInputDir.mkdirs()
+                                handler.setFakeInputPath(devInputDir.absolutePath)
+                                Timber.i("FakeInputWriter path set: ${devInputDir.absolutePath}")
+                            } else {
+                                handler.setFakeInputPath(null)
+                                Timber.i("Using legacy controller input method")
+                            }
 
                             val wineVersion = container.wineVersion
                             Timber.i("Wine version is: $wineVersion")

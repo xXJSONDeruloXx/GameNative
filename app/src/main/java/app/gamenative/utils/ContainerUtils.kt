@@ -301,6 +301,7 @@ object ContainerUtils {
             enableXInput = enableX,
             enableDInput = enableD,
             dinputMapperType = mapperType,
+            controllerInputMethod = container.getControllerInputMethod(),
             disableMouseInput = disableMouse,
             touchscreenMode = touchscreenMode,
             shooterMode = shooterMode,
@@ -523,8 +524,9 @@ object ContainerUtils {
         }
         container.setInputType(api.ordinal)
         container.setDinputMapperType(containerData.dinputMapperType)
+        container.setControllerInputMethod(containerData.controllerInputMethod)
         container.setUseDRI3(containerData.useDRI3)
-        Timber.d("Container set: preferredInputApi=%s, dinputMapperType=0x%02x", api, containerData.dinputMapperType)
+        Timber.d("Container set: preferredInputApi=%s, dinputMapperType=0x%02x, controllerInputMethod=%s", api, containerData.dinputMapperType, containerData.controllerInputMethod)
 
         if (saveToDisk) {
             // Mark that config has been changed, so we can show feedback dialog after next game run

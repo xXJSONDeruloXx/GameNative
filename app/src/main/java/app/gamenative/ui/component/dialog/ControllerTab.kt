@@ -23,6 +23,7 @@ import com.alorma.compose.settings.ui.SettingsGroup
 import com.alorma.compose.settings.ui.SettingsSwitch
 import com.alorma.compose.settings.ui.SettingsMenuLink
 import com.winlator.container.Container
+import com.winlator.container.ContainerData
 
 @Composable
 fun ControllerTabContent(state: ContainerConfigState, default: Boolean) {
@@ -36,6 +37,24 @@ fun ControllerTabContent(state: ContainerConfigState, default: Boolean) {
                 title = { Text(text = stringResource(R.string.use_sdl_api)) },
                 state = config.sdlControllerAPI,
                 onCheckedChange = { state.config.value = config.copy(sdlControllerAPI = it) },
+            )
+        }
+        // Controller input method: evdev vs legacy (only for bionic variant)
+        if (state.isBionicVariant) {
+            SettingsListDropdown(
+                colors = settingsTileColors(),
+                title = { Text(text = stringResource(R.string.controller_input_method)) },
+                subtitle = { Text(text = stringResource(R.string.controller_input_method_description)) },
+                value = if (config.controllerInputMethod == Container.CONTROLLER_INPUT_EVDEV) 0 else 1,
+                items = listOf(
+                    stringResource(R.string.controller_input_method_evdev),
+                    stringResource(R.string.controller_input_method_legacy),
+                ),
+                onItemSelected = { index ->
+                    state.config.value = config.copy(
+                        controllerInputMethod = if (index == 0) Container.CONTROLLER_INPUT_EVDEV else Container.CONTROLLER_INPUT_LEGACY
+                    )
+                },
             )
         }
         SettingsSwitch(

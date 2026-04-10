@@ -70,6 +70,11 @@ public class Container {
     public static final String STEAM_TYPE_ULTRALIGHT = "ultralight";
     public static final String GLIBC = "glibc";
     public static final String BIONIC = "bionic";
+
+    // Controller input method constants
+    public static final String CONTROLLER_INPUT_LEGACY = "legacy";
+    public static final String CONTROLLER_INPUT_EVDEV = "evdev";
+    public static final String DEFAULT_CONTROLLER_INPUT_METHOD = CONTROLLER_INPUT_EVDEV;
     public static final byte MAX_DRIVE_LETTERS = 8;
     public final String id;
     private String name;
@@ -106,6 +111,7 @@ public class Container {
     private int rcfileId = 0;
     private String midiSoundFont = "";
     private int inputType = WinHandler.PreferredInputApi.BOTH.ordinal();
+    private String controllerInputMethod = DEFAULT_CONTROLLER_INPUT_METHOD; // "evdev" or "legacy"
     private String lc_all = "en_US.utf8";
     private int primaryController = 1;
     private String controllerMapping = new String(new char[XrControllerMapping.values().length]);
@@ -585,6 +591,14 @@ public class Container {
         this.inputType = inputType;
     }
 
+    public String getControllerInputMethod() {
+        return controllerInputMethod;
+    }
+
+    public void setControllerInputMethod(String method) {
+        this.controllerInputMethod = method;
+    }
+
     /**
      * Gets the DirectInput mapper type: 1=standard, 2=XInput mapper
      */
@@ -654,6 +668,7 @@ public class Container {
             data.put("launchRealSteam", launchRealSteam);
             data.put("allowSteamUpdates", allowSteamUpdates);
             data.put("inputType", inputType);
+            data.put("controllerInputMethod", controllerInputMethod);
             data.put("dinputMapperType", dinputMapperType);
             data.put("wow64Mode", wow64Mode);
             data.put("startupSelection", startupSelection);
@@ -785,6 +800,9 @@ public class Container {
                     break;
                 case "inputType" :
                     setInputType(data.getInt(key));
+                    break;
+                case "controllerInputMethod" :
+                    setControllerInputMethod(data.getString(key));
                     break;
                 case "dinputMapperType" :
                     setDinputMapperType((byte) data.getInt(key));

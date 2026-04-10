@@ -705,6 +705,10 @@
     <string name="enable_xinput_api">Enable XInput API</string>
     <string name="enable_directinput_api">Enable DirectInput API</string>
     <string name="directinput_mapper_type">DirectInput Mapper Type</string>
+    <string name="controller_input_method">Controller Input Method</string>
+    <string name="controller_input_method_evdev">Evdev (Zero Overhead)</string>
+    <string name="controller_input_method_legacy">Legacy (XInput/Evshim)</string>
+    <string name="controller_input_method_description">Evdev uses raw Linux input events for lower latency. Only available with Bionic containers.</string>
     <string name="disable_mouse_input">Disable Mouse Input</string>
     <string name="touchscreen_mode">Touchscreen Mode</string>
     <string name="touchscreen_mode_description">For visual novels and RTS games</string>

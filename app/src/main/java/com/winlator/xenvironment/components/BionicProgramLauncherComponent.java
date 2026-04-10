@@ -299,34 +299,38 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
         ld_preload += ":" + evshimPath;
         ld_preload += ":" + replacePath;
 
-        // Copy libfakeinput.so to imagefs and add to LD_PRELOAD
-        try {
-            File fakeinputDest = new File(fakeinputPath);
-            File fakeinputSrc = new File(context.getApplicationInfo().nativeLibraryDir, "libfakeinput.so");
-            if (!fakeinputDest.exists() && fakeinputSrc.exists()) {
-                com.winlator.core.FileUtils.copy(fakeinputSrc, fakeinputDest);
-                Log.d("BionicProgramLauncher", "Copied libfakeinput.so to imagefs");
+        // Copy libfakeinput.so to imagefs and add to LD_PRELOAD (only for evdev input method)
+        boolean useEvdev = Container.CONTROLLER_INPUT_EVDEV.equals(container.getControllerInputMethod());
+        if (useEvdev) {
+            try {
+                File fakeinputDest = new File(fakeinputPath);
+                File fakeinputSrc = new File(context.getApplicationInfo().nativeLibraryDir, "libfakeinput.so");
+                if (!fakeinputDest.exists() && fakeinputSrc.exists()) {
+                    com.winlator.core.FileUtils.copy(fakeinputSrc, fakeinputDest);
+                    Log.d("BionicProgramLauncher", "Copied libfakeinput.so to imagefs");
+                }
+                if (fakeinputDest.exists()) {
+                    ld_preload += ":" + fakeinputPath;
+                }
+            } catch (Exception e) {
+                Log.e("BionicProgramLauncher", "Failed to copy libfakeinput.so: " + e.getMessage());
             }
-            if (fakeinputDest.exists()) {
-                ld_preload += ":" + fakeinputPath;
-            }
-        } catch (Exception e) {
-            Log.e("BionicProgramLauncher", "Failed to copy libfakeinput.so: " + e.getMessage());
         }
 
         envVars.put("LD_PRELOAD", ld_preload);
 
         // Create dev/input directory with event files for libfakeinput.so
-        File devInputDir = new File(rootDir, "dev/input");
-        devInputDir.mkdirs();
-        for (int i = 0; i < 4; i++) {
-            File eventFile = new File(devInputDir, "event" + i);
-            if (!eventFile.exists()) {
-                try { eventFile.createNewFile(); } catch (IOException ignored) {}
+        if (useEvdev) {
+            File devInputDir = new File(rootDir, "dev/input");
+            devInputDir.mkdirs();
+            for (int i = 0; i < 4; i++) {
+                File eventFile = new File(devInputDir, "event" + i);
+                if (!eventFile.exists()) {
+                    try { eventFile.createNewFile(); } catch (IOException ignored) {}
+                }
             }
+            envVars.put("FAKE_EVDEV_DIR", devInputDir.getAbsolutePath());
         }
-
-        envVars.put("FAKE_EVDEV_DIR", devInputDir.getAbsolutePath());
         envVars.put("EVSHIM_SHM_NAME", "controller-shm0");
 
         // Check for specific shared memory libraries

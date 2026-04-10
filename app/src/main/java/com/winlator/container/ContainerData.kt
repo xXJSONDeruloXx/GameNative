@@ -70,6 +70,8 @@ data class ContainerData(
     val enableDInput: Boolean = true,
     /** DirectInput mapper type: 1=standard, 2=XInput mapper **/
     val dinputMapperType: Byte = 1,
+    /** Controller input method: "evdev" (zero-overhead) or "legacy" (UDP+evshim) **/
+    val controllerInputMethod: String = Container.DEFAULT_CONTROLLER_INPUT_METHOD,
     /** Disable external mouse input **/
     val disableMouseInput: Boolean = false,
     /** Touchscreen mode **/
@@ -139,6 +141,7 @@ data class ContainerData(
                     "enableXInput" to state.enableXInput,
                     "enableDInput" to state.enableDInput,
                     "dinputMapperType" to state.dinputMapperType,
+                    "controllerInputMethod" to state.controllerInputMethod,
                     "disableMouseInput" to state.disableMouseInput,
                     "touchscreenMode" to state.touchscreenMode,
                     "shooterMode" to state.shooterMode,
@@ -201,6 +204,7 @@ data class ContainerData(
                     enableXInput = savedMap["enableXInput"] as Boolean,
                     enableDInput = savedMap["enableDInput"] as Boolean,
                     dinputMapperType = savedMap["dinputMapperType"] as Byte,
+                    controllerInputMethod = (savedMap["controllerInputMethod"] as? String) ?: Container.DEFAULT_CONTROLLER_INPUT_METHOD,
                     disableMouseInput = savedMap["disableMouseInput"] as Boolean,
                     touchscreenMode = savedMap["touchscreenMode"] as Boolean,
                     shooterMode = (savedMap["shooterMode"] as? Boolean) ?: true,
