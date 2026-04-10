@@ -1440,3 +1440,143 @@ VibeNative **does NOT properly handle GLIBC renaming** in the way we need:
 3. They didn't touch the GLIBC box64, vortek, turnip, or other APK-bundled assets (their repo only contains imagefs files)
 4. For GN-Lime side-by-side, we need to handle ALL of these, which our patcher does
 
+
+---
+
+## GameNative Discord Research: Package Rename History (2026-04-10)
+
+Guild: `1378308569287622737`. Searched for `decompil`, `hardcod`, `package name`, `vibenative`, `evshim`, `libredirect`, and related terms.
+
+### Key Discord evidence (chronological)
+
+#### 2026-02-20 — sockmonkey72 (jeremybernstein) — PR #585 `fix: replace hardcoded app ID paths with BuildConfig.APPLICATION_ID`
+**Channel**: `#development` (`1386424596449988709`)
+
+> This turns out to be a problem on my Thor — I was able to create the Island, but because I can't install the debug apk directly to it via Android Studio, it doesn't really solve my problem (not screwing up my working install). So I went my previous route, which was to add a suffix to the app's appID. It turns out that this causes other breakage because the appID string is hardcoded in a number of places, including in the imagefs (`evshim`). I was able to get this working locally, though, and I've made a PR for it: https://github.com/utkarshdalal/GameNative/pull/585
+>
+> The only gotcha is that imagefs needs to be recompiled ... A rebuild of imagefs to use the exported `EVSHIM_DATA_DIR` env var would solve that problem (and eliminate all of the hackery [which is excluded from the PR branch]).
+
+**PR #585 status**: Closed without merging. Superseded by `jb/dev-env` branch. **None of the changes from PR #585 were merged to master.** All hardcoded paths it addressed remain in the codebase.
+
+**raynoxu1337's review comment** on `evshim.c`:
+> Lol this is funny, i also tried replacing all the hardcoded strings, there is a branch in my repo for exactly this, but the i thought, why not use a regex or something similar here to get the path, evshim's working path should be in that path anyways, no? Maybe its more convenient with some trivial string parsing here instead of ONE MORE env variable??
+
+**GN-Lime relevance**: PR #585 mapped exactly the same source files we identified. Their solution (BuildConfig.APPLICATION_ID + EVSHIM_DATA_DIR env var) is the clean Java-side fix. We should adopt this approach for our fork.
+
+#### 2026-02-23 — zi3d — On GLIBC + package name feasibility
+**Channel**: Thread `1475421160865923306`
+
+> I don't think that's possible *right now*. Glibc will break if you changed pkg name (that's why there's no winlator glibc with custom pkg name), and the controller impl used in Bionic have some hardcoded paths (can get fixed)
+
+**Context**: Discussion about Antutu/Ludashi/PUBG package name variants for OEM governor tricks.
+
+**GN-Lime relevance**: zi3d confirms our finding — GLIBC rename is the hard part, bionic controller paths are fixable. Our analysis shows GLIBC is feasible with redirect-layer patches + box64 PT_INTERP patching.
+
+#### 2026-03-02 — ribbit_68832 — Package rename attempt
+**Channel**: `#development` (`1386424596449988709`)
+
+> How could one go about modifying imagefs? All I see is its download link but does it have a repo or something?
+
+> Remove any static reference to 'app.gamenative' so variant package name can be added
+
+> I marked that PR as a draft, it wont work properly unless I swap out all hardcoded references to app.gamenative
+
+> its more complicated than that, theres dependancies or something with references
+
+> so atm best I can do is get games to launch but controls wont work lol
+
+> funny enough cursor shows up on screen and it works
+
+**Utkarsh's response**:
+> that's not in the imagefs file, and i don't want to do that
+
+> it's hardcoded in the wine and sdl files
+
+> i don't want to do this yet while we figure out how to deal with forks like Max's. I'm adding extra security layers so they can't simply make a new namespace and piggy back off our paid infra.
+
+**GN-Lime relevance**: Utkarsh explicitly acknowledges the wine/SDL hardcoding problem. His reluctance is strategic (fork control), not technical impossibility. Ribbit confirmed games launch but controls break — exactly our "evshim gamepad.mem path" finding.
+
+#### 2026-03-06 — the412banner — APK editor approach
+**Channel**: Thread `1479449383027212451`
+
+> I think it was CMOD winlator that had everything hard coded in where if you try to open a APK editor and change the package name it would break the controller
+
+> So you ultimately want to make it so you could just open the APK editor and change the package name rather than having to re-harcode it?
+
+> The new ludashi changed gears where things are no longer hard coded in like Game hub and I could just whip out an APK editor, change the package name and everything work as is originally with the benefits of antutu Ludashi PuBG Genshin etc
+
+**GN-Lime relevance**: Confirms that older Winlator cmod had the same hardcoding problem, and newer Ludashi-based builds relaxed it somewhat. GameNative's situation is harder because of wine/SDL/evshim deep hardcoding.
+
+#### 2026-03-11 — raynoxu — Debug build with env variable
+**Channel**: Thread `1481326067858804756`
+
+> ok for the sake of exercise i tried to make it so debug build is separate and made it so evshim would take env variable GAMENATIVE_HOME_DIR_NAME=gamenative.app.debug and put it instead of hardcoded path. And when evshim inits i placed extra log to make sure it my version. My issue is that evshim did not rebuild, what am i missing? do i need to run cmake manually?
+
+**GN-Lime relevance**: Same evshim problem we identified. The env var approach works for the Java side but evshim.c needs to be recompiled into libevshim.so and injected into the imagefs.
+
+#### 2026-03-15 — arkhamantis + pepelespooder — Hardcoding provenance
+**Channel**: `#general` (`1412756778159964201`)
+
+**arkhamantis**:
+> Those hardcoded values were done by Coffincolors for Cmod 13, which is what GameNative is based on. Utkarsh didn't do it, Coffincolors did.
+
+**pepelespooder**:
+> Utkarsh you are a mad man for hardcoding so many values
+
+**GN-Lime relevance**: Confirms the hardcoding lineage traces back to coffincolors/cmod, consistent with our finding of `com.winlator.cmod` paths throughout the wrapper and bionic layers.
+
+#### 2026-03-17 — pepelespooder — Decompiling libredirect for VibeNative GLIBC
+**Channel**: `#general` (`1412756778159964201`)
+
+> I got vibenative working properly on glibc
+
+> i had to decompile libredirect
+
+> Like litterally i had to decompile Libredirect just to figure out that it does SOOO MUCH
+
+**GN-Lime relevance**: Pepelespooder is the author of `vibenative-imagefs` that we analyzed. He confirms he decompiled libredirect.so to understand its function and then patched it for VibeNative. Our binary analysis confirmed his approach: simple `gam` → `vib` byte replacement.
+
+#### 2026-03-22 — VibeNative abandoned
+**Channel**: `#general`
+
+**pepelespooder**:
+> i deleted vibenative
+
+**spacebubble**:
+> RIP vibenative 2026-2026
+
+**pepelespooder** (2026-03-28):
+> Lol vibenative is dead
+
+> Lol I told anyone using vibenative in a popup dont ask utkarsh for support
+
+**GN-Lime relevance**: VibeNative was a short-lived experiment. The author ran into issues (missing libredirect/libsdl2 in extraction) and abandoned it. The imagefs repo remains public but is not maintained.
+
+#### 2026-04-07 — avalumi — Current state
+**Channel**: `#general`
+
+> there is some hardcoding done with certain files and they expect app.gamenative, I don't know which or where to change them
+
+#### 2026-04-10 — omnisoju — The right solution
+**Channel**: `#general`
+
+> another solution is to just fix the underlying code so that changing the package name does not influence anything (like controllers right now)
+
+### Summary of Discord findings for GN-Lime
+
+1. **Utkarsh explicitly acknowledges the hardcoding problem** but won't fix it for strategic reasons (fork control, infra protection)
+2. **sockmonkey72's PR #585 mapped the exact same files we identified** and proposed `BuildConfig.APPLICATION_ID` + `EVSHIM_DATA_DIR` — this is the clean Java-side fix we should adopt
+3. **PR #585 was closed without merging** — all those hardcoded paths remain in master
+4. **zi3d confirms GLIBC is the hard part** — consistent with our finding that wine, box64, and the redirect layer all have deep path hardcodes
+5. **ribbit_68832 tried the naive approach** (just change package name) and got games to launch but controls broke — exactly the evshim/gamepad.mem path problem
+6. **pepelespooder confirmed our binary patching approach works** for libredirect.so via decompilation and byte replacement
+7. **VibeNative was abandoned** after hitting libredirect extraction issues and other problems
+8. **The community continues to request** package name variants (Antutu, Ludashi, PUBG for OEM governor tricks) but the core team won't prioritize it
+
+### Actionable takeaways for GN-Lime
+
+1. **Adopt sockmonkey72's `BuildConfig.APPLICATION_ID` approach** from PR #585 for Java-side path construction — this is proven and clean
+2. **The `EVSHIM_DATA_DIR` env var approach** is the right fix for evshim.c — we just need to rebuild libevshim.so
+3. **Our asset patcher already handles the binary layer** that everyone on Discord says is the hard part
+4. **We should NOT expect upstream to accept package-rename PRs** — Utkarsh explicitly declined for strategic reasons. GN-Lime should be a fork, not a PR.
+
