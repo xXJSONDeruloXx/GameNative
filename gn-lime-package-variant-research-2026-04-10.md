@@ -724,6 +724,10 @@ I checked current trees and/or commit history for:
 - `KreitinnSoftware/MiceWine-Application`
 - `KreitinnSoftware/MiceWine-RootFS-Generator`
 - `MaxsTechReview/WinNative`
+- `pipetto-crypto/winlator`
+- `Vivsi1/winlator`
+- `longjunyu2/winlator`
+- `afeimod/winlator-glibc`
 
 #### What I found
 
@@ -771,6 +775,20 @@ I checked current trees and/or commit history for:
 Interpretation:
 - WinNative seems to have **ported some GameNative-style launcher logic** for redirect libs
 - but it does **not** currently prove a public redistributable source or bundled asset for the redirect binaries themselves
+
+##### Other visible Winlator-family forks checked via GitHub API tree/history
+- `pipetto-crypto/winlator`
+- `Vivsi1/winlator`
+- `longjunyu2/winlator`
+- `afeimod/winlator-glibc`
+
+For these forks, I did **not** find:
+- `redirect.tzst`
+- `libredirect.so`
+- `libredirect-bionic.so`
+- `libpluviagoldberg.so`
+
+That makes the redirect bundle look even more like a **GameNative-local addition** rather than a standard artifact shared across the broader Android Windows-emulation ecosystem.
 
 ### Best current provenance read
 
