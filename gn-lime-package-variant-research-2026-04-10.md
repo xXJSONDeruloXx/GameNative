@@ -699,6 +699,10 @@ Loose historical `libredirect_logging-bionic.so`:
 
 Interpretation:
 - the earliest bionic redirect implementation in repo history was an **xhook-based JNI hooking library**
+- that same `upstream/new_vortek` tree also temporarily added a `NativeHooks` object in `app/src/main/java/app/gamenative/PluviaApp.kt`:
+  - `System.loadLibrary("redirect_logging-bionic")`
+  - `NativeHooks.init()` during app startup
+- that startup-hook path did **not** survive to mainline
 - the later packed `redirect.tzst` bionic shim is a **different, smaller binary**
 - so the bionic redirect layer was not just “moved into a tar”; it was **replaced by a different implementation** before `redirect.tzst` landed
 
