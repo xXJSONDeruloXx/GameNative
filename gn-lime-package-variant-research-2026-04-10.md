@@ -559,3 +559,247 @@ If the goal is a real `GN-Lime` fork, the evidence still points to:
 5. Keep a distinction between:
    - **source-known blockers** we can rebuild or patch
    - **source-missing blockers** we may need to replace, reverse, or avoid
+
+---
+
+## Follow-up: `redirect.tzst` provenance and external survey (2026-04-10)
+
+This section focuses specifically on the opaque redirect/preload layer:
+- `app/src/main/assets/redirect.tzst`
+- `usr/lib/libredirect.so`
+- `usr/lib/libredirect-bionic.so`
+
+### High-level conclusion
+
+Right now, `redirect.tzst` looks like a **GameNative-specific artifact**, not something broadly shipped by upstream Pluvia, mainstream Winlator, or MiceWine current trees.
+
+It also looks like it evolved in two steps:
+
+1. a **GLIBC preload shim** lineage tied to the older name `libpluviagoldberg.so`
+2. a later **bionic redirect shim** lineage that first appeared as loose JNI libs on the `upstream/new_vortek` branch and only later got packed into `redirect.tzst`
+
+### What I confirmed in local GameNative history
+
+#### GLIBC-side preload naming timeline
+
+- `e1f09f22` (`It works!`, 2025-05-17)
+  - `GlibcProgramLauncherComponent.java` sets:
+    - `LD_PRELOAD="libpluviagoldberg.so libandroid-sysvshm.so"`
+- `2e936d7e` (`Updated name of preload`, 2025-05-27)
+  - changes that to:
+    - `LD_PRELOAD="libredirect.so libandroid-sysvshm.so"`
+
+Important implication:
+- the current GLIBC redirect shim is very likely a **renamed descendant** of an earlier `libpluviagoldberg.so` preload library
+- but there is **no committed `libpluviagoldberg.so` file** anywhere in this repo history that I could find
+
+#### Bionic-side redirect timeline
+
+- `2df2b427` (`Progress - patched libvortekrenderer and now it doesn't crash but i get a black screen hehe`, 2025-07-15)
+  - branch: `upstream/new_vortek`
+  - adds loose JNI binaries:
+    - `app/src/main/jniLibs/arm64-v8a/libredirect-bionic.so`
+    - `app/src/main/jniLibs/arm64-v8a/libredirect_logging-bionic.so`
+- `2c25981f` (`Got aarch64 proton working with LD_PRELOAD`, 2025-10-18)
+  - `BionicProgramLauncherComponent.java` starts preloading:
+    - `imageFs.getLibDir() + "/libredirect-bionic.so"`
+- `451ca4a1` (`Fixed wowbox64 for arm64ec bionic containers`, 2025-10-20)
+  - introduces:
+    - `app/src/main/assets/redirect.tzst`
+  - adds `ImageFsInstaller` extraction logic for it
+- `20ebeaf0` (`Initial bionic changes (#191)`, 2025-10-23)
+  - merges the bionic stream to mainline and keeps the same `redirect.tzst`
+
+#### Current `redirect.tzst` has never changed since introduction
+
+I checked the blob ID for `app/src/main/assets/redirect.tzst` across local history.
+
+Result:
+- it appears to be the **same blob** from its first appearance in the bionic branch through current `master`
+
+So the current packed redirect bundle is not something that has been iterated in-tree many times. It looks more like a single imported binary artifact that survived unchanged.
+
+### What is actually inside `redirect.tzst`
+
+Archive listing:
+- `./usr/lib/libredirect.so`
+- `./usr/lib/libredirect-bionic.so`
+- plus two accidental Mac metadata files:
+  - `./.DS_Store`
+  - `./usr/.DS_Store`
+
+Tar metadata is also revealing:
+- owner/group: `utkarshdalal staff`
+- archive directory timestamps: `Oct 20 05:35`
+- `libredirect.so` timestamp: `Jul 24 2025`
+- `libredirect-bionic.so` timestamp: `Oct 17 21:11`
+
+That strongly suggests this archive was **hand-packed on a Mac**, not produced by a clean reproducible packaging pipeline.
+
+### Binary observations
+
+#### Current asset `libredirect.so`
+
+From strings / symbols in the packed GLIBC shim:
+- source filename string:
+  - `preload_replace.c`
+- retained legacy naming:
+  - `[INIT] libpluviagoldberg.so loaded`
+  - `pluviagoldberg_on_load`
+  - `LD_PRELOAD=/data/data/app.gamenative/files/imagefs/libpluviagoldberg.so`
+- hardcoded path lineage hints:
+  - `com.winlator/files/rootfs`
+  - `app.gamenative/files/imagefs`
+  - `/data/data/app.gamenative/files/imagefs/usr/tmp`
+  - `/data/data/app.gamenative/files/imagefs/preload_loaded.txt`
+
+Interpretation:
+- the GLIBC redirect shim still carries obvious **PluviaGoldberg-era** and **old Winlator rootfs** lineage inside the binary itself
+- it is not package-agnostic today
+
+#### Current asset `libredirect-bionic.so`
+
+The packed bionic shim is **not** the same binary as the loose July 2025 `jniLibs` one.
+
+Current packed asset:
+- size: `12680`
+- SHA-256: `a6a0ee59bac93112f84bf75994def7607a278e8cb011a6e23414cb0107abc2cd`
+- strings include:
+  - `preload_replace_bionic.c`
+  - `old_pkg`
+  - `new_pkg`
+  - `rewrite (openat): %s -> %s`
+  - `rewrite (read): %s -> %s`
+  - `rewrite (ioctl): %s -> %s`
+  - `rewrite (fstatat): %s -> %s`
+  - `com.winlator.cmod`
+  - `app.gamenative`
+- notably, it **does not** expose the older xhook JNI symbols
+
+Interpretation:
+- this looks like a **smaller later-generation package/path rewrite shim**
+- it appears to be doing generic rewrite logic with `old_pkg` / `new_pkg`
+- but it is still opaque, source-missing, and still knows about legacy package names
+
+#### Historical loose bionic libs from `2df2b427`
+
+Loose historical `libredirect-bionic.so`:
+- size: `45008`
+- SHA-256: `b641fbed68c03d925f18a16d6700ed870ffd937260b694dca8020787f907ebe0`
+
+Loose historical `libredirect_logging-bionic.so`:
+- size: `45072`
+- includes:
+  - `libxhook 1.2.0 (aarch64)`
+  - `Java_com_qiyi_xhook_NativeHandler_*`
+  - `Java_app_gamenative_NativeHooks_init`
+  - `preload_replace_bionic.c`
+  - `/data/data/com.winlator/`
+  - `/data/data/app.gamenative/`
+
+Interpretation:
+- the earliest bionic redirect implementation in repo history was an **xhook-based JNI hooking library**
+- the later packed `redirect.tzst` bionic shim is a **different, smaller binary**
+- so the bionic redirect layer was not just “moved into a tar”; it was **replaced by a different implementation** before `redirect.tzst` landed
+
+### Current external survey results
+
+I checked current trees and/or commit history for:
+- `redirect.tzst`
+- `libredirect.so`
+- `libredirect-bionic.so`
+- related references
+
+#### Repos checked
+- `utkarshdalal/GameNative`
+- `oxters168/Pluvia`
+- `brunodev85/winlator`
+- `coffincolors/winlator`
+- `winebox64/winlator`
+- `utkarshdalal/winlator-cmod`
+- `KreitinnSoftware/MiceWine-Application`
+- `KreitinnSoftware/MiceWine-RootFS-Generator`
+- `MaxsTechReview/WinNative`
+
+#### What I found
+
+##### `utkarshdalal/GameNative`
+- current tree **does** contain `app/src/main/assets/redirect.tzst`
+- this is still the only current tree I found that actually ships the bundle
+
+##### `oxters168/Pluvia`
+- **no** `redirect.tzst`
+- **no** `libredirect*` files in the current tree
+- still has some package-bound paths, but not this exact redirect bundle
+
+##### `brunodev85/winlator`
+- **no** `redirect.tzst`
+- **no** `libredirect*` files found in current tree
+- current tree still has older package-bound paths like `/data/data/com.winlator/...`
+
+##### `coffincolors/winlator`
+- **no** `redirect.tzst`
+- **no** `libredirect*` files found in current tree
+- many package-bound path assumptions still exist, especially around `com.winlator.cmod`
+
+##### `winebox64/winlator`
+- **no** `redirect.tzst`
+- **no** `libredirect*` files found in current tree
+
+##### `utkarshdalal/winlator-cmod`
+- **no** `redirect.tzst`
+- **no** `libredirect*` files found in current tree
+- still uses package-bound hardcodes in ordinary app code
+
+##### `KreitinnSoftware/MiceWine-*`
+- **no** `redirect.tzst`
+- **no** `libredirect*` files found
+- MiceWine appears to solve Android path assumptions more directly in its rootfs/package build system and patches, e.g. many `/data/data/com.micewine.emu/...` path patches in `MiceWine-RootFS-Generator`
+
+##### `MaxsTechReview/WinNative`
+- interesting partial hit:
+  - current code **references** `redirect.tzst` and `libredirect.so` / `libredirect-bionic.so`
+  - but current tree contains **no actual `redirect.tzst` asset** and no `libredirect*` files
+- using GitHub API history, I confirmed those references were introduced on:
+  - `fad0594a` (2026-03-18)
+- before that, WinNative did not reference redirect libs in the same launcher/installer files
+
+Interpretation:
+- WinNative seems to have **ported some GameNative-style launcher logic** for redirect libs
+- but it does **not** currently prove a public redistributable source or bundled asset for the redirect binaries themselves
+
+### Best current provenance read
+
+The most defensible current story is:
+
+1. **GLIBC redirect support started first**, under the older preload identity `libpluviagoldberg.so`.
+2. That GLIBC preload was later **renamed** to `libredirect.so` in app-side launcher code.
+3. **Bionic redirect support arrived later**, first as loose xhook-based JNI libraries on `upstream/new_vortek`.
+4. Before bionic landed on mainline, those loose bionic libs were replaced by a **smaller packed bionic redirect shim** and bundled together with the GLIBC shim inside `redirect.tzst`.
+5. The bundle appears to have been **hand-assembled locally** and then committed as a binary asset.
+6. I still do **not** have a public source repo for either packed redirect shim.
+
+### Feasibility implications for GN-Lime
+
+#### What this means in practice
+
+- `redirect.tzst` is still the biggest **opaque binary** in the package-rename story.
+- It does **not** look like something we can simply pull fresh from mainstream upstream Winlator / Pluvia / MiceWine.
+- The current bundle carries legacy hardcoded package lineage internally.
+
+#### Best current options
+
+1. **Bionic-first and minimize dependence on redirect where possible**
+   - this still looks like the best route for a first `GN-Lime` build
+2. **Treat GLIBC redirect behavior as unstable until proven otherwise**
+   - because the GLIBC shim is clearly old, opaque, and package-bound
+3. **Either find or replace the redirect layer**
+   - public source discovery
+   - binary reverse-mapping / reimplementation
+   - or enough runtime cleanup that the redirect layer is no longer needed for key paths
+
+#### Updated confidence statement
+
+- **GN-Lime remains feasible** as a source-built side-by-side fork
+- **Bionic remains the right first target**
+- **GLIBC remains blocked partly by `wine-custom`, partly by `box64`, and partly by the opaque `redirect.tzst` layer**
