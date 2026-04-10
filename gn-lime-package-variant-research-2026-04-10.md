@@ -1128,3 +1128,206 @@ So the missing source is still most likely to be found in one of these places:
 - an older/private/local build workspace that never got published
 - a binary assembled from unpublished C sources during the `new_vortek` / bionic experimentation phase
 - or some imported rootfs/imagefs artifact outside the visible app repos we checked
+
+---
+
+## Comprehensive asset binary analysis (2026-04-10)
+
+Full download and inspection of every unique binary asset blob across all of GameNative history (plus live imagefs downloads). This section resolves the patching feasibility question completely.
+
+### Method
+
+Enumerated all unique git blob SHAs for:
+- `container_pattern*.tzst` (all historical versions)
+- `imagefs_patches*.tzst` (all versions)
+- `box64-*.tzst` (GLIBC and bionic)
+- `wrapper*.tzst` (all versions)
+- `graphics_driver/*.tzst` (all versions)
+- `redirect.tzst`
+- `pulseaudio-gamenative.tzst`
+- `extra_libs.tzst`
+
+Also downloaded the live runtime imagefs files:
+- `https://downloads.gamenative.app/imagefs_gamenative.txz` (158 MB GLIBC imagefs)
+- `https://downloads.gamenative.app/imagefs_bionic.txz` (175 MB bionic imagefs)
+
+### Key finding: `libredirect.so` internals finally mapped
+
+**`usr/lib/libredirect.so`** (from `redirect.tzst` AND inside `imagefs_gamenative.txz`):
+
+This is the GLIBC-side LD_PRELOAD path-rewrite shim. Its function:
+- Intercepts `openat`, `openat64`, `openat2`, `fstatat`, `fstatat64` syscalls
+- Rewrites any path containing `com.winlator/files/rootfs` → `app.gamenative/files/imagefs`
+- Uses `preload_loaded.txt` sentinel to avoid double-loading
+- Loads itself via `LD_PRELOAD=/data/data/app.gamenative/files/imagefs/libpluviagoldberg.so`
+  (because this lib was previously named `libpluviagoldberg.so`)
+- Has init symbol `pluviagoldberg_on_load` — confirms the naming lineage
+
+Hardcoded strings (all in `.rodata`):
+| Offset | String | Slot |
+|--------|--------|------|
+| 0x6780 | `com.winlator` | 17 bytes |
+| 0x6790 | `app.gamenative` | 17 bytes |
+| 0x67a0 | `com.winlator/files/rootfs` | 33 bytes |
+| 0x67c0 | `app.gamenative/files/imagefs` | 33 bytes |
+| 0x68d8 | `/data/data/app.gamenative/files/imagefs/usr/tmp` | 49 bytes |
+| 0x6b88 | `/data/data/app.gamenative/files/imagefs/preload_loaded.txt` | 65 bytes |
+| 0x80d8 | `LD_PRELOAD=/data/data/app.gamenative/files/imagefs/libpluviagoldberg.so` | 73 bytes |
+| 0x8120 | same as above | 73 bytes |
+| 0x8168 | same as above | 73 bytes |
+
+All patch to `app.gnlime` with ≥4 bytes slack.
+
+**`usr/lib/libredirect-bionic.so`** (from `redirect.tzst`):
+
+This is the Android-bionic-side LD_PRELOAD path-rewrite shim. Its function:
+- Intercepts `openat`, `fstatat`, `ioctl` syscalls
+- Rewrites any path: `old_pkg` → `new_pkg`
+- Current values: `old_pkg = com.winlator.cmod` (17 chars), `new_pkg = app.gamenative` (14 chars)
+- Symbol exports: `old_pkg` and `new_pkg` are the configurable string slots
+- Debug strings: `rewrite (openat): %s -> %s`, `rewrite (ioctl): %s -> %s`, etc.
+
+Hardcoded strings:
+| Offset | String | Slot |
+|--------|--------|------|
+| 0x8ab | `com.winlator.cmod` | 19 bytes |
+| 0x949 | `app.gamenative` | 16 bytes |
+
+To patch for GN-Lime: replace `app.gamenative` → `app.gnlime` at 0x949.
+The `old_pkg = com.winlator.cmod` stays unchanged because the bionic wine binaries
+still have `com.winlator.cmod` hardcoded as their original source package path.
+
+### Key finding: box64 GLIBC PT_INTERP confirmed
+
+All three current GLIBC box64 builds have:
+
+| File | PT_INTERP offset | Slot size | Content |
+|------|-----------------|-----------|---------|
+| `box64-0.3.4.tzst` | `0x2a8` | 70 bytes | `/data/data/app.gamenative/files/imagefs/usr/lib/ld-linux-aarch64.so.1` |
+| `box64-0.3.6.tzst` | `0x2a8` | 70 bytes | same |
+| `box64-0.3.8.tzst` | `0x2a8` | 70 bytes | same |
+
+With `app.gnlime` (10 chars vs 14 chars → 4 chars shorter):
+- New PT_INTERP = `/data/data/app.gnlime/files/imagefs/usr/lib/ld-linux-aarch64.so.1` (65 chars + null = 66 bytes)
+- Fits in 70-byte slot with 4 bytes slack
+- Simple in-place binary patch, no `patchelf` needed
+
+Bionic box64 builds (`box64-0.3.x-bionic.tzst`) use only `com.termux` paths — no `app.gamenative` references. No patching needed.
+
+### Key finding: wrapper libs use `com.winlator.cmod` NOT `app.gamenative`
+
+All wrapper versions (`wrapper-leegao.tzst`, `wrapper-v2.tzst`, `wrapper.tzst`, etc.) have:
+- `com.winlator.cmod/files/imagefs/usr/lib` hardcoded in `libvulkan_wrapper.so` RPATH
+- `com.termux` paths throughout
+
+No `app.gamenative` references in any wrapper. The wrappers were compiled against the cmod package.
+For GN-Lime, the bionic redirect shim (`libredirect-bionic.so`) handles the `com.winlator.cmod` → `app.gnlime` rewrite at runtime, so wrapper libs do NOT need patching.
+
+### Key finding: container patterns have no hardcoded paths
+
+All `container_pattern*.tzst` versions (earliest Winlator through bionic) contain only Windows filesystem structure (`.wine/`, fonts, DLLs, registry). No `/data/data/` path strings found.
+
+### Key finding: live imagefs analysis
+
+**GLIBC imagefs (`imagefs_gamenative.txz`, 158 MB):**
+- Contains `opt/wine/bin/wineserver` with `com.winlator/files/rootfs` paths
+- Contains `usr/bin/aserver` with `com.winlator/files/imagefs/usr/lib` RPATH
+- Contains `usr/lib/libredirect.so` — this is the SAME binary as in `redirect.tzst`
+  (the APK asset `redirect.tzst` is extracted AFTER the imagefs and overwrites this file)
+- **Conclusion**: patching `redirect.tzst` in the APK is sufficient; no server-side imagefs patching needed
+
+**Bionic imagefs (`imagefs_bionic.txz`, 175 MB):**
+- Contains `usr/bin/aserver` (Android native, `/system/bin/linker64`) with `com.winlator` RPATH
+- Contains `usr/bin/cacaserver` (Android native) with `com.termux` and `com.winlator` paths
+- Does NOT contain `app.gamenative` paths
+- **Conclusion**: bionic redirect shim handles runtime rewriting; these files are not critical
+
+### Complete binary patch map for GN-Lime (`app.gnlime`)
+
+#### APK assets — patchable via `tools/lime-asset-patcher/patch_assets.py`
+
+| Asset | Patch count | What changes |
+|-------|-------------|--------------|
+| `box86_64/box64-0.3.4.tzst` | 1 | PT_INTERP `app.gamenative` → `app.gnlime` |
+| `box86_64/box64-0.3.6.tzst` | 1 | same |
+| `box86_64/box64-0.3.8.tzst` | 1 | same |
+| `redirect.tzst` | 8 | `libredirect.so` × 7, `libredirect-bionic.so` × 1 |
+| `graphics_driver/vortek-2.0.tzst` | 2 | ELF + ICD JSON |
+| `graphics_driver/vortek-2.1.tzst` | 2 | ELF + ICD JSON |
+| `graphics_driver/turnip-25.2.0.tzst` | 1 | ICD JSON |
+| `graphics_driver/turnip-25.3.0.tzst` | 1 | ICD JSON |
+
+**Total: 17 patches via the asset patcher tool**
+
+#### Source code — manual changes
+
+| File | Change needed |
+|------|--------------|
+| `app/build.gradle.kts` | `applicationId = "app.gnlime"` |
+| `app/src/main/cpp/extras/evshim.c` | `app.gamenative` → `app.gnlime` |
+| `app/src/main/AndroidManifest.xml` | `app.gamenative.LAUNCH_GAME` → `app.gnlime.LAUNCH_GAME` |
+| `WinHandler.java` | `PACKAGE_NAME` constant |
+| `BionicProgramLauncherComponent.java` | imagefs path construction |
+| `GlibcProgramLauncherComponent.java` | imagefs path construction |
+| `WineUtils.java` | wine path helpers |
+| `DXVKHelper.java` | path helpers |
+| `Container.java` | container path constants |
+| `IntentLaunchManager.kt` | intent action string |
+| `ShortcutUtils.kt` | shortcut URI |
+| `IconSwitcher.kt` | icon URI |
+| `GOGService.kt`, `EpicService.kt`, `AmazonService.kt` | service URIs |
+
+Recommend using `AppPaths.java` abstraction from `origin/feat/package-rename-support` to centralize all path construction rather than individual string edits.
+
+### Architecture diagram (GN-Lime runtime path rewriting)
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Android layer (bionic)                                  │
+│  wine-bionic, box64-bionic executables                  │
+│  have com.winlator.cmod paths hardcoded                 │
+│       ↓ preloaded via LD_PRELOAD                        │
+│  libredirect-bionic.so                                  │
+│    old_pkg = com.winlator.cmod  (unchanged)             │
+│    new_pkg = app.gnlime         (patched from           │
+│                                  app.gamenative)        │
+│  → rewrites com.winlator.cmod → app.gnlime at runtime  │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│ GLIBC layer (inside imagefs)                            │
+│  wineserver, wine binaries have com.winlator paths      │
+│       ↓ preloaded via LD_PRELOAD                        │
+│  libredirect.so (= libpluviagoldberg.so)                │
+│    rewrite: com.winlator/files/rootfs                   │
+│          →  app.gnlime/files/imagefs (patched)          │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│ GLIBC box64                                             │
+│  PT_INTERP: /data/data/app.gnlime/files/imagefs/        │
+│             usr/lib/ld-linux-aarch64.so.1 (patched)     │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Remaining unknowns / limitations
+
+1. **wine-bionic direct `app.gamenative` references**: The bionic wine binaries (served from `imagefs_bionic.txz`) may have `app.gamenative` paths hardcoded in wine server/socket code (confirmed in `utkarshdalal/wine-custom` source). The bionic redirect shim currently catches `com.winlator.cmod` → `app.gamenative` only. If wine-bionic has `app.gamenative` direct hardcodes, those would NOT be caught. A source rebuild of wine-bionic targeting `app.gnlime` is the clean fix.
+
+2. **`imagefs_bionic.txz` aserver/cacaserver**: Have `com.winlator` RPATHs. Minor issue — audio may break. Can be patched server-side or replaced.
+
+3. **GLIBC wine direct `app.gamenative` references**: Similar to above but in GLIBC wine. `libredirect.so` only catches `com.winlator` → `app.gnlime`. Any direct `app.gamenative` in wine-GLIBC code would be wrong. Investigation of `utkarshdalal/wine-custom` confirmed `app.gamenative` hits in `server/request.c`, `server/esync.c`, etc. For a correct GLIBC container, wine-custom needs a source rebuild for `app.gnlime`.
+
+4. **Bionic-first is the recommended starting point**: Build bionic wine + bionic box64 with `app.gnlime` from source. The GLIBC path can remain experimental with known caveats.
+
+### Patcher tool
+
+`tools/lime-asset-patcher/patch_assets.py` — see `tools/lime-asset-patcher/README.md`
+
+```bash
+# Preview all changes
+python3 tools/lime-asset-patcher/patch_assets.py --dry-run --verbose
+
+# Apply
+python3 tools/lime-asset-patcher/patch_assets.py
+```
