@@ -344,6 +344,103 @@ That is another major reason generic game teardown-resume remains so hard.
 
 ---
 
+## 9) Android app freezer is not a teardown-restore mechanism
+
+Android's cached-app freezer is real, but official AOSP documentation makes clear that it is:
+
+- a system-managed cached-process feature
+- not a public app API
+- not equivalent to durable checkpoint/restore
+
+Important documented behavior:
+
+- Android says the freezer exposes **no official APIs** and uses hidden system APIs internally
+- synchronous Binder calls into a frozen app can cause Android to **kill** that frozen remote process
+- asynchronous calls may be buffered until unfreeze, but can still fail if buffers overflow
+- public SDK support is mainly for **detection/mitigation**, not saving and restoring full app state
+- `restoreCheckpoint` in Android docs belongs to **userdata checkpoint/OTA rollback**, not process-state restore
+
+Sources:
+- Cached apps freezer (AOSP): https://source.android.com/docs/core/perf/cached-apps-freezer
+- Binder freezer guidance: https://source.android.com/docs/core/architecture/ipc/binder-freezer
+- `IBinder` frozen-state callbacks: https://developer.android.com/reference/kotlin/android/os/IBinder
+- `RemoteCallbackList`: https://developer.android.com/reference/android/os/RemoteCallbackList
+- `ApplicationExitInfo`: https://developer.android.com/reference/android/app/ApplicationExitInfo
+- User Data Checkpoint: https://source.android.com/docs/core/ota/user-data-checkpoint
+
+### Best interpretation
+
+Android freezer may help a best-effort **RAM-only background pause** strategy, but it is not a path to:
+
+- full teardown,
+- disk-backed snapshot,
+- later game restoration.
+
+---
+
+## 10) Public Proton/Wine evidence does not show a checkpoint/restore path
+
+### Proton
+
+Public Proton materials do **not** show a documented CRIU/checkpoint/restore feature:
+
+- Proton repo README shows no CRIU/checkpoint/restore support
+- GitHub issue searches for Proton + CRIU return no clear feature discussions
+
+Sources:
+- Proton repo: https://github.com/ValveSoftware/Proton
+- GitHub search `repo:ValveSoftware/Proton CRIU`
+
+### Wine
+
+Public WineHQ material also does **not** show a supported end-to-end checkpoint/restore feature for Wine process state.
+
+The closest relevant signals are weak/indirect:
+
+- a Wine bug thread referencing Linux support added partly for CRIU-related reasons
+- discussion that Wine process state can be inconsistent after crash / SIGKILL
+
+Sources:
+- Wine bug 52313 thread: https://list.winehq.org/archives/list/wine-bugs%40list.winehq.org/thread/ZDRXHPMNPC6UWDLWMZJATTYAXW2LHO4D/
+- Wine mailing list message: https://list.winehq.org/archives/list/wine-gitlab%40list.winehq.org/message/6Q7YBSZQKQ6W5NANB3GNXFDAGXDKU5MM/
+
+### Best interpretation
+
+If Valve/Proton or Wine had a serious near-term process-checkpoint story for game sessions, some public evidence would likely exist in:
+
+- docs,
+- issue trackers,
+- release notes,
+- or developer discussions.
+
+So far, the absence of that evidence is itself a useful signal.
+
+---
+
+## 11) Android Vulkan still looks like a diagnostics-only story, not restore
+
+Public Vulkan/Android evidence still points to:
+
+- diagnostic checkpoints / markers
+- device-loss debugging
+- application-managed recreation after device loss
+
+not:
+
+- transparent save/restore of live GPU state,
+- or resume-after-teardown on Android.
+
+Sources:
+- Vulkan debugging chapter: https://docs.vulkan.org/spec/latest/chapters/debugging.html
+- Vulkan devices/queues chapter: https://github.khronos.org/Vulkan-Site/spec/latest/chapters/devsandqueues.html
+- Android Vulkan extension matrix: https://developer.android.com/agi/vulkan-extensions
+
+### Best interpretation
+
+On Android Vulkan specifically, this appears to remain a **research gap** rather than an available product/API path.
+
+---
+
 ## Paths that look real vs not-real for GameNative
 
 ## A) Real today: in-RAM suspend/resume
