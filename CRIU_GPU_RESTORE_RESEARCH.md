@@ -274,6 +274,76 @@ This further supports the same pattern:
 
 ---
 
+## 7) VM / vGPU migration is a more complete graphics-state path than CRIU, but it is the wrong level for GameNative
+
+NVIDIA's current vGPU migration docs say live migration replicates:
+
+- VM system memory
+- CPU execution state
+- vGPU framebuffer
+- vGPU execution state
+
+and then switches execution to the destination host with minimal interruption.
+
+Sources:
+- NVIDIA vGPU features: https://docs.nvidia.com/vgpu/knowledge-base/latest/vgpu-features.html
+- NVIDIA vGPU user guide: https://docs.nvidia.com/vgpu/latest/grid-vgpu-user-guide/
+- R550 whats-new: https://docs.nvidia.com/vgpu/17.0/whats-new-vgpu/index.html
+- R570 whats-new: https://docs.nvidia.com/vgpu/18.0/whats-new-vgpu/index.html
+- Windows Server release notes: https://docs.nvidia.com/vgpu/latest/grid-vgpu-release-notes-microsoft-windows-server/index.html
+
+### Why this matters
+
+This is one of the few public, productized examples of **graphics-inclusive migration after teardown/switchover** that appears to preserve enough GPU execution state for applications to continue.
+
+### Why it still does not solve GameNative
+
+That mechanism works at the **VM / hypervisor / vGPU** layer, not at the user-space process layer.
+
+GameNative is not running each game inside a migratable VM with a vendor-managed vGPU. It is running:
+
+- Android app process
+- Wine process tree
+- mobile GPU stack
+- X11/Winlator-like userspace runtime
+
+So this is evidence for a broader architectural truth:
+
+> Full graphics-state survival becomes much more realistic when the checkpoint boundary is the whole VM, not a single process tree.
+
+But it does not provide a near-term implementation path for GameNative.
+
+---
+
+## 8) Vulkan exposes diagnostics, not full restore
+
+Recent Khronos/Vulkan materials do **not** point to a standardized Vulkan checkpoint/restore facility for full application state.
+
+What exists publicly:
+
+- `VK_NV_device_diagnostic_checkpoints`
+- `VK_AMD_buffer_marker`
+- device-loss diagnostics and post-mortem markers
+
+What does **not** exist publicly as a standard Vulkan feature:
+
+- save full GPU/device/application state
+- later restore that state after teardown
+- resume execution from the same point automatically
+
+Sources:
+- Khronos forum discussion: https://community.khronos.org/t/after-a-vk-device-lost-what-options-are-there/103923
+- Vulkan spec: https://github.khronos.org/Vulkan-Site/spec/latest/chapters/devsandqueues.html
+- `VK_NV_device_diagnostic_checkpoints`: https://docs.vulkan.org/refpages/latest/refpages/source/VK_NV_device_diagnostic_checkpoints.html
+
+### Best interpretation
+
+For Vulkan today, recovery is still fundamentally **application-managed recreation**, not transparent restore of a prior live device state.
+
+That is another major reason generic game teardown-resume remains so hard.
+
+---
+
 ## Paths that look real vs not-real for GameNative
 
 ## A) Real today: in-RAM suspend/resume
