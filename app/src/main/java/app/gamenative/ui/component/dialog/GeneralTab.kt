@@ -263,7 +263,6 @@ fun GeneralTabContent(
             SettingsListDropdown(
                 colors = settingsTileColors(),
                 title = { Text(text = stringResource(R.string.steam_launch_option_title)) },
-                subtitle = { Text(text = stringResource(R.string.steam_launch_option_subtitle)) },
                 value = if (selectedLaunchIndex >= 0) selectedLaunchIndex + 1 else 0,
                 items = launchOptionItems,
                 onItemSelected = { idx ->
