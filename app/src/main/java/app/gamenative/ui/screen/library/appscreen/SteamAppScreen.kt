@@ -544,8 +544,11 @@ class SteamAppScreen : BaseAppScreen() {
             val container = ContainerUtils.getOrCreateContainer(context, libraryItem.appId)
             val launchInfos = SteamService.getWindowsLaunchInfos(gameId)
             val selectedLaunchSignature = container.getExtra(STEAM_SELECTED_LAUNCH_SIGNATURE_KEY, "")
+            val hasValidRememberedLaunch = launchInfos.any {
+                buildSteamLaunchSignature(it) == selectedLaunchSignature
+            }
 
-            if (launchInfos.size > 1 && selectedLaunchSignature.isBlank()) {
+            if (launchInfos.size > 1 && !hasValidRememberedLaunch) {
                 showLaunchOptionDialog(gameId)
             } else {
                 onClickPlay(false)
