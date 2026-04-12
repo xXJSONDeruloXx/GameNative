@@ -98,7 +98,6 @@ import app.gamenative.utils.CustomGameScanner
 import app.gamenative.utils.ExecutableSelectionUtils
 import app.gamenative.utils.IntentLaunchManager
 import app.gamenative.utils.PreInstallSteps
-import app.gamenative.utils.STEAM_TRANSIENT_LAUNCH_SELECTION_KEY
 import app.gamenative.utils.SteamTokenLogin
 import app.gamenative.utils.SteamUtils
 import com.posthog.PostHog
@@ -339,7 +338,9 @@ fun XServerScreen(
     // var pointerEventListener by remember { mutableStateOf<Callback<MotionEvent>?>(null) }
 
     val gameId = ContainerUtils.extractGameIdFromContainerId(appId)
-    val appLaunchInfo = SteamService.resolveConfiguredLaunchInfo(gameId, container)
+    val appLaunchInfo = SteamService.getAppInfoOf(gameId)?.let {
+        SteamService.getWindowsLaunchInfos(gameId).firstOrNull()
+    }
 
     var currentAppInfo = SteamService.getAppInfoOf(gameId)
 
@@ -362,11 +363,6 @@ fun XServerScreen(
             physicalControllerHandler = null
             exitWatchJob?.cancel()
             exitWatchJob = null
-
-            if (container.getExtra(STEAM_TRANSIENT_LAUNCH_SELECTION_KEY, "false").toBoolean()) {
-                IntentLaunchManager.restoreOriginalConfiguration(context, appId)
-                IntentLaunchManager.clearTemporaryOverride(appId)
-            }
         }
     }
     var isKeyboardVisible = false
@@ -2962,7 +2958,7 @@ private fun getWineStartCommand(
     if (isSteamGame) {
         // Steam-specific setup
         if (container.executablePath.isEmpty()){
-            container.executablePath = appLaunchInfo?.executable ?: SteamService.getInstalledExe(gameId)
+            container.executablePath = SteamService.getInstalledExe(gameId)
             container.saveData()
         }
         if (!container.isUseLegacyDRM){

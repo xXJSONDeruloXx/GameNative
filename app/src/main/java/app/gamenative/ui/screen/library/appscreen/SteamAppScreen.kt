@@ -64,10 +64,8 @@ import app.gamenative.ui.enums.DialogType
 import app.gamenative.utils.ContainerUtils
 import app.gamenative.utils.IntentLaunchManager
 import app.gamenative.utils.MarkerUtils
-import app.gamenative.utils.STEAM_SELECTED_LAUNCH_SIGNATURE_KEY
 import app.gamenative.utils.SteamUtils
 import app.gamenative.utils.StorageUtils
-import app.gamenative.utils.buildSteamLaunchSignature
 import app.gamenative.utils.getSteamLaunchOptionLabel
 import app.gamenative.workshop.WorkshopManager
 import app.gamenative.NetworkMonitor
@@ -543,12 +541,8 @@ class SteamAppScreen : BaseAppScreen() {
         } else {
             val container = ContainerUtils.getOrCreateContainer(context, libraryItem.appId)
             val launchInfos = SteamService.getWindowsLaunchInfos(gameId)
-            val selectedLaunchSignature = container.getExtra(STEAM_SELECTED_LAUNCH_SIGNATURE_KEY, "")
-            val hasValidRememberedLaunch = launchInfos.any {
-                buildSteamLaunchSignature(it) == selectedLaunchSignature
-            }
 
-            if (launchInfos.size > 1 && !hasValidRememberedLaunch) {
+            if (launchInfos.size > 1 && container.executablePath.isEmpty()) {
                 showLaunchOptionDialog(gameId)
             } else {
                 onClickPlay(false)
@@ -853,24 +847,6 @@ class SteamAppScreen : BaseAppScreen() {
     }
 
     override fun supportsContainerConfig(): Boolean = true
-
-    @Composable
-    override fun RenderContainerConfigDialog(
-        title: String,
-        context: Context,
-        libraryItem: LibraryItem,
-        initialConfig: ContainerData,
-        onDismissRequest: () -> Unit,
-        onSave: (ContainerData) -> Unit,
-    ) {
-        ContainerConfigDialog(
-            title = title,
-            initialConfig = initialConfig,
-            steamLaunchOptions = SteamService.getWindowsLaunchInfos(libraryItem.gameId),
-            onDismissRequest = onDismissRequest,
-            onSave = onSave,
-        )
-    }
 
     override fun getExportFileExtension(): String = ".steam"
 
@@ -1205,22 +1181,18 @@ class SteamAppScreen : BaseAppScreen() {
                 SteamLaunchOptionDialog(
                     gameName = appInfo?.name ?: libraryItem.name,
                     launchInfos = launchInfos,
-                    initialSelectedSignature = ContainerUtils.getOrCreateContainer(context, libraryItem.appId)
-                        .getExtra(STEAM_SELECTED_LAUNCH_SIGNATURE_KEY, ""),
                     onConfirm = { selectedLaunchInfo, rememberChoice ->
-                        val container = ContainerUtils.getOrCreateContainer(context, libraryItem.appId)
-                        val baseConfig = ContainerUtils.toContainerData(container)
-                        val selectedConfig = baseConfig.copy(
-                            executablePath = selectedLaunchInfo.executable,
-                            steamSelectedLaunchSignature = buildSteamLaunchSignature(selectedLaunchInfo),
-                            steamTransientLaunchSelection = !rememberChoice,
-                        )
-
                         if (rememberChoice) {
-                            IntentLaunchManager.clearTemporaryOverride(libraryItem.appId)
-                            ContainerUtils.applyToContainer(context, libraryItem.appId, selectedConfig.copy(steamTransientLaunchSelection = false))
+                            val container = ContainerUtils.getOrCreateContainer(context, libraryItem.appId)
+                            container.executablePath = selectedLaunchInfo.executable
+                            container.saveData()
                         } else {
-                            IntentLaunchManager.applyTemporaryConfigOverride(context, libraryItem.appId, selectedConfig)
+                            val container = ContainerUtils.getOrCreateContainer(context, libraryItem.appId)
+                            val baseConfig = ContainerUtils.toContainerData(container)
+                            val overrideConfig = baseConfig.copy(
+                                executablePath = selectedLaunchInfo.executable,
+                            )
+                            IntentLaunchManager.applyTemporaryConfigOverride(context, libraryItem.appId, overrideConfig)
                         }
 
                         hideLaunchOptionDialog(gameId)
@@ -1456,16 +1428,10 @@ class SteamAppScreen : BaseAppScreen() {
 private fun SteamLaunchOptionDialog(
     gameName: String,
     launchInfos: List<LaunchInfo>,
-    initialSelectedSignature: String,
     onConfirm: (LaunchInfo, Boolean) -> Unit,
     onDismissRequest: () -> Unit,
 ) {
-    val fallbackLaunchInfo = launchInfos.first()
-    var selectedLaunchInfo by remember(initialSelectedSignature, launchInfos) {
-        mutableStateOf(
-            launchInfos.firstOrNull { buildSteamLaunchSignature(it) == initialSelectedSignature } ?: fallbackLaunchInfo,
-        )
-    }
+    var selectedIndex by remember { mutableIntStateOf(0) }
     var rememberChoice by remember { mutableStateOf(false) }
 
     AlertDialog(
@@ -1484,20 +1450,19 @@ private fun SteamLaunchOptionDialog(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 launchInfos.forEachIndexed { index, launchInfo ->
-                    val selected = buildSteamLaunchSignature(launchInfo) == buildSteamLaunchSignature(selectedLaunchInfo)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .selectable(
-                                selected = selected,
-                                onClick = { selectedLaunchInfo = launchInfo },
+                                selected = selectedIndex == index,
+                                onClick = { selectedIndex = index },
                             )
                             .padding(vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         RadioButton(
-                            selected = selected,
-                            onClick = { selectedLaunchInfo = launchInfo },
+                            selected = selectedIndex == index,
+                            onClick = { selectedIndex = index },
                         )
                         Column(modifier = Modifier.padding(start = 8.dp)) {
                             Text(text = getSteamLaunchOptionLabel(launchInfo, index))
@@ -1531,7 +1496,7 @@ private fun SteamLaunchOptionDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(selectedLaunchInfo, rememberChoice) }) {
+            TextButton(onClick = { onConfirm(launchInfos[selectedIndex], rememberChoice) }) {
                 Text(stringResource(R.string.run_app))
             }
         },

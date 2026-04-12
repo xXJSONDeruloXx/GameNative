@@ -204,8 +204,6 @@ object IntentLaunchManager {
             drives = if (json.has("drives")) json.getString("drives") else Container.DEFAULT_DRIVES,
             execArgs = if (json.has("execArgs")) json.getString("execArgs") else "",
             executablePath = if (json.has("executablePath")) json.getString("executablePath") else "",
-            steamSelectedLaunchSignature = if (json.has("steamSelectedLaunchSignature")) json.getString("steamSelectedLaunchSignature") else "",
-            steamTransientLaunchSelection = if (json.has("steamTransientLaunchSelection")) json.getBoolean("steamTransientLaunchSelection") else false,
             installPath = if (json.has("installPath")) json.getString("installPath") else "",
             showFPS = if (json.has("showFPS")) json.getBoolean("showFPS") else false,
             launchRealSteam = if (json.has("launchRealSteam")) json.getBoolean("launchRealSteam") else false,
@@ -287,8 +285,6 @@ object IntentLaunchManager {
             drives = if (override.drives != Container.DEFAULT_DRIVES) override.drives else base.drives,
             execArgs = override.execArgs.ifEmpty { base.execArgs },
             executablePath = override.executablePath.ifEmpty { base.executablePath },
-            steamSelectedLaunchSignature = override.steamSelectedLaunchSignature.ifEmpty { base.steamSelectedLaunchSignature },
-            steamTransientLaunchSelection = override.steamTransientLaunchSelection,
             installPath = override.installPath.ifEmpty { base.installPath },
             // Boolean fields: only override if different from parsing defaults
             showFPS = if (override.showFPS != false) override.showFPS else base.showFPS,

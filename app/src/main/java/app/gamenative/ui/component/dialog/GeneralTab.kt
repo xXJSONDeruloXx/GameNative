@@ -26,10 +26,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.gamenative.R
 import app.gamenative.ui.component.settings.SettingsListDropdown
-import app.gamenative.utils.STEAM_SELECTED_LAUNCH_SIGNATURE_KEY
-import app.gamenative.utils.buildSteamLaunchSignature
-import app.gamenative.utils.findSteamLaunchInfoBySignature
-import app.gamenative.utils.getSteamLaunchOptionLabel
 import com.alorma.compose.settings.ui.SettingsSwitch
 import app.gamenative.ui.theme.settingsTileColors
 import app.gamenative.ui.theme.settingsTileColorsAlt
@@ -250,37 +246,6 @@ fun GeneralTabContent(
                     },
                 )
             }
-        }
-        val steamLaunchOptions = state.steamLaunchOptions
-        if (steamLaunchOptions.size > 1) {
-            val selectedLaunchIndex = steamLaunchOptions.indexOfFirst {
-                buildSteamLaunchSignature(it) == config.steamSelectedLaunchSignature
-            }
-            val launchOptionItems = listOf(stringResource(R.string.steam_launch_option_ask_every_time)) +
-                steamLaunchOptions.mapIndexed { index, launchInfo ->
-                    getSteamLaunchOptionLabel(launchInfo, index)
-                }
-            SettingsListDropdown(
-                colors = settingsTileColors(),
-                title = { Text(text = stringResource(R.string.steam_launch_option_title)) },
-                value = if (selectedLaunchIndex >= 0) selectedLaunchIndex + 1 else 0,
-                items = launchOptionItems,
-                onItemSelected = { idx ->
-                    state.config.value = if (idx == 0) {
-                        config.copy(
-                            steamSelectedLaunchSignature = "",
-                            steamTransientLaunchSelection = false,
-                        )
-                    } else {
-                        val selectedLaunchInfo = steamLaunchOptions[idx - 1]
-                        config.copy(
-                            executablePath = selectedLaunchInfo.executable,
-                            steamSelectedLaunchSignature = buildSteamLaunchSignature(selectedLaunchInfo),
-                            steamTransientLaunchSelection = false,
-                        )
-                    }
-                },
-            )
         }
         ExecutablePathDropdown(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),

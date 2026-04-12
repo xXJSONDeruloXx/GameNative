@@ -362,7 +362,6 @@
     <string name="button_slots_help">Buttons support up to 2 bindings: primary (press) and secondary (long press)</string>
     <string name="properties">Properties</string>
     <string name="steam_launch_option_title">Launch option</string>
-    <string name="steam_launch_option_ask_every_time">Ask every time</string>
     <string name="steam_launch_option_dialog_title">Choose launch option</string>
     <string name="steam_launch_option_dialog_message">Select how to start %1$s.</string>
     <string name="steam_launch_option_remember_choice">Remember this choice in Properties</string>

@@ -53,11 +53,9 @@ import app.gamenative.utils.FileUtils
 import app.gamenative.utils.LicenseSerializer
 import app.gamenative.utils.MarkerUtils
 import app.gamenative.utils.Net
-import app.gamenative.utils.STEAM_SELECTED_LAUNCH_SIGNATURE_KEY
 import app.gamenative.utils.SteamUtils
 import app.gamenative.utils.CURRENT_UFS_PARSE_VERSION
 import app.gamenative.utils.generateSteamApp
-import app.gamenative.utils.resolveSteamLaunchInfo
 import app.gamenative.workshop.WorkshopManager
 import com.winlator.container.Container
 import com.winlator.xenvironment.ImageFs
@@ -1132,13 +1130,6 @@ class SteamService : Service(), IChallengeUrlChanged {
                 )?.executable ?: ""
         }
 
-        fun resolveConfiguredLaunchInfo(appId: Int, container: Container?): LaunchInfo? {
-            val launchInfos = getWindowsLaunchInfos(appId)
-            if (launchInfos.isEmpty()) return null
-            val selectedSignature = container?.getExtra(STEAM_SELECTED_LAUNCH_SIGNATURE_KEY, "").orEmpty()
-            return resolveSteamLaunchInfo(launchInfos, selectedSignature)
-        }
-
         /**
          * Resolves the effective launch executable for a Steam game (container config or auto-detected).
          * Returns a non-empty sentinel when [Container.isLaunchRealSteam] is true so the launch is not blocked.
@@ -1146,9 +1137,7 @@ class SteamService : Service(), IChallengeUrlChanged {
         fun getLaunchExecutable(appId: String, container: Container): String {
             if (container.isLaunchRealSteam) return "steam"
             val gameId = ContainerUtils.extractGameIdFromContainerId(appId)
-            return container.executablePath
-                .ifEmpty { resolveConfiguredLaunchInfo(gameId, container)?.executable.orEmpty() }
-                .ifEmpty { getInstalledExe(gameId) }
+            return container.executablePath.ifEmpty { getInstalledExe(gameId) }
         }
 
         fun deleteApp(appId: Int): Boolean {
