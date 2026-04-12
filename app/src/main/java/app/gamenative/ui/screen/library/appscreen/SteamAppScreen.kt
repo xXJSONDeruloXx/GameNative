@@ -9,15 +9,20 @@ import android.net.Uri
 import android.os.Environment
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -25,9 +30,11 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
@@ -37,6 +44,7 @@ import androidx.core.content.ContextCompat
 import app.gamenative.PluviaApp
 
 import app.gamenative.R
+import app.gamenative.data.LaunchInfo
 import app.gamenative.data.LibraryItem
 import app.gamenative.enums.Marker
 import app.gamenative.enums.PathType
@@ -45,6 +53,7 @@ import app.gamenative.events.AndroidEvent
 import app.gamenative.service.DownloadService
 import app.gamenative.service.SteamService
 import app.gamenative.service.SteamService.Companion.getAppDirPath
+import app.gamenative.ui.component.dialog.ContainerConfigDialog
 import app.gamenative.ui.component.dialog.MessageDialog
 import app.gamenative.ui.component.dialog.LoadingDialog
 import app.gamenative.ui.component.dialog.state.MessageDialogState
@@ -53,9 +62,13 @@ import app.gamenative.ui.data.GameDisplayInfo
 import app.gamenative.ui.enums.AppOptionMenuType
 import app.gamenative.ui.enums.DialogType
 import app.gamenative.utils.ContainerUtils
+import app.gamenative.utils.IntentLaunchManager
 import app.gamenative.utils.MarkerUtils
+import app.gamenative.utils.STEAM_SELECTED_LAUNCH_SIGNATURE_KEY
 import app.gamenative.utils.SteamUtils
 import app.gamenative.utils.StorageUtils
+import app.gamenative.utils.buildSteamLaunchSignature
+import app.gamenative.utils.getSteamLaunchOptionLabel
 import app.gamenative.workshop.WorkshopManager
 import app.gamenative.NetworkMonitor
 import com.google.android.play.core.splitcompat.SplitCompat
@@ -198,6 +211,18 @@ class SteamAppScreen : BaseAppScreen() {
         }
 
         fun shouldShowBranchDialog(gameId: Int): Boolean = gameId in branchDialogVisibleIds
+
+        private val launchOptionDialogVisible = mutableStateMapOf<Int, Boolean>()
+
+        fun showLaunchOptionDialog(gameId: Int) {
+            launchOptionDialogVisible[gameId] = true
+        }
+
+        fun hideLaunchOptionDialog(gameId: Int) {
+            launchOptionDialogVisible.remove(gameId)
+        }
+
+        fun shouldShowLaunchOptionDialog(gameId: Int): Boolean = launchOptionDialogVisible[gameId] == true
 
         // Shared state for update/verify operation - map of gameId to AppOptionMenuType
         private val pendingUpdateVerifyOperations = mutableStateMapOf<Int, AppOptionMenuType>()
@@ -516,7 +541,15 @@ class SteamAppScreen : BaseAppScreen() {
                 )
             )
         } else {
-            onClickPlay(false)
+            val container = ContainerUtils.getOrCreateContainer(context, libraryItem.appId)
+            val launchInfos = SteamService.getWindowsLaunchInfos(gameId)
+            val selectedLaunchSignature = container.getExtra(STEAM_SELECTED_LAUNCH_SIGNATURE_KEY, "")
+
+            if (launchInfos.size > 1 && selectedLaunchSignature.isBlank()) {
+                showLaunchOptionDialog(gameId)
+            } else {
+                onClickPlay(false)
+            }
         }
     }
 
@@ -818,6 +851,24 @@ class SteamAppScreen : BaseAppScreen() {
 
     override fun supportsContainerConfig(): Boolean = true
 
+    @Composable
+    override fun RenderContainerConfigDialog(
+        title: String,
+        context: Context,
+        libraryItem: LibraryItem,
+        initialConfig: ContainerData,
+        onDismissRequest: () -> Unit,
+        onSave: (ContainerData) -> Unit,
+    ) {
+        ContainerConfigDialog(
+            title = title,
+            initialConfig = initialConfig,
+            steamLaunchOptions = SteamService.getWindowsLaunchInfos(libraryItem.gameId),
+            onDismissRequest = onDismissRequest,
+            onSave = onSave,
+        )
+    }
+
     override fun getExportFileExtension(): String = ".steam"
 
     @Composable
@@ -826,6 +877,7 @@ class SteamAppScreen : BaseAppScreen() {
         onDismiss: () -> Unit,
         onEditContainer: () -> Unit,
         onBack: () -> Unit,
+        onClickPlay: (Boolean) -> Unit,
     ) {
         val context = LocalContext.current
         val gameId = libraryItem.gameId
@@ -864,6 +916,15 @@ class SteamAppScreen : BaseAppScreen() {
                 .collect { state ->
                     gameManagerDialogState = state ?: GameManagerDialogState(false)
                 }
+        }
+
+        var showLaunchOptionDialogState by remember(gameId) {
+            mutableStateOf(shouldShowLaunchOptionDialog(gameId))
+        }
+
+        LaunchedEffect(gameId) {
+            snapshotFlow { shouldShowLaunchOptionDialog(gameId) }
+                .collect { showLaunchOptionDialogState = it }
         }
 
         // Migration state
@@ -1135,6 +1196,40 @@ class SteamAppScreen : BaseAppScreen() {
             )
         }
 
+        if (showLaunchOptionDialogState) {
+            val launchInfos = remember(gameId) { SteamService.getWindowsLaunchInfos(gameId) }
+            if (launchInfos.size > 1) {
+                SteamLaunchOptionDialog(
+                    gameName = appInfo?.name ?: libraryItem.name,
+                    launchInfos = launchInfos,
+                    initialSelectedSignature = ContainerUtils.getOrCreateContainer(context, libraryItem.appId)
+                        .getExtra(STEAM_SELECTED_LAUNCH_SIGNATURE_KEY, ""),
+                    onConfirm = { selectedLaunchInfo, rememberChoice ->
+                        val container = ContainerUtils.getOrCreateContainer(context, libraryItem.appId)
+                        val baseConfig = ContainerUtils.toContainerData(container)
+                        val selectedConfig = baseConfig.copy(
+                            executablePath = selectedLaunchInfo.executable,
+                            steamSelectedLaunchSignature = buildSteamLaunchSignature(selectedLaunchInfo),
+                            steamTransientLaunchSelection = !rememberChoice,
+                        )
+
+                        if (rememberChoice) {
+                            IntentLaunchManager.clearTemporaryOverride(libraryItem.appId)
+                            ContainerUtils.applyToContainer(context, libraryItem.appId, selectedConfig.copy(steamTransientLaunchSelection = false))
+                        } else {
+                            IntentLaunchManager.applyTemporaryConfigOverride(context, libraryItem.appId, selectedConfig)
+                        }
+
+                        hideLaunchOptionDialog(gameId)
+                        onClickPlay(false)
+                    },
+                    onDismissRequest = { hideLaunchOptionDialog(gameId) },
+                )
+            } else {
+                hideLaunchOptionDialog(gameId)
+            }
+        }
+
         // Uninstall confirmation dialog
         if (showUninstallDialog) {
             AlertDialog(
@@ -1352,6 +1447,97 @@ class SteamAppScreen : BaseAppScreen() {
             )
         }
     }
+}
+
+@Composable
+private fun SteamLaunchOptionDialog(
+    gameName: String,
+    launchInfos: List<LaunchInfo>,
+    initialSelectedSignature: String,
+    onConfirm: (LaunchInfo, Boolean) -> Unit,
+    onDismissRequest: () -> Unit,
+) {
+    val fallbackLaunchInfo = launchInfos.first()
+    var selectedLaunchInfo by remember(initialSelectedSignature, launchInfos) {
+        mutableStateOf(
+            launchInfos.firstOrNull { buildSteamLaunchSignature(it) == initialSelectedSignature } ?: fallbackLaunchInfo,
+        )
+    }
+    var rememberChoice by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        title = { Text(stringResource(R.string.steam_launch_option_dialog_title)) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                Text(
+                    text = stringResource(R.string.steam_launch_option_dialog_message, gameName),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                launchInfos.forEachIndexed { index, launchInfo ->
+                    val selected = buildSteamLaunchSignature(launchInfo) == buildSteamLaunchSignature(selectedLaunchInfo)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(
+                                selected = selected,
+                                onClick = { selectedLaunchInfo = launchInfo },
+                            )
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(
+                            selected = selected,
+                            onClick = { selectedLaunchInfo = launchInfo },
+                        )
+                        Column(modifier = Modifier.padding(start = 8.dp)) {
+                            Text(text = getSteamLaunchOptionLabel(launchInfo, index))
+                            if (launchInfo.executable.isNotBlank()) {
+                                Text(
+                                    text = launchInfo.executable,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { rememberChoice = !rememberChoice }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(
+                        checked = rememberChoice,
+                        onCheckedChange = { rememberChoice = it },
+                    )
+                    Text(
+                        text = stringResource(R.string.steam_launch_option_remember_choice),
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(selectedLaunchInfo, rememberChoice) }) {
+                Text(stringResource(R.string.run_app))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

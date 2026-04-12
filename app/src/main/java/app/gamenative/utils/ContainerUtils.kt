@@ -270,6 +270,8 @@ object ContainerUtils {
             drives = container.drives,
             execArgs = container.execArgs,
             executablePath = container.executablePath,
+            steamSelectedLaunchSignature = container.getExtra(STEAM_SELECTED_LAUNCH_SIGNATURE_KEY, ""),
+            steamTransientLaunchSelection = container.getExtra(STEAM_TRANSIENT_LAUNCH_SELECTION_KEY, "false").toBoolean(),
             showFPS = false,
             launchRealSteam = container.isLaunchRealSteam,
             allowSteamUpdates = container.isAllowSteamUpdates,
@@ -443,6 +445,11 @@ object ContainerUtils {
             container.setNeedsUnpacking(true)
         }
         container.executablePath = containerData.executablePath
+        container.putExtra(
+            STEAM_SELECTED_LAUNCH_SIGNATURE_KEY,
+            containerData.steamSelectedLaunchSignature.ifEmpty { null },
+        )
+        container.putExtra(STEAM_TRANSIENT_LAUNCH_SELECTION_KEY, containerData.steamTransientLaunchSelection)
         container.isShowFPS = false
         container.isLaunchRealSteam = containerData.launchRealSteam
         container.isAllowSteamUpdates = containerData.allowSteamUpdates

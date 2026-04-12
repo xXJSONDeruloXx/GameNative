@@ -361,6 +361,12 @@
     <string name="slot_number">Slot %1$d</string>
     <string name="button_slots_help">Buttons support up to 2 bindings: primary (press) and secondary (long press)</string>
     <string name="properties">Properties</string>
+    <string name="steam_launch_option_title">Launch option</string>
+    <string name="steam_launch_option_subtitle">Choose a default launch target or ask every time, like Steam Deck/Game Mode.</string>
+    <string name="steam_launch_option_ask_every_time">Ask every time</string>
+    <string name="steam_launch_option_dialog_title">Choose launch option</string>
+    <string name="steam_launch_option_dialog_message">Select how to start %1$s.</string>
+    <string name="steam_launch_option_remember_choice">Remember this choice in Properties</string>
     <string name="position">Position</string>
     <string name="position_value">X: %1$d, Y: %2$d</string>
     <string name="unsaved_changes">Unsaved Changes</string>

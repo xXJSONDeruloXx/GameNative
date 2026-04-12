@@ -2,6 +2,7 @@ package app.gamenative.ui.component.dialog
 
 import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.MutableState
+import app.gamenative.data.LaunchInfo
 import app.gamenative.utils.ContainerUtils
 import app.gamenative.utils.ManifestComponentHelper
 import app.gamenative.utils.ManifestEntry
@@ -62,6 +63,7 @@ class ContainerConfigState(
     val selectedDriveLetter: MutableState<String>,
     val pendingDriveLetter: MutableState<String>,
     val driveLetterMenuExpanded: MutableState<Boolean>,
+    val steamLaunchOptions: List<LaunchInfo>,
     val screenSizes: List<String>,
     val baseGraphicsDrivers: List<String>,
     val dxWrappers: List<String>,

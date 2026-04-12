@@ -25,6 +25,7 @@ import androidx.core.net.toUri
 import app.gamenative.PluviaApp
 import app.gamenative.R
 import app.gamenative.data.GameSource
+import app.gamenative.data.LaunchInfo
 import app.gamenative.data.LibraryItem
 import app.gamenative.events.AndroidEvent
 import app.gamenative.ui.component.dialog.ContainerConfigDialog
@@ -1026,8 +1027,10 @@ abstract class BaseAppScreen {
 
         // Show container config dialog if needed
         if (showConfigDialog) {
-            ContainerConfigDialog(
+            RenderContainerConfigDialog(
                 title = "${displayInfo.name} Config",
+                context = context,
+                libraryItem = libraryItem,
                 initialConfig = containerData,
                 onDismissRequest = { showConfigDialog = false },
                 onSave = {
@@ -1060,7 +1063,13 @@ abstract class BaseAppScreen {
         )
 
         // Render any additional dialogs
-        AdditionalDialogs(libraryItem, onDismiss = {}, onEditContainer = onEditContainer, onBack = onBack)
+        AdditionalDialogs(
+            libraryItem,
+            onDismiss = {},
+            onEditContainer = onEditContainer,
+            onBack = onBack,
+            onClickPlay = onClickPlay,
+        )
     }
 
     /**
@@ -1082,6 +1091,23 @@ abstract class BaseAppScreen {
         return null
     }
 
+    @Composable
+    open fun RenderContainerConfigDialog(
+        title: String,
+        context: Context,
+        libraryItem: LibraryItem,
+        initialConfig: ContainerData,
+        onDismissRequest: () -> Unit,
+        onSave: (ContainerData) -> Unit,
+    ) {
+        ContainerConfigDialog(
+            title = title,
+            initialConfig = initialConfig,
+            onDismissRequest = onDismissRequest,
+            onSave = onSave,
+        )
+    }
+
     /**
      * Get additional dialogs to show (e.g., loading, message dialogs).
      * Override this to add source-specific dialogs.
@@ -1092,6 +1118,7 @@ abstract class BaseAppScreen {
         onDismiss: () -> Unit,
         onEditContainer: () -> Unit,
         onBack: () -> Unit,
+        onClickPlay: (Boolean) -> Unit,
     ) {
         // Default: no additional dialogs
     }

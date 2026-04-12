@@ -607,8 +607,13 @@ class MainViewModel @Inject constructor(
             val gameId = ContainerUtils.extractGameIdFromContainerId(appId)
 
             SteamService.getAppInfoOf(gameId)?.let { appInfo ->
-                // TODO: this should not be a search, the app should have been launched with a specific launch config that we then use to compare
-                val launchConfig = SteamService.getWindowsLaunchInfos(gameId).firstOrNull {
+                val container = runCatching { ContainerUtils.getContainer(context, appId) }.getOrNull()
+                val configuredLaunchInfo = container?.let { SteamService.resolveConfiguredLaunchInfo(gameId, it) }
+                val launchConfig = configuredLaunchInfo?.takeIf {
+                    val gameExe = Paths.get(it.executable.replace('\\', '/')).name.lowercase()
+                    val windowExe = window.className.lowercase()
+                    gameExe == windowExe
+                } ?: SteamService.getWindowsLaunchInfos(gameId).firstOrNull {
                     val gameExe = Paths.get(it.executable.replace('\\', '/')).name.lowercase()
                     val windowExe = window.className.lowercase()
                     gameExe == windowExe

@@ -82,6 +82,7 @@ import app.gamenative.ui.components.requestPermissionsForPath
 import app.gamenative.ui.theme.PluviaTheme
 import app.gamenative.ui.theme.settingsTileColors
 import app.gamenative.ui.theme.settingsTileColorsAlt
+import app.gamenative.data.LaunchInfo
 import app.gamenative.utils.CustomGameScanner
 import app.gamenative.utils.ContainerUtils
 import app.gamenative.utils.ManifestComponentHelper
@@ -143,6 +144,7 @@ fun ContainerConfigDialog(
     default: Boolean = false,
     title: String,
     initialConfig: ContainerData = ContainerData(),
+    steamLaunchOptions: List<LaunchInfo> = emptyList(),
     onDismissRequest: () -> Unit,
     onSave: (ContainerData) -> Unit,
 ) {
@@ -955,6 +957,7 @@ fun ContainerConfigDialog(
             selectedDriveLetter = selectedDriveLetterRef,
             pendingDriveLetter = pendingDriveLetterRef,
             driveLetterMenuExpanded = driveLetterMenuExpandedRef,
+            steamLaunchOptions = steamLaunchOptions,
             screenSizes = screenSizes,
             baseGraphicsDrivers = baseGraphicsDrivers,
             dxWrappers = dxWrappers,
