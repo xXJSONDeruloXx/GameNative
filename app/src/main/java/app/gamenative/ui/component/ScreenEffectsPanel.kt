@@ -292,8 +292,8 @@ fun ScreenEffectsTabContent(
             val omfgModeIndex = omfgModeToQuickMenuIndex(omfgMode)
             OptionSectionHeader(text = stringResource(R.string.frame_generation))
             ScreenEffectAdjustmentRow(
-                title = stringResource(R.string.frame_generation_mode),
-                valueText = stringResource(omfgModeLabelRes(omfgMode)),
+                title = stringResource(omfgModeLabelRes(omfgMode)),
+                valueText = "",
                 progress = normalizedProgress(
                     omfgModeIndex.toFloat(),
                     0f,
