@@ -280,6 +280,38 @@ data class EnvVarInfo(
                     "Radeon HD 7900 Series",
                 ),
             ),
+            // OMFG — Open Multi Frame Generation Vulkan layer
+            // https://github.com/xXJSONDeruloXx/omfg
+            "ENABLE_OMFG_RUST" to EnvVarInfo(
+                identifier = "ENABLE_OMFG_RUST",
+                selectionType = EnvVarSelectionType.TOGGLE,
+                possibleValues = listOf("0", "1"),
+            ),
+            "OMFG_LAYER_MODE" to EnvVarInfo(
+                identifier = "OMFG_LAYER_MODE",
+                selectionType = EnvVarSelectionType.SUGGESTIONS,
+                possibleValues = listOf(
+                    "passthrough",
+                    "blend",
+                    "adaptive-blend",
+                    "reproject-blend",
+                    "reproject-adaptive-blend",
+                    "multi-blend",
+                    "adaptive-multi-blend",
+                    "reproject-multi-blend",
+                    "reproject-adaptive-multi-blend",
+                    "optflow-blend",
+                    "optflow-adaptive-blend",
+                    "bfi",
+                    "copy",
+                ),
+            ),
+            "OMFG_MULTI_BLEND_COUNT" to EnvVarInfo(
+                identifier = "OMFG_MULTI_BLEND_COUNT",
+            ),
+            "OMFG_ADAPTIVE_MULTI_TARGET_FPS" to EnvVarInfo(
+                identifier = "OMFG_ADAPTIVE_MULTI_TARGET_FPS",
+            ),
             // Wine DLL overrides — user types freely or picks a common preset
             // More common DLL overrides can be added in future. Only audio related for now
             "WINEDLLOVERRIDES" to EnvVarInfo(
