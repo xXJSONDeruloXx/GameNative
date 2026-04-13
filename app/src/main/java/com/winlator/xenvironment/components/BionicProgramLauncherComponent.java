@@ -96,6 +96,7 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
                 extractEmulatorsDlls();
             else
                 extractBox64Files();
+            extractOmfgLayer();
             if (preUnpack != null) preUnpack.run();
             pid = execGuestProgram();
             Log.d("BionicProgramLauncherComponent", "Process " + pid + " started");
@@ -361,6 +362,18 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
         else
             command = binDir + "/box64 " + guestExecutable;
         return command;
+    }
+
+    private void extractOmfgLayer() {
+        ImageFs imageFs = environment.getImageFs();
+        Context context = environment.getContext();
+        File rootDir = imageFs.getRootDir();
+        File layerSo = new File(rootDir, "usr/share/vulkan/implicit_layer.d/libVkLayer_OMFG_rust.so");
+        if (!layerSo.exists()) {
+            Log.i("Extraction", "Extracting OMFG Vulkan layer");
+            TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, context.getAssets(), "omfg-vk-layer-bionic.tzst", rootDir);
+            FileUtils.chmod(layerSo, 0755);
+        }
     }
 
     private void extractBox64Files() {
