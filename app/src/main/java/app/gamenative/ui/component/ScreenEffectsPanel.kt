@@ -135,12 +135,35 @@ private fun scalingModeLabelRes(mode: Int): Int = when (mode) {
     else -> R.string.screen_effects_scaling_mode_none
 }
 
+private val omfgQuickMenuModes = listOf(
+    "passthrough",
+    "blend",
+    "adaptive-blend",
+    "reproject-blend",
+)
+
+private fun omfgModeToQuickMenuIndex(mode: String): Int =
+    omfgQuickMenuModes.indexOf(mode).takeIf { it >= 0 } ?: 0
+
+private fun quickMenuIndexToOmfgMode(index: Int): String =
+    omfgQuickMenuModes[index.coerceIn(0, omfgQuickMenuModes.lastIndex)]
+
+private fun omfgModeLabelRes(mode: String): Int = when (mode) {
+    "blend" -> R.string.frame_generation_mode_blend
+    "adaptive-blend" -> R.string.frame_generation_mode_adaptive
+    "reproject-blend" -> R.string.frame_generation_mode_reproject
+    else -> R.string.frame_generation_mode_passthrough
+}
+
 @Composable
 fun ScreenEffectsTabContent(
     renderer: GLRenderer,
     modifier: Modifier = Modifier,
     firstItemFocusRequester: FocusRequester? = null,
     scrollState: ScrollState = rememberScrollState(),
+    omfgEnabled: Boolean = false,
+    omfgMode: String = "passthrough",
+    onOmfgModeChanged: (String) -> Unit = {},
 ) {
     val composer = renderer.effectComposer
     val initialColorEffect = composer.getEffect(ColorEffect::class.java)
@@ -265,6 +288,28 @@ fun ScreenEffectsTabContent(
             .focusGroup()
             .padding(vertical = 12.dp),
     ) {
+        if (omfgEnabled) {
+            val omfgModeIndex = omfgModeToQuickMenuIndex(omfgMode)
+            OptionSectionHeader(text = stringResource(R.string.frame_generation))
+            ScreenEffectAdjustmentRow(
+                title = stringResource(R.string.frame_generation_mode),
+                valueText = stringResource(omfgModeLabelRes(omfgMode)),
+                progress = normalizedProgress(
+                    omfgModeIndex.toFloat(),
+                    0f,
+                    omfgQuickMenuModes.lastIndex.toFloat(),
+                ),
+                onDecrease = {
+                    onOmfgModeChanged(quickMenuIndexToOmfgMode((omfgModeIndex - 1).coerceAtLeast(0)))
+                },
+                onIncrease = {
+                    onOmfgModeChanged(quickMenuIndexToOmfgMode((omfgModeIndex + 1).coerceAtMost(omfgQuickMenuModes.lastIndex)))
+                },
+                focusRequester = firstItemFocusRequester,
+            )
+            Spacer(modifier = Modifier.height(20.dp))
+        }
+
         OptionSectionHeader(text = stringResource(R.string.screen_effects_scaling))
 
         ScreenEffectAdjustmentRow(
@@ -281,7 +326,7 @@ fun ScreenEffectsTabContent(
             onIncrease = {
                 scalingMode = (scalingMode + 1).coerceAtMost(SCREEN_EFFECT_SCALE_MODE_FSR)
             },
-            focusRequester = firstItemFocusRequester,
+            focusRequester = if (omfgEnabled) null else firstItemFocusRequester,
         )
         if (scalingMode == SCREEN_EFFECT_SCALE_MODE_FSR) {
             ScreenEffectAdjustmentRow(

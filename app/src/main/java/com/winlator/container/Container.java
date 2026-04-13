@@ -86,6 +86,7 @@ public class Container {
     private boolean showFPS;
     private boolean launchRealSteam;
     private boolean allowSteamUpdates;
+    private boolean enableOmfg;
     private boolean wow64Mode = true;
     private boolean needsUnpacking = true;
     private byte startupSelection = STARTUP_SELECTION_AGGRESSIVE;
@@ -331,6 +332,14 @@ public class Container {
 
     public void setAllowSteamUpdates(boolean allowSteamUpdates) {
         this.allowSteamUpdates = allowSteamUpdates;
+    }
+
+    public boolean isEnableOmfg() {
+        return enableOmfg;
+    }
+
+    public void setEnableOmfg(boolean enableOmfg) {
+        this.enableOmfg = enableOmfg;
     }
 
     public boolean isSdlControllerAPI() {
@@ -653,6 +662,7 @@ public class Container {
             data.put("showFPS", showFPS);
             data.put("launchRealSteam", launchRealSteam);
             data.put("allowSteamUpdates", allowSteamUpdates);
+            data.put("enableOmfg", enableOmfg);
             data.put("inputType", inputType);
             data.put("dinputMapperType", dinputMapperType);
             data.put("wow64Mode", wow64Mode);
@@ -773,6 +783,9 @@ public class Container {
                     break;
                 case "allowSteamUpdates" :
                     setAllowSteamUpdates(data.getBoolean(key));
+                    break;
+                case "enableOmfg" :
+                    setEnableOmfg(data.optBoolean(key, false));
                     break;
                 case "steamType" :
                     setSteamType(data.getString(key));

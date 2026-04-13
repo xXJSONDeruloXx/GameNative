@@ -285,6 +285,8 @@ fun XServerScreen(
     val container = remember(appId) {
         ContainerUtils.getContainer(context, appId)
     }
+    var omfgMode by remember(container.id) { mutableStateOf("passthrough") }
+    val omfgHotConfigFile = remember(container.id) { File(ImageFs.find(context).getTmpDir(), "omfg-hot.conf") }
 
     val suspendPolicy = remember(container.id) { container.suspendPolicy }
     val neverSuspend = suspendPolicy.equals(Container.SUSPEND_POLICY_NEVER, ignoreCase = true)
@@ -1001,6 +1003,15 @@ fun XServerScreen(
         showQuickMenu = true
     }
 
+    val onOmfgModeChanged: (String) -> Unit = { newMode ->
+        omfgMode = newMode
+        runCatching {
+            writeOmfgHotConfig(omfgHotConfigFile, newMode)
+        }.onFailure {
+            Timber.e(it, "Failed to write OMFG hot config")
+        }
+    }
+
     DisposableEffect(Unit) {
         val inputManager = context.getSystemService(Context.INPUT_SERVICE) as InputManager
 
@@ -1630,6 +1641,8 @@ fun XServerScreen(
                                 appLaunchInfo,
                                 xServerView!!.getxServer(),
                                 containerVariantChanged,
+                                omfgMode,
+                                omfgHotConfigFile,
                                 onGameLaunchError,
                                 navigateBack,
                             )
@@ -2027,6 +2040,9 @@ fun XServerScreen(
             activeToggleIds = buildSet {
                 if (areControlsVisible) add(QuickMenuAction.INPUT_CONTROLS)
             },
+            omfgEnabled = container.isEnableOmfg,
+            omfgMode = omfgMode,
+            onOmfgModeChanged = onOmfgModeChanged,
         )
 
         if (manualResumeMode && PluviaApp.isOverlayPaused && !showQuickMenu && !keepPausedForEditor) {
@@ -2531,6 +2547,8 @@ private fun setupXEnvironment(
     // shortcut: Shortcut?,
     xServer: XServer,
     containerVariantChanged: Boolean,
+    omfgMode: String,
+    omfgHotConfigFile: File,
     onGameLaunchError: ((String) -> Unit)? = null,
     navigateBack: () -> Unit,
 ): XEnvironment {
@@ -2659,6 +2677,11 @@ private fun setupXEnvironment(
         guestProgramLauncherComponent.setSteamType(container.getSteamType())
 
         envVars.putAll(container.envVars)
+        if (container.isEnableOmfg) {
+            envVars.put("ENABLE_OMFG_RUST", "1")
+            envVars.put("OMFG_HOT_CONFIG_PATH", omfgHotConfigFile.absolutePath)
+            writeOmfgHotConfig(omfgHotConfigFile, omfgMode)
+        }
         if (!envVars.has("WINEESYNC")) envVars.put("WINEESYNC", "1")
         val graphicsDriverConfig = KeyValueSet(container.getGraphicsDriverConfig())
         if (graphicsDriverConfig.get("version").lowercase(Locale.getDefault()).contains("gen8")) {
@@ -4428,6 +4451,19 @@ private fun extractGraphicsDriverFiles(
             envVars.put("VKBASALT_CONFIG", vkbasaltConfig)
         }
     }
+}
+
+private fun writeOmfgHotConfig(
+    file: File,
+    mode: String,
+) {
+    FileUtils.writeString(
+        file,
+        """
+        [omfg]
+        OMFG_LAYER_MODE=$mode
+        """.trimIndent() + "\n",
+    )
 }
 
 private fun buildVkBasaltConfig(

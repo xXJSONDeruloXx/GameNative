@@ -221,6 +221,9 @@ fun QuickMenu(
     onPerformanceHudConfigChanged: (PerformanceHudConfig) -> Unit = {},
     hasPhysicalController: Boolean = false,
     activeToggleIds: Set<Int> = emptySet(),
+    omfgEnabled: Boolean = false,
+    omfgMode: String = "passthrough",
+    onOmfgModeChanged: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val exitGameItem = QuickMenuItem(
@@ -475,6 +478,9 @@ fun QuickMenu(
                                                 modifier = Modifier.fillMaxSize(),
                                                 firstItemFocusRequester = effectsItemFocusRequester,
                                                 scrollState = effectsScrollState,
+                                                omfgEnabled = omfgEnabled,
+                                                omfgMode = omfgMode,
+                                                onOmfgModeChanged = onOmfgModeChanged,
                                             )
                                         } else {
                                             Box(

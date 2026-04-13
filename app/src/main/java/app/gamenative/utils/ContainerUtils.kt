@@ -317,6 +317,7 @@ object ContainerUtils {
             sharpnessEffect = container.getExtra("sharpnessEffect", "None"),
             sharpnessLevel = container.getExtra("sharpnessLevel", "100").toIntOrNull() ?: 100,
             sharpnessDenoise = container.getExtra("sharpnessDenoise", "100").toIntOrNull() ?: 100,
+            enableOmfg = container.isEnableOmfg,
         )
     }
 
@@ -446,6 +447,7 @@ object ContainerUtils {
         container.isShowFPS = false
         container.isLaunchRealSteam = containerData.launchRealSteam
         container.isAllowSteamUpdates = containerData.allowSteamUpdates
+        container.setEnableOmfg(containerData.enableOmfg)
         container.setSteamType(containerData.steamType)
         container.cpuList = containerData.cpuList
         container.cpuListWoW64 = containerData.cpuListWoW64

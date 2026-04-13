@@ -210,6 +210,16 @@ fun GraphicsTabContent(state: ContainerConfigState) {
                     Text(text = "${state.sharpnessDenoise.value}%")
                 }
             }
+
+            // Frame Generation (OMFG)
+            SettingsSwitch(
+                colors = settingsTileColors(),
+                title = { Text(text = stringResource(R.string.frame_generation)) },
+                state = config.enableOmfg,
+                onCheckedChange = { checked ->
+                    state.config.value = config.copy(enableOmfg = checked)
+                },
+            )
         } else {
             // Non-bionic: existing driver/version UI and Vortek-specific options
             SettingsListDropdown(

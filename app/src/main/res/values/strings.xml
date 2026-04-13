@@ -696,6 +696,12 @@
     <string name="bcn_emulation">BCn Emulation</string>
     <string name="bcn_emulation_type">BCn Emulation Type</string>
     <string name="bcn_emulation_cache">BCn Emulation Cache</string>
+    <string name="frame_generation">Frame Generation</string>
+    <string name="frame_generation_mode">Frame Gen Mode</string>
+    <string name="frame_generation_mode_passthrough">Off (Passthrough)</string>
+    <string name="frame_generation_mode_blend">Blend</string>
+    <string name="frame_generation_mode_adaptive">Adaptive Blend</string>
+    <string name="frame_generation_mode_reproject">Reproject</string>
     <string name="sharpness_effect">Sharpness Boost</string>
     <string name="sharpness_level">Sharpness Level</string>
     <string name="sharpness_denoise">Sharpness Denoise</string>
