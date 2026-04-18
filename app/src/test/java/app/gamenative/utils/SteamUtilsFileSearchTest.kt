@@ -71,21 +71,22 @@ class SteamUtilsFileSearchTest {
         appDir = File(SteamService.internalAppInstallPath, "123456")
         appDir.mkdirs()
 
-        // Set up ImageFs for restoreOriginalExecutable
-        val imageFs = ImageFs.find(context)
+        // Set up container directory so ContainerManager can find it
+        // This prevents getOrCreateContainer() from trying to create a new container (which needs zstd-jni)
+        val baseImageFs = ImageFs.find(context)
+        val homeDir = File(baseImageFs.rootDir, "home")
+        homeDir.mkdirs()
+
+        val containerDir = File(homeDir, "${ImageFs.USER}-${testAppId}")
+        containerDir.mkdirs()
+
+        // Set up ImageFs for restoreOriginalExecutable against the actual container root
+        val imageFs = ImageFs.find(containerDir)
         val wineprefix = File(imageFs.wineprefix)
         wineprefix.mkdirs()
         val dosDevices = File(wineprefix, "dosdevices")
         dosDevices.mkdirs()
         File(dosDevices, "a:").mkdirs()
-
-        // Set up container directory so ContainerManager can find it
-        // This prevents getOrCreateContainer() from trying to create a new container (which needs zstd-jni)
-        val homeDir = File(imageFs.rootDir, "home")
-        homeDir.mkdirs()
-
-        val containerDir = File(homeDir, "${ImageFs.USER}-${testAppId}")
-        containerDir.mkdirs()
 
         // Create a minimal container config file
         val container = Container(testAppId)
@@ -230,7 +231,7 @@ class SteamUtilsFileSearchTest {
     @Test
     fun restoreOriginalExecutable_findsAndRestoresOriginalExe() {
         // Set up dosdevices path
-        val imageFs = ImageFs.find(context)
+        val imageFs = ImageFs.find(File(ImageFs.find(context).rootDir, "home/${ImageFs.USER}-$testAppId"))
         val dosDevicesPath = File(imageFs.wineprefix, "dosdevices/a:")
         dosDevicesPath.mkdirs()
 
@@ -259,7 +260,7 @@ class SteamUtilsFileSearchTest {
     @Test
     fun restoreOriginalExecutable_respectsMaxDepth() {
         // Set up dosdevices path
-        val imageFs = ImageFs.find(context)
+        val imageFs = ImageFs.find(File(ImageFs.find(context).rootDir, "home/${ImageFs.USER}-$testAppId"))
         val dosDevicesPath = File(imageFs.wineprefix, "dosdevices/a:")
         dosDevicesPath.mkdirs()
 
@@ -285,7 +286,7 @@ class SteamUtilsFileSearchTest {
     @Test
     fun restoreOriginalExecutable_doesNotFailWhenNoBackupFound() {
         // Set up dosdevices path with no backup files
-        val imageFs = ImageFs.find(context)
+        val imageFs = ImageFs.find(File(ImageFs.find(context).rootDir, "home/${ImageFs.USER}-$testAppId"))
         val dosDevicesPath = File(imageFs.wineprefix, "dosdevices/a:")
         dosDevicesPath.mkdirs()
 
@@ -557,7 +558,7 @@ class SteamUtilsFileSearchTest {
         dllFile.writeBytes(originalDllContent.toByteArray())
 
         // Create game.exe files
-        val imageFs = ImageFs.find(context)
+        val imageFs = ImageFs.find(File(ImageFs.find(context).rootDir, "home/${ImageFs.USER}-$testAppId"))
         val dosDevicesPath = File(imageFs.wineprefix, "dosdevices/a:")
         dosDevicesPath.mkdirs()
         val gameExe = File(dosDevicesPath, "game.exe")
@@ -568,7 +569,7 @@ class SteamUtilsFileSearchTest {
         gameExeOriginal.writeBytes("original exe content".toByteArray())
 
         // Set up container structure with Steam directory
-        val containerDir = File(imageFs.rootDir, "home/${ImageFs.USER}-${testAppId}")
+        val containerDir = imageFs.rootDir
         val steamDir = File(containerDir, ".wine/drive_c/Program Files (x86)/Steam")
         steamDir.mkdirs()
 
@@ -797,7 +798,7 @@ class SteamUtilsFileSearchTest {
         dllFile.writeBytes(originalDllContent.toByteArray())
 
         // Create game.exe files
-        val imageFs = ImageFs.find(context)
+        val imageFs = ImageFs.find(File(ImageFs.find(context).rootDir, "home/${ImageFs.USER}-$testAppId"))
         val dosDevicesPath = File(imageFs.wineprefix, "dosdevices/a:")
         dosDevicesPath.mkdirs()
         val gameExe = File(dosDevicesPath, "game.exe")
@@ -808,7 +809,7 @@ class SteamUtilsFileSearchTest {
         gameExeOriginal.writeBytes("original exe content".toByteArray())
 
         // Set up container structure with Steam directory
-        val containerDir = File(imageFs.rootDir, "home/${ImageFs.USER}-${testAppId}")
+        val containerDir = imageFs.rootDir
         val steamDir = File(containerDir, ".wine/drive_c/Program Files (x86)/Steam")
         steamDir.mkdirs()
 
@@ -989,7 +990,7 @@ class SteamUtilsFileSearchTest {
         dllFile.writeBytes(originalDllContent.toByteArray())
 
         // Create game.exe files
-        val imageFs = ImageFs.find(context)
+        val imageFs = ImageFs.find(File(ImageFs.find(context).rootDir, "home/${ImageFs.USER}-$testAppId"))
         val dosDevicesPath = File(imageFs.wineprefix, "dosdevices/a:")
         dosDevicesPath.mkdirs()
         val gameExe = File(dosDevicesPath, "game.exe")
@@ -1000,7 +1001,7 @@ class SteamUtilsFileSearchTest {
         gameExeOriginal.writeBytes("original exe content".toByteArray())
 
         // Set up container structure
-        val containerDir = File(imageFs.rootDir, "home/${ImageFs.USER}-${testAppId}")
+        val containerDir = imageFs.rootDir
 
         // Set container executablePath so restoreUnpackedExecutable and restoreOriginalExecutable can work
         val container = ContainerUtils.getContainer(context, testAppId)
@@ -1542,7 +1543,7 @@ class SteamUtilsFileSearchTest {
 
     @Test
     fun test_backupSteamclientFiles_backsUpExistingFiles() {
-        val imageFs = ImageFs.find(context)
+        val imageFs = ImageFs.find(File(ImageFs.find(context).rootDir, "home/${ImageFs.USER}-$testAppId"))
         val wineprefixSteamDir = File(imageFs.wineprefix, "drive_c/Program Files (x86)/Steam")
         wineprefixSteamDir.mkdirs()
 
@@ -1583,7 +1584,7 @@ class SteamUtilsFileSearchTest {
 
     @Test
     fun test_backupSteamclientFiles_handlesNonExistentFiles() {
-        val imageFs = ImageFs.find(context)
+        val imageFs = ImageFs.find(File(ImageFs.find(context).rootDir, "home/${ImageFs.USER}-$testAppId"))
         val wineprefixSteamDir = File(imageFs.wineprefix, "drive_c/Program Files (x86)/Steam")
         wineprefixSteamDir.mkdirs()
 
@@ -1617,7 +1618,7 @@ class SteamUtilsFileSearchTest {
 
     @Test
     fun test_restoreSteamclientFiles_restoresFromBackup() {
-        val imageFs = ImageFs.find(context)
+        val imageFs = ImageFs.find(File(ImageFs.find(context).rootDir, "home/${ImageFs.USER}-$testAppId"))
         val wineprefixSteamDir = File(imageFs.wineprefix, "drive_c/Program Files (x86)/Steam")
         wineprefixSteamDir.mkdirs()
 
@@ -1660,7 +1661,7 @@ class SteamUtilsFileSearchTest {
 
     @Test
     fun test_restoreSteamclientFiles_deletesExtraDlls() {
-        val imageFs = ImageFs.find(context)
+        val imageFs = ImageFs.find(File(ImageFs.find(context).rootDir, "home/${ImageFs.USER}-$testAppId"))
         val wineprefixSteamDir = File(imageFs.wineprefix, "drive_c/Program Files (x86)/Steam")
         wineprefixSteamDir.mkdirs()
 
@@ -1693,7 +1694,7 @@ class SteamUtilsFileSearchTest {
 
     @Test
     fun test_restoreSteamclientFiles_handlesMissingBackup() {
-        val imageFs = ImageFs.find(context)
+        val imageFs = ImageFs.find(File(ImageFs.find(context).rootDir, "home/${ImageFs.USER}-$testAppId"))
         val wineprefixSteamDir = File(imageFs.wineprefix, "drive_c/Program Files (x86)/Steam")
         wineprefixSteamDir.mkdirs()
 
@@ -1729,5 +1730,90 @@ class SteamUtilsFileSearchTest {
             assertEquals("Original file $fileName should remain unchanged",
                 content, file.readText())
         }
+    }
+
+    @Test
+    fun test_resetSteamModeArtifacts_deletesSteamInstallAndCaches() {
+        val imageFs = ImageFs.find(File(ImageFs.find(context).rootDir, "home/${ImageFs.USER}-$testAppId"))
+        val containerRoot = imageFs.rootDir
+        val driveC = File(containerRoot, ".wine/drive_c")
+        val steamDir = File(driveC, "Program Files (x86)/Steam")
+        val localSteamDir = File(driveC, "users/${ImageFs.USER}/AppData/Local/Steam")
+        val roamingSteamDir = File(driveC, "users/${ImageFs.USER}/AppData/Roaming/Steam")
+        val programDataDir = File(driveC, "ProgramData")
+
+        File(steamDir, "config/config.vdf").apply { parentFile.mkdirs(); writeText("config") }
+        File(steamDir, "userdata/392297941/config/localconfig.vdf").apply { parentFile.mkdirs(); writeText("local") }
+        File(steamDir, "appcache/httpcache/foo").apply { parentFile.mkdirs(); writeText("cache") }
+        File(localSteamDir, "htmlcache/LocalPrefs.json").apply { parentFile.mkdirs(); writeText("prefs") }
+        File(roamingSteamDir, "logs/bootstrap_log.txt").apply { parentFile.mkdirs(); writeText("log") }
+        File(programDataDir, "Microsoft/Windows/Start Menu/Programs/Notepad.lnk").apply { parentFile.mkdirs(); writeText("keep") }
+
+        assertTrue(steamDir.exists())
+        assertTrue(localSteamDir.exists())
+        assertTrue(roamingSteamDir.exists())
+        assertTrue(programDataDir.exists())
+
+        SteamUtils.resetSteamModeArtifacts(containerRoot)
+
+        assertFalse("Steam install dir should be deleted", steamDir.exists())
+        assertFalse("Local Steam cache dir should be deleted", localSteamDir.exists())
+        assertFalse("Roaming Steam dir should be deleted", roamingSteamDir.exists())
+        assertTrue("ProgramData should be preserved", programDataDir.exists())
+        assertTrue(
+            "ProgramData contents should be preserved",
+            File(programDataDir, "Microsoft/Windows/Start Menu/Programs/Notepad.lnk").exists(),
+        )
+    }
+
+    @Test
+    fun test_resetSteamModeArtifacts_handlesMissingDirs() {
+        val imageFs = ImageFs.find(File(ImageFs.find(context).rootDir, "home/${ImageFs.USER}-$testAppId"))
+        val containerRoot = imageFs.rootDir
+        containerRoot.mkdirs()
+
+        SteamUtils.resetSteamModeArtifacts(containerRoot)
+
+        assertTrue("Container root should remain", containerRoot.exists())
+    }
+
+    @Test
+    fun test_resetUnpackingArtifacts_restoresExecutablesAndDeletesTransientFiles() {
+        val imageFs = ImageFs.find(File(ImageFs.find(context).rootDir, "home/${ImageFs.USER}-$testAppId"))
+        val gameDir = File(imageFs.wineprefix, "dosdevices/a:/Game")
+        gameDir.mkdirs()
+
+        val mainExe = File(gameDir, "Main.exe").apply { writeText("current-unpacked") }
+        File(gameDir, "Main.exe.original.exe").apply { writeText("original-main") }
+        File(gameDir, "Main.exe.unpacked.exe").apply { writeText("unpacked-main") }
+
+        val helperExe = File(gameDir, "Helper.exe").apply { writeText("current-helper-unpacked") }
+        File(gameDir, "Helper.exe.original.exe").apply { writeText("original-helper") }
+        File(gameDir, "Helper.exe.unpacked.exe").apply { writeText("unpacked-helper") }
+
+        val extraDllDir = File(imageFs.wineprefix, "drive_c/Program Files (x86)/Steam/extra_dlls")
+        File(extraDllDir, "StubDRM64.dll").apply { parentFile.mkdirs(); writeText("stub") }
+
+        SteamUtils.resetUnpackingArtifacts(context, steamAppId)
+
+        assertEquals("original-main", mainExe.readText())
+        assertEquals("original-helper", helperExe.readText())
+        assertFalse(File(gameDir, "Main.exe.original.exe").exists())
+        assertFalse(File(gameDir, "Main.exe.unpacked.exe").exists())
+        assertFalse(File(gameDir, "Helper.exe.original.exe").exists())
+        assertFalse(File(gameDir, "Helper.exe.unpacked.exe").exists())
+        assertFalse("extra_dlls should be deleted", extraDllDir.exists())
+    }
+
+    @Test
+    fun test_resetUnpackingArtifacts_handlesMissingArtifacts() {
+        val imageFs = ImageFs.find(File(ImageFs.find(context).rootDir, "home/${ImageFs.USER}-$testAppId"))
+        val gameDir = File(imageFs.wineprefix, "dosdevices/a:/Game")
+        gameDir.mkdirs()
+        File(gameDir, "Main.exe").writeText("current")
+
+        SteamUtils.resetUnpackingArtifacts(context, steamAppId)
+
+        assertEquals("current", File(gameDir, "Main.exe").readText())
     }
 }

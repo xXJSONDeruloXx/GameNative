@@ -408,6 +408,7 @@ object ContainerUtils {
         }
         val previousForceDlc: Boolean = container.isForceDlc
         val previousSteamOfflineMode: Boolean = container.isSteamOfflineMode()
+        val previousUseLegacyDRM: Boolean = container.isUseLegacyDRM
         val previousUnpackFiles: Boolean = container.isUnpackFiles
         val previousLaunchRealSteam: Boolean = container.isLaunchRealSteam
         val previousSteamType: String = container.getSteamType()
@@ -480,11 +481,11 @@ object ContainerUtils {
         container.setUnpackFiles(containerData.unpackFiles)
         container.setSuspendPolicy(containerData.suspendPolicy)
         container.setPortraitMode(containerData.portraitMode)
-        if (previousUnpackFiles != containerData.unpackFiles && containerData.unpackFiles) {
+        if (previousUnpackFiles != containerData.unpackFiles) {
             container.setNeedsUnpacking(true)
         }
-        // If launchRealSteam changed, force re-unpacking for DRM pipeline switch
-        if (previousLaunchRealSteam != containerData.launchRealSteam) {
+        // If launchRealSteam or useLegacyDRM changed, force re-unpacking for DRM pipeline switches
+        if (previousLaunchRealSteam != containerData.launchRealSteam || previousUseLegacyDRM != containerData.useLegacyDRM) {
             container.setNeedsUnpacking(true)
         }
         container.putExtra("sharpnessEffect", containerData.sharpnessEffect)
@@ -520,13 +521,33 @@ object ContainerUtils {
             MarkerUtils.removeMarker(appDirPath, Marker.STEAM_COLDCLIENT_USED)
             Timber.i("steamOfflineMode changed from '$previousSteamOfflineMode' to '${containerData.steamOfflineMode}'. Cleared STEAM_DLL_REPLACED marker for container ${container.id}.")
         }
-        // If launchRealSteam changed, clear markers so DRM/DLL setup re-evaluates
+        if (previousUseLegacyDRM != containerData.useLegacyDRM) {
+            val steamAppId = extractGameIdFromContainerId(container.id)
+            val appDirPath = SteamService.getAppDirPath(steamAppId)
+            MarkerUtils.removeMarker(appDirPath, Marker.STEAM_DLL_REPLACED)
+            MarkerUtils.removeMarker(appDirPath, Marker.STEAM_COLDCLIENT_USED)
+            Timber.i("useLegacyDRM changed from '$previousUseLegacyDRM' to '${containerData.useLegacyDRM}'. Cleared STEAM markers for container ${container.id}.")
+        }
+        if (previousUnpackFiles != containerData.unpackFiles) {
+            val steamAppId = extractGameIdFromContainerId(container.id)
+            val appDirPath = SteamService.getAppDirPath(steamAppId)
+            MarkerUtils.removeMarker(appDirPath, Marker.STEAM_DLL_REPLACED)
+            MarkerUtils.removeMarker(appDirPath, Marker.STEAM_COLDCLIENT_USED)
+            if (saveToDisk && !containerData.unpackFiles) {
+                SteamUtils.resetUnpackingArtifacts(container.rootDir, steamAppId)
+            }
+            Timber.i("unpackFiles changed from '$previousUnpackFiles' to '${containerData.unpackFiles}'. Cleared STEAM markers${if (saveToDisk && !containerData.unpackFiles) " and reset unpacking artifacts" else ""} for container ${container.id}.")
+        }
+        // If launchRealSteam changed, clear markers and Steam mode artifacts so launch rebuilds the target mode from scratch
         if (previousLaunchRealSteam != containerData.launchRealSteam) {
             val steamAppId = extractGameIdFromContainerId(container.id)
             val appDirPath = SteamService.getAppDirPath(steamAppId)
             MarkerUtils.removeMarker(appDirPath, Marker.STEAM_DLL_REPLACED)
             MarkerUtils.removeMarker(appDirPath, Marker.STEAM_COLDCLIENT_USED)
-            Timber.i("launchRealSteam changed from '$previousLaunchRealSteam' to '${containerData.launchRealSteam}'. Cleared STEAM_DLL_REPLACED marker for container ${container.id}.")
+            if (saveToDisk) {
+                SteamUtils.resetSteamModeArtifacts(container.rootDir)
+            }
+            Timber.i("launchRealSteam changed from '$previousLaunchRealSteam' to '${containerData.launchRealSteam}'. Cleared STEAM markers and reset Steam mode artifacts for container ${container.id}.")
         }
         // If steamType changed, clear markers so ColdClient/box64rc setup re-evaluates
         if (previousSteamType != containerData.steamType) {

@@ -4452,16 +4452,9 @@ private fun extractSteamFiles(
     container: Container,
     onExtractFileListener: OnExtractFileListener?,
 ) {
-    val imageFs = ImageFs.find(context)
-    if (File(ImageFs.find(context).rootDir.absolutePath, ImageFs.WINEPREFIX + "/drive_c/Program Files (x86)/Steam/steam.exe").exists()) return
-    val downloaded = File(imageFs.getFilesDir(), "steam.tzst")
-    Timber.i("Extracting steam.tzst")
-    TarCompressorUtils.extract(
-        TarCompressorUtils.Type.ZSTD,
-        downloaded,
-        imageFs.getRootDir(),
-        onExtractFileListener,
-    );
+    val containerImageFs = ImageFs.find(container.rootDir)
+    if (File(containerImageFs.rootDir.absolutePath, ImageFs.WINEPREFIX + "/drive_c/Program Files (x86)/Steam/steam.exe").exists()) return
+    SteamUtils.extractRealSteamArchive(context, container, onExtractFileListener)
 }
 
 private fun readZipManifestNameFromAssets(context: Context, assetName: String): String? {

@@ -156,20 +156,35 @@ private sealed class GameResolutionResult {
     ) : GameResolutionResult()
 }
 
+private fun steamContainerLooksInstalled(context: Context, appId: String): Boolean {
+    if (!ContainerUtils.hasContainer(context, appId)) return false
+
+    return runCatching {
+        val container = ContainerUtils.getContainer(context, appId)
+        val aDrivePath = com.winlator.container.Container.drivesIterator(container.drives)
+            .firstOrNull { it[0] == "A" }
+            ?.getOrNull(1)
+            ?.takeIf { it.isNotBlank() }
+            ?: return false
+
+        val aDriveDir = java.io.File(aDrivePath)
+        aDriveDir.isDirectory && aDriveDir.walkTopDown().any { it.isFile }
+    }.getOrDefault(false)
+}
+
 private fun resolveGameAppId(context: Context, appId: String): GameResolutionResult {
     val gameSource = ContainerUtils.extractGameSourceFromContainerId(appId)
     val gameId = ContainerUtils.extractGameIdFromContainerId(appId)
     val isInstalled = when (gameSource) {
         GameSource.STEAM -> {
-            // isAppInstalled uses getAppInfoOf internally to derive the game dir name.
-            // if the service hasn't started yet (instance==null), getAppInfoOf returns
-            // null → empty dir name → marker check fails → false negative.
-            // skip the redundant DB query and fall back to container existence.
-            if (SteamService.getAppInfoOf(gameId) != null) {
+            // Prefer the download-complete marker when available, but fall back to the
+            // container's actual mapped A: drive contents when the marker is stale or missing.
+            val markerInstalled = if (SteamService.getAppInfoOf(gameId) != null) {
                 SteamService.isAppInstalled(gameId)
             } else {
-                ContainerUtils.hasContainer(context, appId)
+                false
             }
+            markerInstalled || steamContainerLooksInstalled(context, appId)
         }
 
         GameSource.GOG -> {

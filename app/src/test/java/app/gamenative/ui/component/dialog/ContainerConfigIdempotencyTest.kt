@@ -255,4 +255,71 @@ class ContainerConfigIdempotencyTest {
         ContainerUtils.applyToContainer(context, container, ContainerData(launchRealSteam = false), saveToDisk = false)
         assertFalse("Second toggle: marker removed again", MarkerUtils.hasMarker(appDirPath, Marker.STEAM_DLL_REPLACED))
     }
+
+    @Test
+    fun togglingLaunchRealSteamWithSaveToDisk_resetsSteamModeArtifacts() {
+        container.isLaunchRealSteam = true
+
+        val steamDir = File(tempDir, ".wine/drive_c/Program Files (x86)/Steam")
+        val localSteamDir = File(tempDir, ".wine/drive_c/users/xuser/AppData/Local/Steam")
+        val roamingSteamDir = File(tempDir, ".wine/drive_c/users/xuser/AppData/Roaming/Steam")
+        val programDataDir = File(tempDir, ".wine/drive_c/ProgramData")
+
+        File(steamDir, "config/config.vdf").apply { parentFile.mkdirs(); writeText("config") }
+        File(steamDir, "userdata/392297941/config/localconfig.vdf").apply { parentFile.mkdirs(); writeText("local") }
+        File(localSteamDir, "htmlcache/LocalPrefs.json").apply { parentFile.mkdirs(); writeText("prefs") }
+        File(roamingSteamDir, "logs/bootstrap_log.txt").apply { parentFile.mkdirs(); writeText("log") }
+        File(programDataDir, "Microsoft/Windows/Start Menu/Programs/Notepad.lnk").apply { parentFile.mkdirs(); writeText("keep") }
+
+        val data = ContainerData(launchRealSteam = false)
+        ContainerUtils.applyToContainer(context, container, data, saveToDisk = true)
+
+        assertFalse("Steam install dir should be removed on mode switch", steamDir.exists())
+        assertFalse("Local Steam cache should be removed on mode switch", localSteamDir.exists())
+        assertFalse("Roaming Steam dir should be removed on mode switch", roamingSteamDir.exists())
+        assertTrue("ProgramData should be preserved", programDataDir.exists())
+        assertTrue(File(programDataDir, "Microsoft/Windows/Start Menu/Programs/Notepad.lnk").exists())
+    }
+
+    @Test
+    fun togglingUseLegacyDrm_removesMarkersAndSetsNeedsUnpacking() {
+        container.setUseLegacyDRM(false)
+        container.setNeedsUnpacking(false)
+        MarkerUtils.addMarker(appDirPath, Marker.STEAM_DLL_REPLACED)
+        MarkerUtils.addMarker(appDirPath, Marker.STEAM_COLDCLIENT_USED)
+
+        ContainerUtils.applyToContainer(context, container, ContainerData(useLegacyDRM = true), saveToDisk = false)
+
+        assertTrue("needsUnpacking should be true when useLegacyDRM changes", container.isNeedsUnpacking)
+        assertFalse(MarkerUtils.hasMarker(appDirPath, Marker.STEAM_DLL_REPLACED))
+        assertFalse(MarkerUtils.hasMarker(appDirPath, Marker.STEAM_COLDCLIENT_USED))
+    }
+
+    @Test
+    fun togglingUnpackFilesOffWithSaveToDisk_resetsUnpackingArtifacts() {
+        container.setUnpackFiles(true)
+        container.setNeedsUnpacking(false)
+
+        val imageFs = com.winlator.xenvironment.ImageFs.find(tempDir)
+        val gameDir = File(imageFs.wineprefix, "dosdevices/a:/Game")
+        gameDir.mkdirs()
+        val mainExe = File(gameDir, "Main.exe").apply { writeText("current-unpacked") }
+        File(gameDir, "Main.exe.original.exe").apply { writeText("original-main") }
+        File(gameDir, "Main.exe.unpacked.exe").apply { writeText("unpacked-main") }
+        val extraDllDir = File(imageFs.wineprefix, "drive_c/Program Files (x86)/Steam/extra_dlls")
+        File(extraDllDir, "StubDRM64.dll").apply { parentFile.mkdirs(); writeText("stub") }
+
+        MarkerUtils.addMarker(appDirPath, Marker.STEAM_DLL_REPLACED)
+        MarkerUtils.addMarker(appDirPath, Marker.STEAM_COLDCLIENT_USED)
+
+        ContainerUtils.applyToContainer(context, container, ContainerData(unpackFiles = false), saveToDisk = true)
+
+        assertTrue("needsUnpacking should be true when unpackFiles changes", container.isNeedsUnpacking)
+        assertEquals("original-main", mainExe.readText())
+        assertFalse(File(gameDir, "Main.exe.original.exe").exists())
+        assertFalse(File(gameDir, "Main.exe.unpacked.exe").exists())
+        assertFalse(extraDllDir.exists())
+        assertFalse(MarkerUtils.hasMarker(appDirPath, Marker.STEAM_DLL_REPLACED))
+        assertFalse(MarkerUtils.hasMarker(appDirPath, Marker.STEAM_COLDCLIENT_USED))
+    }
 }

@@ -14,6 +14,7 @@ import app.gamenative.service.SteamService
 import app.gamenative.service.SteamService.Companion.getAppDirName
 import app.gamenative.service.SteamService.Companion.getAppInfoOf
 import com.winlator.container.Container
+import com.winlator.core.OnExtractFileListener
 import com.winlator.core.TarCompressorUtils
 import com.winlator.core.WineRegistryEditor
 import com.winlator.xenvironment.ImageFs
@@ -42,6 +43,13 @@ import java.util.concurrent.TimeUnit
 import kotlin.io.path.setLastModifiedTime
 
 object SteamUtils {
+
+    private fun imageFsForContainer(container: Container): ImageFs = ImageFs.find(container.getRootDir())
+
+    private fun imageFsForApp(context: Context, appId: String): ImageFs {
+        val container = ContainerUtils.getOrCreateContainer(context, appId)
+        return imageFsForContainer(container)
+    }
 
     fun getDownloadBytes(manifest: ManifestInfo?): Long {
         if (manifest == null) return 0L
@@ -165,7 +173,7 @@ object SteamUtils {
         var replaced32Count = 0
         var replaced64Count = 0
         val backupPaths = mutableSetOf<String>()
-        val imageFs = ImageFs.find(context)
+        val imageFs = imageFsForApp(context, appId)
         autoLoginUserChanges(imageFs)
         setupLightweightSteamConfig(imageFs, SteamService.userSteamId?.toString())
 
@@ -260,7 +268,7 @@ object SteamUtils {
             Timber.i("Deleted extra_dlls directory before extraction for appId: $steamAppId")
         }
 
-        val imageFs = ImageFs.find(context)
+        val imageFs = imageFsForApp(context, appId)
         val downloaded = File(imageFs.getFilesDir(), "experimental-drm-20260116.tzst")
         TarCompressorUtils.extract(
             TarCompressorUtils.Type.ZSTD,
@@ -294,7 +302,7 @@ object SteamUtils {
     }
 
     fun backupSteamclientFiles(context: Context, steamAppId: Int) {
-        val imageFs = ImageFs.find(context)
+        val imageFs = imageFsForApp(context, "STEAM_$steamAppId")
 
         var backupCount = 0
 
@@ -313,7 +321,7 @@ object SteamUtils {
     }
 
     fun restoreSteamclientFiles(context: Context, steamAppId: Int) {
-        val imageFs = ImageFs.find(context)
+        val imageFs = imageFsForApp(context, "STEAM_$steamAppId")
 
         var restoredCount = 0
 
@@ -336,6 +344,80 @@ object SteamUtils {
         }
 
         Timber.i("Finished restoreSteamclientFiles for appId: $steamAppId. Restored $restoredCount file(s)")
+    }
+
+    /**
+     * Clears Steam-installation state inside a container when switching launch mode.
+     *
+     * This deliberately removes the full Steam footprint so the next launch can
+     * reconstruct the target mode from scratch:
+     * - Real Steam mode: extract fresh steam.tzst + token/login state
+     * - ColdClient/Goldberg mode: extract fresh lightweight Steam root
+     *
+     * We remove only Steam-specific mutable state and leave the rest of the Wine
+     * prefix intact (e.g. ProgramData Start Menu entries, Windows system files).
+     */
+    internal fun resetSteamModeArtifacts(containerRoot: File) {
+        val driveC = File(containerRoot, ".wine/drive_c")
+        val dirsToDelete = listOf(
+            File(driveC, "Program Files (x86)/Steam"),
+            File(driveC, "users/${ImageFs.USER}/AppData/Local/Steam"),
+            File(driveC, "users/${ImageFs.USER}/AppData/Roaming/Steam"),
+        )
+
+        dirsToDelete.forEach { dir ->
+            if (dir.exists()) {
+                val deleted = dir.deleteRecursively()
+                Timber.i("resetSteamModeArtifacts: deleted %s (success=%s)", dir.absolutePath, deleted)
+            }
+        }
+    }
+
+    internal fun extractRealSteamArchive(
+        context: Context,
+        container: Container,
+        onExtractFileListener: OnExtractFileListener? = null,
+    ): Boolean {
+        val archive = File(ImageFs.find(context).filesDir, "steam.tzst")
+        if (!archive.exists()) {
+            Timber.w("extractRealSteamArchive: steam.tzst missing at ${archive.absolutePath}")
+            return false
+        }
+
+        val tempRoot = File(context.cacheDir, "steam_extract_${container.id}")
+        tempRoot.deleteRecursively()
+        tempRoot.mkdirs()
+
+        return try {
+            val extracted = TarCompressorUtils.extract(
+                TarCompressorUtils.Type.ZSTD,
+                archive,
+                tempRoot,
+                onExtractFileListener,
+            )
+            if (!extracted) {
+                Timber.w("extractRealSteamArchive: extraction failed for container ${container.id}")
+                return false
+            }
+
+            val extractedSteamDir = File(tempRoot, "home/${ImageFs.USER}/.wine/drive_c/Program Files (x86)/Steam")
+            if (!extractedSteamDir.exists()) {
+                Timber.w("extractRealSteamArchive: extracted Steam dir missing for container ${container.id}: ${extractedSteamDir.absolutePath}")
+                return false
+            }
+
+            val targetSteamDir = File(container.rootDir, ".wine/drive_c/Program Files (x86)/Steam")
+            targetSteamDir.parentFile?.mkdirs()
+            targetSteamDir.deleteRecursively()
+            extractedSteamDir.copyRecursively(targetSteamDir, overwrite = true)
+            Timber.i("extractRealSteamArchive: copied extracted Steam tree into ${targetSteamDir.absolutePath}")
+            true
+        } catch (e: Exception) {
+            Timber.e(e, "extractRealSteamArchive: failed for container ${container.id}")
+            false
+        } finally {
+            tempRoot.deleteRecursively()
+        }
     }
 
     internal fun generateColdClientIni(
@@ -509,7 +591,7 @@ object SteamUtils {
      */
     private fun restoreUnpackedExecutable(context: Context, steamAppId: Int) {
         try {
-            val imageFs = ImageFs.find(context)
+            val imageFs = imageFsForApp(context, "STEAM_$steamAppId")
             val appDirPath = SteamService.getAppDirPath(steamAppId)
 
             // Convert to Wine path format
@@ -561,7 +643,7 @@ object SteamUtils {
                 return
             }
 
-            val imageFs = ImageFs.find(context)
+            val imageFs = imageFsForApp(context, "STEAM_$steamAppId")
 
             // Create the steamapps folder structure
             val steamappsDir = File(imageFs.wineprefix, "drive_c/Program Files (x86)/Steam/steamapps")
@@ -721,8 +803,8 @@ object SteamUtils {
 
         Timber.i("Starting restoreSteamApi for appId: ${appId}")
         val steamAppId = ContainerUtils.extractGameIdFromContainerId(appId)
-        val imageFs = ImageFs.find(context)
         val container = ContainerUtils.getOrCreateContainer(context, appId)
+        val imageFs = imageFsForContainer(container)
         val cfgFile = File(imageFs.wineprefix, "drive_c/Program Files (x86)/Steam/steam.cfg")
         if (!cfgFile.exists()){
             cfgFile.parentFile?.mkdirs()
@@ -833,7 +915,7 @@ object SteamUtils {
         Timber.i("Checking directory: $appDirPath")
         var restoredCount = 0
 
-        val imageFs = ImageFs.find(context)
+        val imageFs = imageFsForApp(context, "STEAM_$steamAppId")
         val dosDevicesPath = File(imageFs.wineprefix, "dosdevices/a:")
 
         dosDevicesPath.walkTopDown().maxDepth(10)
@@ -863,12 +945,69 @@ object SteamUtils {
     }
 
     /**
+     * Reverts Steamless/unpack-file mutations so the next launch can rebuild the desired state.
+     *
+     * This restores any backed up executable from *.original.exe and then removes transient
+     * unpack artifacts (*.original.exe, *.unpacked.exe) plus the ColdClient extra_dlls folder.
+     */
+    internal fun resetUnpackingArtifacts(containerRoot: File, steamAppId: Int) {
+        val imageFs = ImageFs.find(containerRoot)
+        val dosDevicesPath = File(imageFs.wineprefix, "dosdevices/a:")
+        var restoredCount = 0
+        var deletedOriginalCount = 0
+        var deletedUnpackedCount = 0
+
+        dosDevicesPath.walkTopDown().maxDepth(10)
+            .filter { it.isFile && it.name.endsWith(".original.exe", ignoreCase = true) }
+            .forEach { file ->
+                try {
+                    val origPath = file.toPath()
+                    val originalPath = origPath.parent.resolve(origPath.name.removeSuffix(".original.exe"))
+                    if (Files.exists(originalPath)) {
+                        Files.delete(originalPath)
+                    }
+                    Files.copy(origPath, originalPath)
+                    restoredCount++
+                } catch (e: IOException) {
+                    Timber.w(e, "Failed to restore ${file.name} from backup during resetUnpackingArtifacts")
+                }
+            }
+
+        dosDevicesPath.walkTopDown().maxDepth(10)
+            .filter { it.isFile && (it.name.endsWith(".original.exe", ignoreCase = true) || it.name.endsWith(".unpacked.exe", ignoreCase = true)) }
+            .forEach { file ->
+                val deleted = file.delete()
+                if (deleted) {
+                    if (file.name.endsWith(".original.exe", ignoreCase = true)) {
+                        deletedOriginalCount++
+                    } else {
+                        deletedUnpackedCount++
+                    }
+                }
+            }
+
+        val extraDllDir = File(imageFs.wineprefix, "drive_c/Program Files (x86)/Steam/extra_dlls")
+        if (extraDllDir.exists()) {
+            extraDllDir.deleteRecursively()
+        }
+
+        Timber.i(
+            "Finished resetUnpackingArtifacts for appId: $steamAppId. Restored $restoredCount executable(s), deleted $deletedOriginalCount .original.exe file(s) and $deletedUnpackedCount .unpacked.exe file(s)",
+        )
+    }
+
+    internal fun resetUnpackingArtifacts(context: Context, steamAppId: Int) {
+        val container = ContainerUtils.getOrCreateContainer(context, "STEAM_$steamAppId")
+        resetUnpackingArtifacts(container.rootDir, steamAppId)
+    }
+
+    /**
      * Migrates save files from GSE Saves directory to Steam userdata directory.
      * This function copies all files from the GSE saves location to the proper Steam userdata
      * location and then removes the original GSE directory to complete the migration.
      */
     fun migrateGSESavesToSteamUserdata(context: Context, appId: Int) {
-        val imageFs = ImageFs.find(context)
+        val imageFs = imageFsForApp(context, "STEAM_$appId")
         val accountId = SteamService.userSteamId?.accountID?.toInt()
             ?: PrefManager.steamUserAccountId.takeIf { it != 0 }
 
