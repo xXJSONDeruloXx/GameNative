@@ -214,7 +214,6 @@ fun GeneralTabContent(
                         currentConfig.put("version", "async-1.10.3")
                         currentConfig.put("async", "1")
                         currentConfig.put("asyncCache", "0")
-                        state.config.value = config.copy(dxwrapperConfig = currentConfig.toString())
 
                         state.config.value = config.copy(
                             containerVariant = newVariant,

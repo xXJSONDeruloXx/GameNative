@@ -400,7 +400,7 @@ object ContainerUtils {
 
     fun applyToContainer(context: Context, container: Container, containerData: ContainerData, saveToDisk: Boolean) {
         Timber.d("Applying containerData to container. execArgs: '${containerData.execArgs}', saveToDisk: $saveToDisk")
-        // Detect language change before mutating container
+        // Detect changes before mutating container
         val previousLanguage: String = try {
             container.language
         } catch (e: Exception) {
@@ -409,6 +409,9 @@ object ContainerUtils {
         val previousForceDlc: Boolean = container.isForceDlc
         val previousSteamOfflineMode: Boolean = container.isSteamOfflineMode()
         val previousUnpackFiles: Boolean = container.isUnpackFiles
+        val previousLaunchRealSteam: Boolean = container.isLaunchRealSteam
+        val previousSteamType: String = container.getSteamType()
+        val previousAllowSteamUpdates: Boolean = container.isAllowSteamUpdates
         val userRegFile = File(container.rootDir, ".wine/user.reg")
         WineRegistryEditor(userRegFile).use { registryEditor ->
             registryEditor.setStringValue("Software\\Wine\\Direct3D", "renderer", containerData.renderer)
@@ -480,6 +483,10 @@ object ContainerUtils {
         if (previousUnpackFiles != containerData.unpackFiles && containerData.unpackFiles) {
             container.setNeedsUnpacking(true)
         }
+        // If launchRealSteam changed, force re-unpacking for DRM pipeline switch
+        if (previousLaunchRealSteam != containerData.launchRealSteam) {
+            container.setNeedsUnpacking(true)
+        }
         container.putExtra("sharpnessEffect", containerData.sharpnessEffect)
         container.putExtra("sharpnessLevel", containerData.sharpnessLevel.toString())
         container.putExtra("sharpnessDenoise", containerData.sharpnessDenoise.toString())
@@ -512,6 +519,30 @@ object ContainerUtils {
             MarkerUtils.removeMarker(appDirPath, Marker.STEAM_DLL_REPLACED)
             MarkerUtils.removeMarker(appDirPath, Marker.STEAM_COLDCLIENT_USED)
             Timber.i("steamOfflineMode changed from '$previousSteamOfflineMode' to '${containerData.steamOfflineMode}'. Cleared STEAM_DLL_REPLACED marker for container ${container.id}.")
+        }
+        // If launchRealSteam changed, clear markers so DRM/DLL setup re-evaluates
+        if (previousLaunchRealSteam != containerData.launchRealSteam) {
+            val steamAppId = extractGameIdFromContainerId(container.id)
+            val appDirPath = SteamService.getAppDirPath(steamAppId)
+            MarkerUtils.removeMarker(appDirPath, Marker.STEAM_DLL_REPLACED)
+            MarkerUtils.removeMarker(appDirPath, Marker.STEAM_COLDCLIENT_USED)
+            Timber.i("launchRealSteam changed from '$previousLaunchRealSteam' to '${containerData.launchRealSteam}'. Cleared STEAM_DLL_REPLACED marker for container ${container.id}.")
+        }
+        // If steamType changed, clear markers so ColdClient/box64rc setup re-evaluates
+        if (previousSteamType != containerData.steamType) {
+            val steamAppId = extractGameIdFromContainerId(container.id)
+            val appDirPath = SteamService.getAppDirPath(steamAppId)
+            MarkerUtils.removeMarker(appDirPath, Marker.STEAM_DLL_REPLACED)
+            MarkerUtils.removeMarker(appDirPath, Marker.STEAM_COLDCLIENT_USED)
+            Timber.i("steamType changed from '$previousSteamType' to '${containerData.steamType}'. Cleared STEAM_DLL_REPLACED marker for container ${container.id}.")
+        }
+        // If allowSteamUpdates changed, clear markers so Steam DLL setup re-evaluates
+        if (previousAllowSteamUpdates != containerData.allowSteamUpdates) {
+            val steamAppId = extractGameIdFromContainerId(container.id)
+            val appDirPath = SteamService.getAppDirPath(steamAppId)
+            MarkerUtils.removeMarker(appDirPath, Marker.STEAM_DLL_REPLACED)
+            MarkerUtils.removeMarker(appDirPath, Marker.STEAM_COLDCLIENT_USED)
+            Timber.i("allowSteamUpdates changed from '$previousAllowSteamUpdates' to '${containerData.allowSteamUpdates}'. Cleared STEAM_DLL_REPLACED marker for container ${container.id}.")
         }
 
         // Apply controller settings to container
