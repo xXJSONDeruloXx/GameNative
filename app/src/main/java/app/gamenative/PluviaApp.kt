@@ -223,7 +223,7 @@ class PluviaApp : SplitCompatApplication() {
                 .onFailure { Timber.e(it, "shutdownEnvironment: achievementWatcher.stop") }
             runCatching { SteamService.clearCachedAchievements() }
                 .onFailure { Timber.e(it, "shutdownEnvironment: clearCachedAchievements") }
-            runCatching { touchpadView?.releasePointerCapture() }
+            runCatching { touchpadView?.releasePointerCaptureForInternalUi() }
                 .onFailure { Timber.e(it, "shutdownEnvironment: releasePointerCapture") }
             runCatching { env?.stopEnvironmentComponents() }
                 .onFailure { Timber.e(it, "shutdownEnvironment: stopEnvironmentComponents") }

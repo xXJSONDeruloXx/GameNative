@@ -720,6 +720,21 @@ fun XServerScreen(
         }
     }
 
+    fun tryCapturePointerFromMouseEvent(event: MotionEvent?) {
+        if (event == null || PluviaApp.isOverlayPaused || container.isTouchscreenMode ||
+            showElementEditor || keepPausedForEditor || showQuickMenu || isEditMode) {
+            return
+        }
+
+        val device = event.device ?: return
+        val isMouseLike = device.supportsSource(InputDevice.SOURCE_MOUSE) ||
+                device.supportsSource(InputDevice.SOURCE_MOUSE_RELATIVE) ||
+                device.supportsSource(InputDevice.SOURCE_TOUCHPAD)
+        if (!isMouseLike) return
+
+        PluviaApp.touchpadView?.requestPointerCaptureOnExternalMouseEvent()
+    }
+
     fun scanForExternalDevices() {
         val deviceIds = InputDevice.getDeviceIds()
         hasPhysicalKeyboard = deviceIds.any { id ->
@@ -766,7 +781,7 @@ fun XServerScreen(
                             // Delay technically not required for the function to work but this can
                             // race against tryCapturePointer() and end up capturing after release
                             // was already called
-                            view.releasePointerCapture()
+                            view.releasePointerCaptureForInternalUi()
                         }
                     }, 100)
                 }
@@ -1073,7 +1088,7 @@ fun XServerScreen(
                 // Delay technically not required for the function to work but this can
                 // race against tryCapturePointer() and end up capturing after release
                 // was already called
-                view.releasePointerCapture()
+                view.releasePointerCaptureForInternalUi()
             }
         }, 100)
 
@@ -1221,6 +1236,7 @@ fun XServerScreen(
                                 areControlsVisible = false
                             }
                         }
+                        tryCapturePointerFromMouseEvent(it.event)
                         tryCapturePointer()
                     }
                 }

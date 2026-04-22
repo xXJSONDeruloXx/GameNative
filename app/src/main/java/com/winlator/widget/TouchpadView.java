@@ -1167,7 +1167,27 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
         this.moveCursorToTouchpoint = moveCursorToTouchpoint;
     }
 
+    public boolean requestPointerCaptureOnExternalMouseEvent() {
+        if (!capturePointerOnExternalMouse || pointerCaptureRequested) {
+            return false;
+        }
+        pointerCaptureRequested = true;
+        if (!hasFocus() && !requestFocus()) {
+            pointerCaptureRequested = false;
+            Log.w("TouchpadView", "requestFocus() failed, skipping pointer capture");
+            return false;
+        }
+        requestPointerCapture();
+        return true;
+    }
+
+    public void releasePointerCaptureForInternalUi() {
+        pointerCaptureRequested = false;
+        releasePointerCapture();
+    }
+
     public boolean onExternalMouseEvent(MotionEvent event) {
+        requestPointerCaptureOnExternalMouseEvent();
         boolean handled = false;
         if (event.isFromSource(InputDevice.SOURCE_MOUSE)) {
             int actionButton = event.getActionButton();
