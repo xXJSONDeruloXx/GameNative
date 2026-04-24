@@ -26,7 +26,12 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -73,25 +78,19 @@ fun OmfgConfigTabContent(
         // ── Mode ──────────────────────────────────
         OptionSectionHeader(text = stringResource(R.string.omfg_section_mode))
 
-        OmfgCycleRow(
+        OmfgDropdownRow(
             title = stringResource(R.string.omfg_layer_mode),
-            valueText = config.OMFG_LAYER_MODE,
+            selectedValue = config.OMFG_LAYER_MODE,
             options = OmfgConfig.ALL_LAYER_MODES,
-            currentIndex = OmfgConfig.ALL_LAYER_MODES.indexOf(config.OMFG_LAYER_MODE).coerceAtLeast(0),
-            onIndexChanged = { i ->
-                onConfigChanged(config.copy(OMFG_LAYER_MODE = OmfgConfig.ALL_LAYER_MODES[i]))
-            },
+            onOptionSelected = { onConfigChanged(config.copy(OMFG_LAYER_MODE = it)) },
             focusRequester = firstItemFocusRequester,
         )
 
-        OmfgCycleRow(
+        OmfgDropdownRow(
             title = stringResource(R.string.omfg_debug_view),
-            valueText = config.OMFG_DEBUG_VIEW,
+            selectedValue = config.OMFG_DEBUG_VIEW,
             options = OmfgConfig.DEBUG_VIEWS,
-            currentIndex = OmfgConfig.DEBUG_VIEWS.indexOf(config.OMFG_DEBUG_VIEW).coerceAtLeast(0),
-            onIndexChanged = { i ->
-                onConfigChanged(config.copy(OMFG_DEBUG_VIEW = OmfgConfig.DEBUG_VIEWS[i]))
-            },
+            onOptionSelected = { onConfigChanged(config.copy(OMFG_DEBUG_VIEW = it)) },
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -653,101 +652,91 @@ private fun OmfgAdjustButton(
 }
 
 /**
- * A cycle-through row for picking from a list of string options (e.g. layer modes, debug views).
- * Left/right arrows cycle through the list.
+ * A dropdown selector row for picking from a list of string options.
+ * Tap/click/A to open a dropdown menu with all options.
+ * The currently selected value is shown with a chevron indicator.
  */
 @Composable
-private fun OmfgCycleRow(
+private fun OmfgDropdownRow(
     title: String,
-    valueText: String,
+    selectedValue: String,
     options: List<String>,
-    currentIndex: Int,
-    onIndexChanged: (Int) -> Unit,
+    onOptionSelected: (String) -> Unit,
     focusRequester: FocusRequester? = null,
 ) {
+    var expanded by remember { mutableStateOf(false) }
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
     val accentColor = PluviaTheme.colors.accentPurple
     val shape = RoundedCornerShape(14.dp)
-    val progress = if (options.size > 1) {
-        currentIndex.toFloat() / (options.lastIndex).coerceAtLeast(1).toFloat()
-    } else {
-        0f
-    }
 
-    Column(
-        modifier = Modifier
-            .padding(horizontal = 8.dp, vertical = 2.dp)
-            .clip(shape)
-            .background(
-                if (isFocused) {
-                    Brush.horizontalGradient(
-                        colors = listOf(
-                            accentColor.copy(alpha = 0.16f),
-                            accentColor.copy(alpha = 0.08f),
-                        ),
-                    )
-                } else {
-                    Brush.horizontalGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f),
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.10f),
-                        ),
-                    )
-                },
-            )
-            .then(
-                if (isFocused) {
-                    Modifier.border(
-                        width = 2.dp,
-                        color = accentColor.copy(alpha = 0.7f),
-                        shape = shape,
-                    )
-                } else {
-                    Modifier
-                },
-            )
-            .then(
-                if (focusRequester != null) {
-                    Modifier.focusRequester(focusRequester)
-                } else {
-                    Modifier
-                },
-            )
-            .focusable(interactionSource = interactionSource)
-            .onPreviewKeyEvent { keyEvent ->
-                if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN && isFocused) {
-                    when (keyEvent.nativeKeyEvent.keyCode) {
-                        KeyEvent.KEYCODE_DPAD_LEFT,
-                        KeyEvent.KEYCODE_BUTTON_A -> {
-                            if (currentIndex > 0) onIndexChanged(currentIndex - 1)
-                            true
-                        }
-                        KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                            if (currentIndex < options.lastIndex) onIndexChanged(currentIndex + 1)
-                            true
-                        }
-                        else -> false
-                    }
-                } else {
-                    false
-                }
-            }
-            .selectable(
-                selected = isFocused,
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = {
-                    if (currentIndex < options.lastIndex) onIndexChanged(currentIndex + 1)
-                    else if (options.isNotEmpty()) onIndexChanged(0)
-                },
-            )
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+    Box(
+        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier
+                .clip(shape)
+                .background(
+                    if (isFocused) {
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                accentColor.copy(alpha = 0.16f),
+                                accentColor.copy(alpha = 0.08f),
+                            ),
+                        )
+                    } else {
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f),
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.10f),
+                            ),
+                        )
+                    },
+                )
+                .then(
+                    if (isFocused) {
+                        Modifier.border(
+                            width = 2.dp,
+                            color = accentColor.copy(alpha = 0.7f),
+                            shape = shape,
+                        )
+                    } else {
+                        Modifier
+                    },
+                )
+                .then(
+                    if (focusRequester != null) {
+                        Modifier.focusRequester(focusRequester)
+                    } else {
+                        Modifier
+                    },
+                )
+                .focusable(interactionSource = interactionSource)
+                .onPreviewKeyEvent { keyEvent ->
+                    if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN && isFocused) {
+                        when (keyEvent.nativeKeyEvent.keyCode) {
+                            KeyEvent.KEYCODE_BUTTON_A,
+                            KeyEvent.KEYCODE_DPAD_RIGHT,
+                            KeyEvent.KEYCODE_DPAD_LEFT -> {
+                                expanded = true
+                                true
+                            }
+                            else -> false
+                        }
+                    } else {
+                        false
+                    }
+                }
+                .selectable(
+                    selected = isFocused,
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = { expanded = true },
+                )
+                .padding(horizontal = 16.dp, vertical = 14.dp)
+                .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
                 text = title,
@@ -755,23 +744,66 @@ private fun OmfgCycleRow(
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = if (isFocused) FontWeight.SemiBold else FontWeight.Medium,
             )
-            Text(
-                text = valueText,
-                style = MaterialTheme.typography.labelLarge,
-                color = if (isFocused) accentColor else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = selectedValue,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (isFocused) accentColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = if (isFocused) accentColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
-
-        LinearProgressIndicator(
-            progress = { progress },
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
             modifier = Modifier
-                .fillMaxWidth()
-                .height(8.dp)
-                .clip(RoundedCornerShape(999.dp)),
-            color = accentColor,
-            trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-        )
+                .background(
+                    MaterialTheme.colorScheme.surface,
+                    shape = RoundedCornerShape(12.dp),
+                )
+                .verticalScroll(rememberScrollState()),
+        ) {
+            options.forEachIndexed { index, option ->
+                val isSelected = option == selectedValue
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = option,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) accentColor else MaterialTheme.colorScheme.onSurface,
+                        )
+                    },
+                    onClick = {
+                        onOptionSelected(option)
+                        expanded = false
+                    },
+                    modifier = Modifier.then(
+                        if (isSelected) {
+                            Modifier.background(
+                                accentColor.copy(alpha = 0.12f),
+                                shape = RoundedCornerShape(8.dp),
+                            )
+                        } else {
+                            Modifier
+                        },
+                    ),
+                )
+                if (index < options.lastIndex) {
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f),
+                    )
+                }
+            }
+        }
     }
 }
