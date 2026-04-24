@@ -960,7 +960,7 @@ private fun ScreenEffectAdjustmentButton(
 }
 
 @Composable
-private fun ScreenEffectToggleRow(
+internal fun ScreenEffectToggleRow(
     title: String,
     subtitle: String? = null,
     enabled: Boolean,
@@ -1036,7 +1036,7 @@ private fun ScreenEffectToggleRow(
 }
 
 @Composable
-private fun ScreenEffectActionRow(
+internal fun ScreenEffectActionRow(
     title: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     accentColor: Color,

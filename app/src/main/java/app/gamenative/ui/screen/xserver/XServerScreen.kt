@@ -60,6 +60,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import app.gamenative.R
+import app.gamenative.omfg.OmfgConfig
 import app.gamenative.ui.util.SnackbarManager
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
@@ -329,6 +330,7 @@ fun XServerScreen(
         ContainerUtils.getContainer(context, appId)
     }
     var omfgMode by remember(container.id) { mutableStateOf("passthrough") }
+    var omfgConfig by remember(container.id) { mutableStateOf(OmfgConfig.DEFAULTS.copy(OMFG_LAYER_MODE = "passthrough")) }
     val omfgHotConfigFile = remember(container.id) { File(ImageFs.find(context).getTmpDir(), "omfg-hot.conf") }
 
     val suspendPolicy = remember(container.id) { container.suspendPolicy }
@@ -1084,8 +1086,19 @@ fun XServerScreen(
 
     val onOmfgModeChanged: (String) -> Unit = { newMode ->
         omfgMode = newMode
+        omfgConfig = omfgConfig.copy(OMFG_LAYER_MODE = newMode)
         runCatching {
-            writeOmfgHotConfig(omfgHotConfigFile, newMode)
+            writeOmfgHotConfig(omfgHotConfigFile, omfgConfig)
+        }.onFailure {
+            Timber.e(it, "Failed to write OMFG hot config")
+        }
+    }
+
+    val onOmfgConfigChanged: (OmfgConfig) -> Unit = { newConfig ->
+        omfgConfig = newConfig
+        omfgMode = newConfig.OMFG_LAYER_MODE
+        runCatching {
+            writeOmfgHotConfig(omfgHotConfigFile, newConfig)
         }.onFailure {
             Timber.e(it, "Failed to write OMFG hot config")
         }
@@ -1720,7 +1733,7 @@ fun XServerScreen(
                                 appLaunchInfo,
                                 xServerView!!.getxServer(),
                                 containerVariantChanged,
-                                omfgMode,
+                                omfgConfig,
                                 omfgHotConfigFile,
                                 onGameLaunchError,
                                 navigateBack,
@@ -2126,6 +2139,8 @@ fun XServerScreen(
             omfgEnabled = container.isEnableOmfg,
             omfgMode = omfgMode,
             onOmfgModeChanged = onOmfgModeChanged,
+            omfgConfig = omfgConfig,
+            onOmfgConfigChanged = onOmfgConfigChanged,
         )
 
         if (manualResumeMode && PluviaApp.isOverlayPaused && !showQuickMenu && !keepPausedForEditor) {
@@ -2631,7 +2646,7 @@ private fun setupXEnvironment(
     // shortcut: Shortcut?,
     xServer: XServer,
     containerVariantChanged: Boolean,
-    omfgMode: String,
+    omfgConfig: OmfgConfig,
     omfgHotConfigFile: File,
     onGameLaunchError: ((String) -> Unit)? = null,
     navigateBack: () -> Unit,
@@ -2766,7 +2781,7 @@ private fun setupXEnvironment(
         if (container.isEnableOmfg) {
             envVars.put("ENABLE_OMFG_RUST", "1")
             envVars.put("OMFG_HOT_CONFIG_PATH", omfgHotConfigFile.absolutePath)
-            writeOmfgHotConfig(omfgHotConfigFile, omfgMode)
+            writeOmfgHotConfig(omfgHotConfigFile, omfgConfig)
         }
         if (!envVars.has("WINEESYNC")) envVars.put("WINEESYNC", "1")
         val graphicsDriverConfig = KeyValueSet(container.getGraphicsDriverConfig())
@@ -4541,14 +4556,11 @@ private fun extractGraphicsDriverFiles(
 
 private fun writeOmfgHotConfig(
     file: File,
-    mode: String,
+    config: OmfgConfig,
 ) {
     FileUtils.writeString(
         file,
-        """
-        [omfg]
-        OMFG_LAYER_MODE=$mode
-        """.trimIndent() + "\n",
+        config.toToml(),
     )
 }
 
