@@ -770,8 +770,7 @@ private fun OmfgDropdownRow(
                 .background(
                     MaterialTheme.colorScheme.surface,
                     shape = RoundedCornerShape(12.dp),
-                )
-                .verticalScroll(rememberScrollState()),
+                ),
         ) {
             options.forEachIndexed { index, option ->
                 val isSelected = option == selectedValue
