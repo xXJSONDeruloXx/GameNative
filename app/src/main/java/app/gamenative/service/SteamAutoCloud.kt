@@ -925,7 +925,53 @@ object SteamAutoCloud {
                             result.first
                         } == true
 
-                    if (hasLocalChanges) {
+                    // Container-wipe detection: cache still has files but local files are
+                    // all gone (e.g. container was deleted/recreated without clearing the
+                    // cloud-sync DB). Uploading in this state would wipe the cloud saves.
+                    // Instead, clear the stale cache and re-download from cloud.
+                    val cachedHadFiles = cachedFileList?.userFileInfo?.isNotEmpty() == true
+                    val localHasNoFiles = allLocalUserFiles.isEmpty()
+                    val isContainerWipe = hasLocalChanges && cachedHadFiles && localHasNoFiles
+
+                    if (isContainerWipe) {
+                        Timber.i("Local files vanished but cache is stale — clearing cache and re-downloading from cloud")
+
+                        with(steamInstance) {
+                            db.withTransaction {
+                                fileChangeListsDao.deleteByAppId(appInfo.id)
+                                changeNumbersDao.deleteByAppId(appInfo.id)
+                            }
+                        }
+
+                        // Re-fetch full file list from cloud (changeNumber=0)
+                        val freshFileList = steamCloud.getAppFileListChange(appInfo.id, 0L).await()
+
+                        if (freshFileList.files.isNotEmpty()) {
+                            downloadFiles(freshFileList, parentScope).await()
+
+                            val updatedLocalFiles = getLocalUserFilesAsPrefixMap()
+
+                            with(steamInstance) {
+                                db.withTransaction {
+                                    fileChangeListsDao.insert(appInfo.id, updatedLocalFiles.map { it.value }.flatten())
+                                    changeNumbersDao.insert(appInfo.id, freshFileList.currentChangeNumber)
+                                }
+                            }
+
+                            syncResult = SyncResult.Success
+                        } else {
+                            Timber.i("Cloud has no files for this app — nothing to download")
+
+                            with(steamInstance) {
+                                db.withTransaction {
+                                    fileChangeListsDao.insert(appInfo.id, emptyList())
+                                    changeNumbersDao.insert(appInfo.id, cloudAppChangeNumber)
+                                }
+                            }
+
+                            syncResult = SyncResult.UpToDate
+                        }
+                    } else if (hasLocalChanges) {
                         Timber.i("Found local changes and no new cloud user files")
 
                         uploadUserFiles(parentScope).await()
