@@ -45,9 +45,11 @@ import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Gamepad
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.QueryStats
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -74,6 +76,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -98,6 +101,7 @@ object QuickMenuAction {
     const val EDIT_CONTROLS = 4
     const val EDIT_PHYSICAL_CONTROLLER = 5
     const val PERFORMANCE_HUD = 6
+    const val TOUCHSCREEN_MODE = 7
 }
 
 private object QuickMenuTab {
@@ -233,6 +237,8 @@ fun QuickMenu(
     performanceHudConfig: PerformanceHudConfig = PerformanceHudConfig(),
     onPerformanceHudConfigChanged: (PerformanceHudConfig) -> Unit = {},
     hasPhysicalController: Boolean = false,
+    isTouchscreenModeActive: Boolean = false,
+    onTouchGestureSettingsClick: () -> Unit = {},
     activeToggleIds: Set<Int> = emptySet(),
     omfgEnabled: Boolean = false,
     omfgMode: String = "passthrough",
@@ -281,6 +287,14 @@ fun QuickMenu(
                 icon = Icons.Default.Edit,
                 labelResId = R.string.edit_controls,
                 accentColor = PluviaTheme.colors.accentSuccess,
+            )
+        )
+        add(
+            QuickMenuItem(
+                id = QuickMenuAction.TOUCHSCREEN_MODE,
+                icon = Icons.Default.Fingerprint,
+                labelResId = R.string.touchscreen_mode,
+                accentColor = PluviaTheme.colors.accentPurple,
             )
         )
     }
@@ -578,6 +592,10 @@ fun QuickMenu(
                                                         }
                                                     },
                                                     focusRequester = if (index == 0) controllerItemFocusRequester else null,
+                                                    secondaryIcon = if (item.id == QuickMenuAction.TOUCHSCREEN_MODE && isTouchscreenModeActive)
+                                                        Icons.Default.Settings else null,
+                                                    onSecondaryClick = if (item.id == QuickMenuAction.TOUCHSCREEN_MODE && isTouchscreenModeActive)
+                                                        onTouchGestureSettingsClick else null,
                                                 )
                                             }
                                         }
@@ -1715,6 +1733,8 @@ private fun QuickMenuItemRow(
     isActive: Boolean = false,
     onClick: () -> Unit,
     focusRequester: FocusRequester? = null,
+    secondaryIcon: ImageVector? = null,
+    onSecondaryClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -1828,6 +1848,24 @@ private fun QuickMenuItemRow(
             },
             modifier = Modifier.weight(1f),
         )
+
+        if (secondaryIcon != null && onSecondaryClick != null) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    .clickable(role = Role.Button, onClick = onSecondaryClick),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = secondaryIcon,
+                    contentDescription = stringResource(R.string.gesture_settings_title),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
     }
 }
 

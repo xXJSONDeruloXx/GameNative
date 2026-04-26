@@ -2,7 +2,6 @@ package app.gamenative.ui.screen.xserver
 
 import android.app.Activity
 import android.content.Context
-import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Build
 import android.util.Log
@@ -52,7 +51,6 @@ import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.pointerInteropFilter
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
@@ -71,6 +69,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.gamenative.PluviaApp
 import app.gamenative.PrefManager
+import app.gamenative.SteamBootstrap
 import app.gamenative.data.GameSource
 import app.gamenative.gamefixes.GameFixesRegistry
 import app.gamenative.data.LaunchInfo
@@ -85,7 +84,6 @@ import app.gamenative.externaldisplay.ExternalDisplaySwapController
 import app.gamenative.externaldisplay.SwapInputOverlayView
 import app.gamenative.service.AchievementWatcher
 import app.gamenative.service.SteamService
-import app.gamenative.service.amazon.AmazonService
 import app.gamenative.service.epic.EpicService
 import app.gamenative.service.gog.GOGService
 import app.gamenative.ui.component.QuickMenu
@@ -417,6 +415,11 @@ fun XServerScreen(
     var showElementEditor by remember { mutableStateOf(false) }
     var elementToEdit by remember { mutableStateOf<com.winlator.inputcontrols.ControlElement?>(null) }
     var showPhysicalControllerDialog by remember { mutableStateOf(false) }
+    var showTouchGestureDialog by remember { mutableStateOf(false) }
+    var isTouchscreenModeActive by remember { mutableStateOf(container.isTouchscreenMode) }
+    var currentGestureConfig by remember {
+        mutableStateOf(app.gamenative.data.TouchGestureConfig.fromJson(container.getGestureConfig()))
+    }
     var keyboardRequestedFromOverlay by remember { mutableStateOf(false) }
     var showQuickMenu by remember { mutableStateOf(false) }
     var quickMenuToolsVisible by remember { mutableStateOf(false) }
@@ -997,6 +1000,55 @@ fun XServerScreen(
                     }
                 }
                 true
+            }
+
+            QuickMenuAction.TOUCHSCREEN_MODE -> {
+                val newMode = !container.isTouchscreenMode
+                container.setTouchscreenMode(newMode)
+                container.saveData()
+                isTouchscreenModeActive = newMode
+
+                // Notify TouchpadView of the mode change
+                PluviaApp.touchpadView?.setTouchscreenMode(newMode)
+
+                if (newMode) {
+                    // Apply gesture config when enabling
+                    PluviaApp.touchpadView?.setGestureConfig(currentGestureConfig)
+
+                    // Hide on-screen controls (mirrors startup priority logic)
+                    if (areControlsVisible) {
+                        hideInputControls()
+                        areControlsVisible = false
+                    }
+
+                    // Hide cursor in touchscreen mode
+                    xServerView?.renderer?.setCursorVisible(false)
+                } else {
+                    // Restore cursor if mouse input is allowed
+                    if (!container.isDisableMouseInput) {
+                        xServerView?.renderer?.setCursorVisible(true)
+                    }
+
+                    // Re-evaluate whether to show on-screen controls
+                    // (same logic as scanForExternalDevices startup path)
+                    if (!hasPhysicalController && !hasPhysicalKeyboard &&
+                        !hasPhysicalMouse && !hasInternalTouchpad) {
+                        val manager = PluviaApp.inputControlsManager
+                        val profiles = manager?.getProfiles(false) ?: listOf()
+                        if (profiles.isNotEmpty() && !areControlsVisible) {
+                            val profileIdStr = container.getExtra("profileId", "0")
+                            val profileId = profileIdStr.toIntOrNull() ?: 0
+                            val targetProfile = if (profileId != 0) {
+                                manager?.getProfile(profileId)
+                            } else {
+                                null
+                            } ?: manager?.getProfile(0) ?: profiles.getOrNull(2) ?: profiles.first()
+                            showInputControls(targetProfile, xServerView!!.getxServer().winHandler, container)
+                            areControlsVisible = true
+                        }
+                    }
+                }
+                false
             }
 
             QuickMenuAction.EDIT_PHYSICAL_CONTROLLER -> {
@@ -2133,8 +2185,11 @@ fun XServerScreen(
             performanceHudConfig = performanceHudConfig,
             onPerformanceHudConfigChanged = ::applyPerformanceHudConfig,
             hasPhysicalController = hasPhysicalController,
+            isTouchscreenModeActive = isTouchscreenModeActive,
+            onTouchGestureSettingsClick = { showTouchGestureDialog = true },
             activeToggleIds = buildSet {
                 if (areControlsVisible) add(QuickMenuAction.INPUT_CONTROLS)
+                if (isTouchscreenModeActive) add(QuickMenuAction.TOUCHSCREEN_MODE)
             },
             omfgEnabled = container.isEnableOmfg,
             omfgMode = omfgMode,
@@ -2188,6 +2243,21 @@ fun XServerScreen(
                 showElementEditor = false
                 // Keep edit mode active so user can edit other elements
             }
+        )
+    }
+
+    // Touch Gesture Settings Dialog
+    if (showTouchGestureDialog) {
+        app.gamenative.ui.component.dialog.TouchGestureSettingsDialog(
+            gestureConfig = currentGestureConfig,
+            onDismiss = { showTouchGestureDialog = false },
+            onSave = { newConfig ->
+                currentGestureConfig = newConfig
+                container.setGestureConfig(newConfig.toJson())
+                container.saveData()
+                PluviaApp.touchpadView?.setGestureConfig(newConfig)
+                showTouchGestureDialog = false
+            },
         )
     }
 
@@ -2761,6 +2831,15 @@ private fun setupXEnvironment(
         val wow64Mode = container.isWoW64Mode
         guestProgramLauncherComponent.setContainer(container);
         guestProgramLauncherComponent.setWineInfo(xServerState.value.wineInfo);
+        if (guestProgramLauncherComponent is BionicProgramLauncherComponent) {
+            // Real-Steam mode publishes SteamGameId/SteamAppId from this value.
+            // Safe to set unconditionally; non-Steam sources will produce 0 and
+            // are ignored by the launcher unless launchRealSteam is on.
+            val numericAppId = runCatching { ContainerUtils.extractGameIdFromContainerId(appId) }.getOrNull()
+            if (numericAppId != null && numericAppId > 0) {
+                guestProgramLauncherComponent.setSteamAppId(numericAppId.toString())
+            }
+        }
         gameExecutable = "wine explorer /desktop=shell," + xServer.screenInfo + " " +
             getWineStartCommand(context, appId, container, bootToContainer, testGraphics, appLaunchInfo, envVars, guestProgramLauncherComponent, gameSource) +
             (if (container.execArgs.isNotEmpty()) " " + container.execArgs else "")
@@ -2985,6 +3064,15 @@ private fun setupXEnvironment(
             } catch (e: Exception) {
                 Timber.e(e, "Error requesting encrypted app ticket for app $gameIdForTicket")
             }
+        }
+    }
+
+    if (container.wineVersion.lowercase().contains("proton-10")) {
+        try {
+            // Only proton 10 can apply this fix
+            XAudioUtils.replaceXAudioDllsFromRedistributable(context, guestProgramLauncherComponent, appId)
+        } catch (e: Exception) {
+            Timber.tag("replaceXAudioDllsFromRedistributable").w(e, "Failed to replace XAudio DLLs; continuing launch")
         }
     }
 
@@ -3402,9 +3490,20 @@ private fun getWineStartCommand(
         "\"wfm.exe\""
     } else {
         if (container.isLaunchRealSteam) {
-            // Launch Steam with the applaunch parameter to start the game
-            "\"C:\\\\Program Files (x86)\\\\Steam\\\\steam.exe\" -silent -vgui -tcp " +
-                    "-nobigpicture -nofriendsui -nochatui -nointro -applaunch $gameId"
+            // Launch steam.exe with the game's exe path as its argument.
+            // Real-Steam mode expects the binary to live under
+            // C:\Program Files (x86)\Steam\steamapps\common\<GameFolder>\<exe>
+            val appDirPath = SteamService.getAppDirPath(gameId)
+            val gameFolderName = appDirPath.substringAfterLast('/').ifEmpty { gameId.toString() }
+            val exePath = container.executablePath.ifEmpty { SteamService.getInstalledExe(gameId) }
+            val normalizedExe = exePath.replace('/', '\\').trimStart('\\')
+            // Match the other launch flows: cwd to the directory that contains
+            // the game's exe on the Linux side (the same path Wine reads as
+            // C:\Program Files (x86)\Steam\steamapps\common\<GameFolder>\...).
+            val executableDir = appDirPath + "/" + exePath.substringBeforeLast("/", "")
+            guestProgramLauncherComponent.workingDir = File(executableDir)
+            Timber.i("Real-Steam working directory is $executableDir")
+            "\"C:\\\\Program Files (x86)\\\\Steam\\\\steam.exe\" \"C:\\\\Program Files (x86)\\\\Steam\\\\steamapps\\\\common\\\\$gameFolderName\\\\$normalizedExe\""
         } else {
             var executablePath = ""
             if (container.executablePath.isNotEmpty()) {
@@ -3508,6 +3607,18 @@ private fun exit(
         Timber.e(e, "winHandler.stop() failed during exit")
     }
     PluviaApp.shutdownEnvironment()
+
+    // Real-Steam mode brought up libsteamclient.so inside this Android process
+    // (see BionicProgramLauncherComponent.bootstrapNativeSteamClient). Tear it
+    // down so the next launch can stand up a fresh pipe / user instead of
+    // inheriting the previous session's half-dead state.
+    if (container.isLaunchRealSteam) {
+        try {
+            SteamBootstrap.stop()
+        } catch (e: Exception) {
+            Timber.e(e, "SteamBootstrap.stop() failed during exit")
+        }
+    }
 
     // empty Wine/XDG trash in background after container stops
     CoroutineScope(Dispatchers.IO).launch {
@@ -4585,6 +4696,19 @@ private fun extractSteamFiles(
     onExtractFileListener: OnExtractFileListener?,
 ) {
     val imageFs = ImageFs.find(context)
+    val steamExe = File(
+        ImageFs.find(context).rootDir.absolutePath,
+        ImageFs.WINEPREFIX + "/drive_c/Program Files (x86)/Steam/steam.exe",
+    )
+    try {
+        steamExe.parentFile?.mkdirs()
+        context.assets.open("steam.exe").use { input ->
+            Files.copy(input, steamExe.toPath(), REPLACE_EXISTING)
+        }
+    } catch (e: IOException) {
+        Timber.e(e, "Failed to copy steam.exe asset")
+    }
+
     if (File(ImageFs.find(context).rootDir.absolutePath, ImageFs.WINEPREFIX + "/drive_c/Program Files (x86)/Steam/steam.exe").exists()) return
     val downloaded = File(imageFs.getFilesDir(), "steam.tzst")
     Timber.i("Extracting steam.tzst")
