@@ -1096,12 +1096,6 @@ private fun ScreenEffectSwitch(
     }
 }
 
-private fun normalizedProgress(
-    value: Float,
-    min: Float,
-    max: Float,
-): Float = ((value - min) / (max - min)).coerceIn(0f, 1f)
-
 private fun formatPercent(value: Float): String {
     val rounded = value.toInt()
     return if (rounded > 0) "+${rounded}%" else "${rounded}%"

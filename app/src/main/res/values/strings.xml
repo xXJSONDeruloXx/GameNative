@@ -704,9 +704,9 @@
     <string name="sharpness_level">Sharpness Level</string>
     <string name="sharpness_denoise">Sharpness Denoise</string>
     <string name="lsfg_enable">Lossless Frame Generation</string>
-    <string name="lsfg_enable_description">Experimental lsfg-vk v2 integration for supported containers</string>
+    <string name="lsfg_enable_description">lsfg-vk frame generation for supported containers (bionic only)</string>
     <string name="lsfg_container_settings_note">Configure Lossless.dll here. Enable LSFG-VK and tune its hot-reload settings from the in-game Quick Menu.</string>
-    <string name="lsfg_quick_menu_ready_subtitle">Multiplier, Flow Scale, and Performance Mode are written to conf.toml and hot-reloaded while the game is running.</string>
+    <string name="lsfg_quick_menu_ready_subtitle">Frame generation active. Changes take effect on next swapchain recreation.</string>
     <string name="lsfg_quick_menu_disabled_subtitle">Enable LSFG-VK here when you want frame generation available for this game. A resize or restart may be needed.</string>
     <string name="lsfg_quick_menu_missing_dll_subtitle">Set Lossless.dll in container settings to arm LSFG-VK for this game.</string>
     <string name="lsfg_quick_menu_unsupported_subtitle">LSFG-VK is unavailable for this container type.</string>

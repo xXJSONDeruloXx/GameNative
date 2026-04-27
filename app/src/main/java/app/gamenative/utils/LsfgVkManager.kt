@@ -14,7 +14,10 @@ object LsfgVkManager {
     private const val LOSSLESS_DLL_NAME = "Lossless.dll"
 
     private const val CONFIG_RELATIVE_PATH = ".config/lsfg-vk/conf.toml"
-    private const val CONFIG_PROFILE_NAME = "GameNative"
+    // Fixed process identifier written to conf.toml [[game]] exe and injected via LSFG_PROCESS_EXE.
+    // The layer was patched specifically for GameNative: /proc/self/exe under Wine points to the
+    // Wine loader, so LSFG_PROCESS_EXE lets us override it with a stable identifier we control.
+    private const val PROCESS_EXE_IDENTIFIER = "gamenative-lsfg"
     private const val LIB_FILENAME = "liblsfg-vk-layer.so"
     private const val MANIFEST_FILENAME = "VkLayer_LSFGVK_frame_generation.json"
     private const val VERSION_FILENAME = ".lsfg_vk_runtime_version"
@@ -29,12 +32,11 @@ object LsfgVkManager {
     private const val EXTRA_PERFORMANCE_MODE = "lsfgPerformanceMode"
 
     private const val ENV_DISABLE = "DISABLE_LSFGVK"
-    private const val ENV_CONFIG = "LSFGVK_CONFIG"
-    private const val ENV_PROFILE = "LSFGVK_PROFILE"
+    private const val ENV_CONFIG = "LSFG_CONFIG"
+    private const val ENV_PROCESS_EXE = "LSFG_PROCESS_EXE"
 
-    // Clear old v1 env vars too so earlier experiments do not leak into the current v2 path.
+    // Clear legacy env vars so earlier experiments do not leak.
     private const val LEGACY_ENV_DISABLE = "DISABLE_LSFG"
-    private const val LEGACY_ENV_CONFIG = "LSFG_CONFIG"
     private const val LEGACY_ENV_PROCESS = "LSFG_PROCESS"
     private const val LEGACY_ENV_MODE = "LSFG_LEGACY"
     private const val LEGACY_ENV_DLL_PATH = "LSFG_DLL_PATH"
@@ -126,13 +128,14 @@ object LsfgVkManager {
 
         envVars.remove(ENV_DISABLE)
         envVars.put(ENV_CONFIG, configFile(container).absolutePath)
-        envVars.put(ENV_PROFILE, CONFIG_PROFILE_NAME)
+        // Always inject the stable process identifier so [[game]] matching works under Wine.
+        envVars.put(ENV_PROCESS_EXE, PROCESS_EXE_IDENTIFIER)
 
         val dllPath = resolveLosslessDllPath(configuredDllPath(container))
         val armed = isEnabled(container) && !dllPath.isNullOrBlank()
         when {
             armed -> Timber.i(
-                "LSFG-VK armed via v2 conf.toml (%s, dll=%s, multiplier=%d, flowScale=%s, performance=%s)",
+                "LSFG-VK armed (%s, dll=%s, multiplier=%d, flowScale=%s, performance=%s)",
                 spec.label,
                 dllPath,
                 multiplier(container),
@@ -140,7 +143,7 @@ object LsfgVkManager {
                 performanceMode(container),
             )
             isEnabled(container) -> Timber.w(
-                "LSFG-VK enabled but Lossless.dll could not be resolved; wrote dormant v2 conf.toml",
+                "LSFG-VK enabled but Lossless.dll could not be resolved; conf.toml written without [[game]] block",
             )
             else -> Timber.i("LSFG-VK runtime ready (%s); feature currently disabled", spec.label)
         }
@@ -185,9 +188,8 @@ object LsfgVkManager {
     private fun clearLaunchEnv(envVars: EnvVars) {
         envVars.remove(ENV_DISABLE)
         envVars.remove(ENV_CONFIG)
-        envVars.remove(ENV_PROFILE)
+        envVars.remove(ENV_PROCESS_EXE)
         envVars.remove(LEGACY_ENV_DISABLE)
-        envVars.remove(LEGACY_ENV_CONFIG)
         envVars.remove(LEGACY_ENV_PROCESS)
         envVars.remove(LEGACY_ENV_MODE)
         envVars.remove(LEGACY_ENV_DLL_PATH)
@@ -256,22 +258,24 @@ object LsfgVkManager {
         performanceMode: Boolean,
     ): String {
         return buildString {
-            appendLine("version = 2")
+            appendLine("version = 1")
             appendLine()
             appendLine("[global]")
             if (!dllPath.isNullOrBlank()) {
                 appendLine("dll = ${tomlString(dllPath)}")
             }
-            appendLine("allow_fp16 = true")
             appendLine()
 
-            if (enabled) {
-                appendLine("[[profile]]")
-                appendLine("name = ${tomlString(CONFIG_PROFILE_NAME)}")
+            // A matching [[game]] block is what enables the layer for this process.
+            // Omitting it leaves enable=false (the global default) so frame generation is skipped.
+            // We always set LSFG_PROCESS_EXE=PROCESS_EXE_IDENTIFIER so the exe match is reliable
+            // under Wine, where /proc/self/exe points to the Wine loader rather than the game.
+            if (enabled && !dllPath.isNullOrBlank()) {
+                appendLine("[[game]]")
+                appendLine("exe = ${tomlString(PROCESS_EXE_IDENTIFIER)}")
                 appendLine("multiplier = ${multiplier.coerceIn(2, 4)}")
                 appendLine("flow_scale = ${formatFlowScale(flowScale)}")
                 appendLine("performance_mode = ${if (performanceMode) "true" else "false"}")
-                appendLine("pacing = \"none\"")
             }
         }
     }
