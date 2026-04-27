@@ -61,7 +61,7 @@ object LsfgVkManager {
 
     private val bionicSpec = RuntimeSpec(
         assetDir = "lsfg_vk/android_arm64_v8a",
-        version = "v2-android-arm64-v8a-20260317-77b89b2",
+        version = "v1.0.0-android-arm64-v8a",
         label = "android-arm64-v8a",
     )
 
