@@ -106,10 +106,12 @@ class MainActivity : ComponentActivity() {
     private val postDownloadHandler = Handler(Looper.getMainLooper())
     private val activeDownloads = mutableSetOf<Int>()
     private var lastTouchTime = 0L
+    private var allowPostDownloadSleep = false
 
     private val postDownloadSleep = Runnable {
         if (activeDownloads.isEmpty()) {
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            allowPostDownloadSleep = false
         }
     }
 
@@ -140,9 +142,13 @@ class MainActivity : ComponentActivity() {
             if (event.isDownloading) activeDownloads += event.appId else activeDownloads -= event.appId
 
             if (activeDownloads.isNotEmpty()) {
+                allowPostDownloadSleep = false
                 AppUtils.keepScreenOn(this)
-            } else if (System.currentTimeMillis() - lastTouchTime > 10_000L) {
-                postDownloadHandler.postDelayed(postDownloadSleep, 30_000L)
+            } else {
+                allowPostDownloadSleep = true
+                if (System.currentTimeMillis() - lastTouchTime > 10_000L) {
+                    postDownloadHandler.postDelayed(postDownloadSleep, 30_000L)
+                }
             }
         }
     }
@@ -152,6 +158,9 @@ class MainActivity : ComponentActivity() {
         lastTouchTime = System.currentTimeMillis()
         postDownloadHandler.removeCallbacks(postDownloadSleep)
         AppUtils.keepScreenOn(this)
+        if (activeDownloads.isEmpty() && allowPostDownloadSleep) {
+            postDownloadHandler.postDelayed(postDownloadSleep, 30_000L)
+        }
     }
 
     private var index = totalIndex++
