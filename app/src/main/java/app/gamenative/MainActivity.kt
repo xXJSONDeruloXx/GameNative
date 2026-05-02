@@ -103,15 +103,15 @@ class MainActivity : ComponentActivity() {
         var wasLaunchedViaExternalIntent: Boolean = false
     }
 
-    private val postDownloadSleep = object : Runnable {
-        var armed = false
-        override fun run() {
-            if (armed) window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            armed = false
+    private val postDownloadHandler = Handler(Looper.getMainLooper())
+    private val activeDownloads = mutableSetOf<Int>()
+    private var lastTouchTime = 0L
+
+    private val postDownloadSleep = Runnable {
+        if (activeDownloads.isEmpty()) {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
     }
-    private val postDownloadHandler = Handler(Looper.getMainLooper())
-    private var lastTouchTime = 0L
 
     private val onSetSystemUi: (AndroidEvent.SetSystemUIVisibility) -> Unit = {
         desiredSystemUiVisible = it.visible
@@ -134,14 +134,24 @@ class MainActivity : ComponentActivity() {
         finishAndRemoveTask()
     }
 
+    private val onDownloadStatusChanged: (AndroidEvent.DownloadStatusChanged) -> Unit = { event ->
+        postDownloadHandler.post {
+            postDownloadHandler.removeCallbacks(postDownloadSleep)
+            if (event.isDownloading) activeDownloads += event.appId else activeDownloads -= event.appId
+
+            if (activeDownloads.isNotEmpty()) {
+                AppUtils.keepScreenOn(this)
+            } else if (System.currentTimeMillis() - lastTouchTime > 10_000L) {
+                postDownloadHandler.postDelayed(postDownloadSleep, 30_000L)
+            }
+        }
+    }
+
     override fun onUserInteraction() {
         super.onUserInteraction()
         lastTouchTime = System.currentTimeMillis()
-        if (postDownloadSleep.armed) {
-            postDownloadHandler.removeCallbacks(postDownloadSleep)
-            postDownloadSleep.armed = false
-            AppUtils.keepScreenOn(this)
-        }
+        postDownloadHandler.removeCallbacks(postDownloadSleep)
+        AppUtils.keepScreenOn(this)
     }
 
     private var index = totalIndex++
@@ -192,12 +202,7 @@ class MainActivity : ComponentActivity() {
         PluviaApp.events.on<AndroidEvent.StartOrientator, Unit>(onStartOrientator)
         PluviaApp.events.on<AndroidEvent.SetAllowedOrientation, Unit>(onSetAllowedOrientation)
         PluviaApp.events.on<AndroidEvent.EndProcess, Unit>(onEndProcess)
-        PluviaApp.events.on<AndroidEvent.DownloadStatusChanged, Unit> { event ->
-            if (!event.isDownloading && System.currentTimeMillis() - lastTouchTime > 10_000L) {
-                postDownloadSleep.armed = true
-                postDownloadHandler.postDelayed(postDownloadSleep, 30_000L)
-            }
-        }
+        PluviaApp.events.on<AndroidEvent.DownloadStatusChanged, Unit>(onDownloadStatusChanged)
 
         setContent {
             var hasNotificationPermission by remember { mutableStateOf(false) }
@@ -320,6 +325,7 @@ class MainActivity : ComponentActivity() {
         PluviaApp.events.off<AndroidEvent.StartOrientator, Unit>(onStartOrientator)
         PluviaApp.events.off<AndroidEvent.SetAllowedOrientation, Unit>(onSetAllowedOrientation)
         PluviaApp.events.off<AndroidEvent.EndProcess, Unit>(onEndProcess)
+        PluviaApp.events.off<AndroidEvent.DownloadStatusChanged, Unit>(onDownloadStatusChanged)
         postDownloadHandler.removeCallbacks(postDownloadSleep)
 
         Timber.d(
