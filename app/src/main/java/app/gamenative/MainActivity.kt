@@ -8,9 +8,12 @@ import android.content.res.Configuration
 import android.graphics.Color.TRANSPARENT
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.OrientationEventListener
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -100,6 +103,16 @@ class MainActivity : ComponentActivity() {
         var wasLaunchedViaExternalIntent: Boolean = false
     }
 
+    private val postDownloadSleep = object : Runnable {
+        var armed = false
+        override fun run() {
+            if (armed) window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            armed = false
+        }
+    }
+    private val postDownloadHandler = Handler(Looper.getMainLooper())
+    private var lastTouchTime = 0L
+
     private val onSetSystemUi: (AndroidEvent.SetSystemUIVisibility) -> Unit = {
         desiredSystemUiVisible = it.visible
         applyImmersiveMode()
@@ -119,6 +132,16 @@ class MainActivity : ComponentActivity() {
 
     private val onEndProcess: (AndroidEvent.EndProcess) -> Unit = {
         finishAndRemoveTask()
+    }
+
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        lastTouchTime = System.currentTimeMillis()
+        if (postDownloadSleep.armed) {
+            postDownloadHandler.removeCallbacks(postDownloadSleep)
+            postDownloadSleep.armed = false
+            AppUtils.keepScreenOn(this)
+        }
     }
 
     private var index = totalIndex++
@@ -169,6 +192,12 @@ class MainActivity : ComponentActivity() {
         PluviaApp.events.on<AndroidEvent.StartOrientator, Unit>(onStartOrientator)
         PluviaApp.events.on<AndroidEvent.SetAllowedOrientation, Unit>(onSetAllowedOrientation)
         PluviaApp.events.on<AndroidEvent.EndProcess, Unit>(onEndProcess)
+        PluviaApp.events.on<AndroidEvent.DownloadStatusChanged, Unit> { event ->
+            if (!event.isDownloading && System.currentTimeMillis() - lastTouchTime > 10_000L) {
+                postDownloadSleep.armed = true
+                postDownloadHandler.postDelayed(postDownloadSleep, 30_000L)
+            }
+        }
 
         setContent {
             var hasNotificationPermission by remember { mutableStateOf(false) }
@@ -291,6 +320,7 @@ class MainActivity : ComponentActivity() {
         PluviaApp.events.off<AndroidEvent.StartOrientator, Unit>(onStartOrientator)
         PluviaApp.events.off<AndroidEvent.SetAllowedOrientation, Unit>(onSetAllowedOrientation)
         PluviaApp.events.off<AndroidEvent.EndProcess, Unit>(onEndProcess)
+        postDownloadHandler.removeCallbacks(postDownloadSleep)
 
         Timber.d(
             "onDestroy - Index: %d, Connected: %b, Logged-In: %b, Changing-Config: %b",
