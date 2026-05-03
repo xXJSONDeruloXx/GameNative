@@ -32,6 +32,10 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.MaterialTheme
+import kotlin.math.roundToInt
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -2597,6 +2601,7 @@ private fun EditModeToolbar(
     onDuplicate: (Int) -> Unit
 ) {
     var duplicateProfileOpen by remember { mutableStateOf(false) }
+    var opacityDropdownOpen by remember { mutableStateOf(false) }
     var toolbarOffsetX by remember { mutableStateOf(0f) }
     var toolbarOffsetY by remember { mutableStateOf(0f) }
     val density = LocalDensity.current
@@ -2679,6 +2684,54 @@ private fun EditModeToolbar(
                                 },
                             )
                         }
+                    }
+                }
+            }
+
+            // Opacity button with dropdown
+            Box {
+                TextButton(onClick = { opacityDropdownOpen = !opacityDropdownOpen }) {
+                    Text(stringResource(R.string.controls_opacity), color = androidx.compose.ui.graphics.Color.White)
+                }
+
+                DropdownMenu(
+                    expanded = opacityDropdownOpen,
+                    onDismissRequest = { opacityDropdownOpen = false }
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.controls_opacity),
+                            color = androidx.compose.ui.graphics.Color.White,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        val sliderState = remember { mutableStateOf(PrefManager.controlsOpacity) }
+                        Slider(
+                            value = sliderState.value,
+                            onValueChange = { newVal ->
+                                sliderState.value = newVal
+                                PluviaApp.inputControlsView?.let { icView ->
+                                    icView.setOverlayOpacity(newVal)
+                                    icView.invalidate()
+                                }
+                            },
+                            onValueChangeFinished = {
+                                PrefManager.controlsOpacity = sliderState.value
+                            },
+                            valueRange = 0f..1f,
+                            steps = 20,
+                            modifier = Modifier.width(200.dp),
+                            colors = SliderDefaults.colors(
+                                thumbColor = androidx.compose.ui.graphics.Color.White,
+                                activeTrackColor = androidx.compose.ui.graphics.Color.White,
+                                inactiveTrackColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.3f),
+                            )
+                        )
+                        Text("${(sliderState.value * 100).roundToInt()}%",
+                            color = androidx.compose.ui.graphics.Color.White,
+                            style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
