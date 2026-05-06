@@ -5,10 +5,12 @@ import java.util.Locale
 
 /** Helpers for Quick Menu LSFG state persistence and runtime hot-reload. */
 object LsfgQuickMenuHelper {
+
     data class Settings(
         val multiplier: Int,
         val flowScale: Float,
         val performanceMode: Boolean,
+        val presentMode: LsfgVkManager.PresentMode,
     )
 
     fun isAvailable(container: Container): Boolean =
@@ -18,6 +20,7 @@ object LsfgQuickMenuHelper {
         multiplier = LsfgVkManager.multiplier(container),
         flowScale = LsfgVkManager.flowScale(container),
         performanceMode = LsfgVkManager.performanceMode(container),
+        presentMode = LsfgVkManager.presentMode(container),
     )
 
     fun sanitizeMultiplier(multiplier: Int): Int =
@@ -33,6 +36,7 @@ object LsfgQuickMenuHelper {
         container.putExtra(LsfgVkManager.EXTRA_MULTIPLIER, multiplier.toString())
         container.putExtra(LsfgVkManager.EXTRA_FLOW_SCALE, String.format(Locale.US, "%.2f", flowScale))
         container.putExtra(LsfgVkManager.EXTRA_PERFORMANCE_MODE, settings.performanceMode.toString())
+        container.putExtra(LsfgVkManager.EXTRA_PRESENT_MODE, settings.presentMode.tomlValue)
         container.saveData()
 
         val effectiveEnabled = multiplier >= 2
@@ -43,6 +47,7 @@ object LsfgQuickMenuHelper {
             effectiveMultiplier,
             flowScale,
             settings.performanceMode,
+            settings.presentMode,
         )
     }
 }

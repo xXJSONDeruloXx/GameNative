@@ -92,6 +92,7 @@ import app.gamenative.ui.data.PerformanceHudSize
 import app.gamenative.ui.theme.PluviaTheme
 import app.gamenative.ui.util.adaptivePanelWidth
 import app.gamenative.utils.MathUtils.normalizedProgress
+import app.gamenative.utils.LsfgVkManager
 import com.winlator.container.Container
 import com.winlator.renderer.GLRenderer
 import com.winlator.winhandler.ProcessInfo
@@ -260,8 +261,10 @@ fun QuickMenu(
     lsfgFlowScale: Float = 0.80f,
     lsfgPerformanceMode: Boolean = true,
     onLsfgMultiplierChanged: (Int) -> Unit = {},
+        lsfgPresentMode: LsfgVkManager.PresentMode = LsfgVkManager.PresentMode.FIFO,
     onLsfgFlowScaleChanged: (Float) -> Unit = {},
     onLsfgPerformanceModeChanged: (Boolean) -> Unit = {},
+        onLsfgPresentModeChanged: (LsfgVkManager.PresentMode) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val exitGameItem = QuickMenuItem(
@@ -582,9 +585,11 @@ fun QuickMenu(
                                             multiplier = lsfgMultiplier,
                                             flowScale = lsfgFlowScale,
                                             performanceMode = lsfgPerformanceMode,
+                presentMode = lsfgPresentMode,
                                             onMultiplierChanged = onLsfgMultiplierChanged,
                                             onFlowScaleChanged = onLsfgFlowScaleChanged,
                                             onPerformanceModeChanged = onLsfgPerformanceModeChanged,
+                onPresentModeChanged = onLsfgPresentModeChanged,
                                             scrollState = lsfgScrollState,
                                             focusRequester = lsfgItemFocusRequester,
                                             modifier = Modifier.fillMaxSize(),
@@ -1077,9 +1082,11 @@ private fun LsfgQuickMenuTab(
     multiplier: Int,
     flowScale: Float,
     performanceMode: Boolean,
+    presentMode: LsfgVkManager.PresentMode,
     onMultiplierChanged: (Int) -> Unit,
     onFlowScaleChanged: (Float) -> Unit,
     onPerformanceModeChanged: (Boolean) -> Unit,
+    onPresentModeChanged: (LsfgVkManager.PresentMode) -> Unit,
     scrollState: ScrollState,
     focusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier,
@@ -1147,6 +1154,32 @@ private fun LsfgQuickMenuTab(
                     onToggle = { onPerformanceModeChanged(!performanceMode) },
                     accentColor = accentColor,
                 )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // ── Present Mode ────────────────────────────────────────────
+                QuickMenuSectionHeader(
+                    title = stringResource(R.string.lsfg_present_mode),
+                )
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    LsfgVkManager.PresentMode.entries.forEach { mode ->
+                        val label = when (mode) {
+                            LsfgVkManager.PresentMode.FIFO -> "FIFO"
+                            LsfgVkManager.PresentMode.MAILBOX -> "Mailbox"
+                            LsfgVkManager.PresentMode.IMMEDIATE -> "Immediate"
+                        }
+                        QuickMenuChoiceChip(
+                            text = label,
+                            selected = presentMode == mode,
+                            accentColor = accentColor,
+                            onClick = { onPresentModeChanged(mode) },
+                            modifier = Modifier.width(80.dp),
+                        )
+                    }
+                }
             }
         }
 

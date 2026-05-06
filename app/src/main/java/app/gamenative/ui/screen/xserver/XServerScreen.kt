@@ -103,6 +103,7 @@ import app.gamenative.utils.ContainerUtils
 import app.gamenative.utils.CustomGameScanner
 import app.gamenative.utils.ExecutableSelectionUtils
 import app.gamenative.utils.LsfgQuickMenuHelper
+import app.gamenative.utils.LsfgVkManager
 import app.gamenative.utils.ManifestComponentHelper
 import app.gamenative.utils.PreInstallSteps
 import app.gamenative.utils.SteamTokenLogin
@@ -448,6 +449,7 @@ fun XServerScreen(
     var lsfgMultiplier by rememberSaveable(container.id) { mutableIntStateOf(initialLsfgSettings.multiplier) }
     var lsfgFlowScale by rememberSaveable(container.id) { mutableStateOf(initialLsfgSettings.flowScale) }
     var lsfgPerformanceMode by rememberSaveable(container.id) { mutableStateOf(initialLsfgSettings.performanceMode) }
+    var lsfgPresentMode by rememberSaveable(container.id) { mutableStateOf(initialLsfgSettings.presentMode) }
 
     fun persistFpsLimiterState() {
         container.putExtra(FPS_LIMITER_ENABLED_EXTRA, fpsLimiterEnabled)
@@ -547,7 +549,7 @@ fun XServerScreen(
     fun applyLsfgSettings() {
         LsfgQuickMenuHelper.applySettings(
             container,
-            LsfgQuickMenuHelper.Settings(lsfgMultiplier, lsfgFlowScale, lsfgPerformanceMode),
+            LsfgQuickMenuHelper.Settings(lsfgMultiplier, lsfgFlowScale, lsfgPerformanceMode, lsfgPresentMode),
         )
     }
 
@@ -566,6 +568,10 @@ fun XServerScreen(
         applyLsfgSettings()
     }
 
+    fun applyLsfgPresentMode(mode: LsfgVkManager.PresentMode) {
+        lsfgPresentMode = mode
+        applyLsfgSettings()
+    }
     LaunchedEffect(xServerView) {
         val detectedMax = detectMaxRefreshRateHz(context, xServerView)
         detectedMaxRefreshRateHz = detectedMax
@@ -2391,9 +2397,11 @@ fun XServerScreen(
             lsfgMultiplier = lsfgMultiplier,
             lsfgFlowScale = lsfgFlowScale,
             lsfgPerformanceMode = lsfgPerformanceMode,
+                lsfgPresentMode = lsfgPresentMode,
             onLsfgMultiplierChanged = ::applyLsfgMultiplier,
             onLsfgFlowScaleChanged = ::applyLsfgFlowScale,
             onLsfgPerformanceModeChanged = ::applyLsfgPerformanceMode,
+                onLsfgPresentModeChanged = ::applyLsfgPresentMode,
         )
 
         if (manualResumeMode && PluviaApp.isOverlayPaused && !showQuickMenu && !keepPausedForEditor) {

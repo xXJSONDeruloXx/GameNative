@@ -58,6 +58,23 @@ object LsfgVkManager {
     const val EXTRA_MULTIPLIER = "lsfgMultiplier"
     const val EXTRA_FLOW_SCALE = "lsfgFlowScale"
     const val EXTRA_PERFORMANCE_MODE = "lsfgPerformanceMode"
+    const val EXTRA_PRESENT_MODE = "lsfgPresentMode"
+
+    /** Supported Vulkan present modes for LSFG. */
+    enum class PresentMode(val tomlValue: String) {
+        FIFO("fifo"),
+        MAILBOX("mailbox"),
+        IMMEDIATE("immediate");
+
+        companion object {
+            fun fromContainerExtra(value: String): PresentMode =
+                when (value.lowercase(Locale.ROOT)) {
+                    "mailbox" -> MAILBOX
+                    "immediate" -> IMMEDIATE
+                    else -> FIFO
+                }
+        }
+    }
 
     // Environment variables consumed by the lsfg-vk layer
     private const val ENV_DISABLE = "DISABLE_LSFG"
@@ -115,6 +132,10 @@ object LsfgVkManager {
     /** Get whether performance mode is enabled (default true). */
     fun performanceMode(container: Container): Boolean =
         parseBool(container.getExtra(EXTRA_PERFORMANCE_MODE, "true"))
+
+    /** Get the present mode (default FIFO). */
+    fun presentMode(container: Container): PresentMode =
+        PresentMode.fromContainerExtra(container.getExtra(EXTRA_PRESENT_MODE, "fifo"))
 
     /**
      * Install the layer runtime + DLL into the container's filesystem.
@@ -231,6 +252,7 @@ object LsfgVkManager {
                 multiplier = multiplier(container),
                 flowScale = flowScale(container),
                 performanceMode = performanceMode(container),
+                presentMode = presentMode(container),
             )
             val ok = FileUtils.writeString(configFile, configText)
             if (ok && configFile.exists()) {
@@ -264,7 +286,6 @@ object LsfgVkManager {
 
         val dllPath = containerDllPath(container)
         val armed = parseBool(container.getExtra(EXTRA_ARMED, "false")) && dllPath != null
-
         if (!armed) {
             // Remove the manifest so the Vulkan loader can't find the layer
             disableLayerInContainer(container)
@@ -332,6 +353,7 @@ object LsfgVkManager {
         multiplier: Int,
         flowScale: Float,
         performanceMode: Boolean,
+        presentMode: PresentMode = PresentMode.FIFO,
     ): String = buildString {
         appendLine("version = 1")
         appendLine()
@@ -349,7 +371,7 @@ object LsfgVkManager {
             appendLine("flow_scale = ${formatFlowScale(flowScale)}")
             appendLine("performance_mode = ${if (performanceMode) "true" else "false"}")
             appendLine("hdr_mode = false")
-            appendLine("experimental_present_mode = ${tomlString("fifo")}")
+            appendLine("experimental_present_mode = ${tomlString(presentMode.tomlValue)}")
         }
     }
 
@@ -393,6 +415,7 @@ object LsfgVkManager {
         multiplier: Int,
         flowScale: Float,
         performanceMode: Boolean,
+        presentMode: PresentMode = PresentMode.FIFO,
     ): Boolean {
         if (!isSupported(container)) return false
 
@@ -413,23 +436,14 @@ object LsfgVkManager {
             val effectiveFlowScale = flowScale.coerceIn(0.25f, 1.0f)
             val effectivePerfMode = performanceMode && enabled
 
-            val configText = buildString {
-                appendLine("version = 1")
-                appendLine()
-                appendLine("[global]")
-                if (!dllPath.isNullOrBlank()) {
-                    appendLine("dll = ${tomlString(dllPath)}")
-                }
-                appendLine("no_fp16 = false")
-                appendLine()
-                appendLine("[[game]]")
-                appendLine("exe = ${tomlString(PROCESS_EXE_IDENTIFIER)}")
-                appendLine("multiplier = $effectiveMultiplier")
-                appendLine("flow_scale = ${formatFlowScale(effectiveFlowScale)}")
-                appendLine("performance_mode = ${if (effectivePerfMode) "true" else "false"}")
-                appendLine("hdr_mode = false")
-                appendLine("experimental_present_mode = ${tomlString("fifo")}")
-            }
+            val configText = buildConfigToml(
+                dllPath = dllPath,
+                enabled = enabled && dllPath != null,
+                multiplier = effectiveMultiplier,
+                flowScale = effectiveFlowScale,
+                performanceMode = effectivePerfMode,
+                presentMode = presentMode,
+            )
 
             val ok = FileUtils.writeString(configFile, configText)
             if (ok && configFile.exists()) {
@@ -437,8 +451,8 @@ object LsfgVkManager {
             }
             if (ok) {
                 Timber.tag(TAG).i(
-                    "Hot-reloaded conf.toml: enabled=%s, multiplier=%d, flowScale=%.2f, perf=%s",
-                    enabled, effectiveMultiplier, effectiveFlowScale, effectivePerfMode
+                    "Hot-reloaded conf.toml: enabled=%s, multiplier=%d, flowScale=%.2f, perf=%s, presentMode=%s",
+                    enabled, effectiveMultiplier, effectiveFlowScale, effectivePerfMode, presentMode.tomlValue
                 )
             }
             ok
