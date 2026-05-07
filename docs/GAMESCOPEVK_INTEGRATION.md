@@ -1,8 +1,9 @@
 # GameScopeVK Integration into GameNative
 
-## Status: BLACK SCREEN — Root Cause Identified
+## Status: DR Server Implemented — Two Remaining Issues
 
-GameScopeVK loads, detects the Adreno driver, creates a Vulkan device with all required extensions, but **cannot present frames** because the DirectRendering socket server is missing from GameNative.
+1. **DirectRendering socket server** ✅ IMPLEMENTED — `libgamescope_dr.so` listens on `DR_SOCK_PATH`, accepts GameScopeVK connections
+2. **Game-specific hang** — Alan Wake stops at `vkCreateInstance` through GameScopeVK (never reaches `vkCreateDevice`). DreamsOfAether previously worked through `vkCreateDevice` + `Frame interpolation backend created`.
 
 ---
 
@@ -234,10 +235,16 @@ This is essentially Option A but framed as a standalone component.
 ## Files Modified in GameNative
 
 ### New Files
+- `app/src/main/cpp/gamescope_dr/direct_rendering_server.h` — C API
+- `app/src/main/cpp/gamescope_dr/direct_rendering_server.cpp` — DR socket server (JNI + native)
+- `app/src/main/cpp/gamescope_dr/CMakeLists.txt` — build config
+- `app/src/main/java/app/gamenative/utils/GamescopeDirectRendering.kt` — Kotlin JNI bridge
 - `app/src/main/assets/gamescope_vk/android_arm64_v8a/libGameScopeVK.so` (2.1MB)
 - `app/src/main/assets/gamescope_vk/android_arm64_v8a/libxcb-dri3.so` (14KB)
 - `app/src/main/assets/gamescope_vk/android_arm64_v8a/libxcb-present.so` (9.9KB)
 - `app/src/main/java/app/gamenative/utils/GamescopeVkManager.kt`
+- `app/src/main/jniLibs/arm64-v8a/libgamescope_dr.so` (68KB, prebuilt)
+- `docs/GAMESCOPEVK_INTEGRATION.md`
 
 ### Modified Files
 - `app/src/main/java/com/winlator/xenvironment/components/BionicProgramLauncherComponent.java`
