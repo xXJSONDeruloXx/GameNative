@@ -127,6 +127,14 @@ struct SwapchainData {
     VkImageView frameHistoryViews[MAX_FRAME_HISTORY] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
     VkDeviceMemory frameHistoryMemory[MAX_FRAME_HISTORY] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
     uint32_t historyIndex = 0;  // Current index in circular buffer
+    
+    // Generated frames presentation
+    // We generate N-1 interpolated frames between real frames
+    // These are stored here after GenerateFrames() and presented in subsequent calls
+    std::vector<VkImage> generatedFrames;        // Generated frame images
+    std::vector<VkImageView> generatedFrameViews; // Views for presentation
+    uint32_t pendingGeneratedFrames = 0;          // Number of generated frames ready to present
+    uint32_t nextGeneratedFrameIndex = 0;         // Index of next generated frame to present
 };
 
 // Global dispatch table for the layer

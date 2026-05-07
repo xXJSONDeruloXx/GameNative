@@ -1127,37 +1127,83 @@ VKAPI_ATTR VkResult VKAPI_CALL LayerQueuePresentKHR(
         0, nullptr,
         1, &historyBarrier);
     
-    // If we have enough history, run frame generation
+    // Check if we have pending generated frames to present
+    bool presentGenerated = false;
+    VkImage frameToPresent = VK_NULL_HANDLE;
+    
+    if (swapchainData->pendingGeneratedFrames > 0 && 
+        swapchainData->nextGeneratedFrameIndex < swapchainData->generatedFrames.size()) {
+        // Present the next generated frame
+        frameToPresent = swapchainData->generatedFrames[swapchainData->nextGeneratedFrameIndex];
+        presentGenerated = true;
+        swapchainData->pendingGeneratedFrames--;
+        swapchainData->nextGeneratedFrameIndex++;
+        
+        LOGI("GN-Framegen: Presenting generated frame %d/%zu",
+             swapchainData->nextGeneratedFrameIndex, swapchainData->generatedFrames.size());
+    }
+    
+    // If we don't have pending generated frames and have enough history, generate new ones
     uint32_t generatedFrameCount = 0;
-    if (swapchainData->currentFrame >= 1 && swapchainData->frameGenerator) {
+    if (!presentGenerated && 
+        swapchainData->currentFrame >= 1 && 
+        swapchainData->frameGenerator) {
         // We have at least previous and current frames
         // GenerateFrames will add compute dispatches to the command buffer
         LOGI("GN-Framegen: Generating %d frames between history[%d] and history[%d]",
              swapchainData->generationCount, previousHistoryIdx, currentHistoryIdx);
         
-        // Get generated images from FrameGenerator
-        std::vector<VkImage> generatedImages(swapchainData->generationCount);
+        // Resize generated frames storage if needed
+        if (swapchainData->generatedFrames.size() != swapchainData->generationCount) {
+            swapchainData->generatedFrames.resize(swapchainData->generationCount);
+        }
         
         generatedFrameCount = swapchainData->frameGenerator->GenerateFrames(
             swapchainData->commandBuffer,
             swapchainData->frameHistory[currentHistoryIdx],   // current
             swapchainData->frameHistory[previousHistoryIdx],    // previous
-            generatedImages.data(),
+            swapchainData->generatedFrames.data(),
             swapchainData->generationCount);
         
         if (generatedFrameCount > 0) {
             LOGI("GN-Framegen: Successfully generated %d frames", generatedFrameCount);
             
-            // TODO: Present generated frames
-            // Challenge: generatedImages are VkImage objects, not swapchain images
-            // Options:
-            // 1. Copy generated frames to additional swapchain images (need more swapchain images)
-            // 2. Create a presentation mechanism for non-swapchain images
-            // 3. Use a compositor that can display arbitrary images
-            //
-            // For now, we generate the frames but only present the real frame
-            // Full implementation requires coordination with swapchain creation
-            // to have enough images for real + generated frames
+            // Queue generated frames for presentation
+            swapchainData->pendingGeneratedFrames = generatedFrameCount;
+            swapchainData->nextGeneratedFrameIndex = 0;
+            
+            // Transition first generated frame to presentable layout
+            if (generatedFrameCount > 0) {
+                VkImageMemoryBarrier presentBarrier = {};
+                presentBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                presentBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+                presentBarrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+                presentBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+                presentBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+                presentBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                presentBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                presentBarrier.image = swapchainData->generatedFrames[0];
+                presentBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                presentBarrier.subresourceRange.baseMipLevel = 0;
+                presentBarrier.subresourceRange.levelCount = 1;
+                presentBarrier.subresourceRange.baseArrayLayer = 0;
+                presentBarrier.subresourceRange.layerCount = 1;
+                
+                swapchainData->device->CmdPipelineBarrier(
+                    swapchainData->commandBuffer,
+                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                    VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                    0,
+                    0, nullptr,
+                    0, nullptr,
+                    1, &presentBarrier);
+                
+                // Present the first generated frame now
+                frameToPresent = swapchainData->generatedFrames[0];
+                presentGenerated = true;
+                swapchainData->pendingGeneratedFrames--;
+                swapchainData->nextGeneratedFrameIndex = 1;
+            }
         } else {
             LOGW("GN-Framegen: Frame generation returned 0 frames");
         }
@@ -1194,7 +1240,99 @@ VKAPI_ATTR VkResult VKAPI_CALL LayerQueuePresentKHR(
         // Continue with present even if compute failed
     }
     
-    // Now present the real frame
+    // If we're presenting a generated frame, copy it to the swapchain image first
+    // This overwrites the real frame with the generated frame
+    if (presentGenerated && frameToPresent != VK_NULL_HANDLE) {
+        // Get the swapchain image we'll present
+        uint32_t swapchainImageIndex = pPresentInfo->pImageIndices[0];
+        VkImage swapchainImage = swapchainData->swapchainImages[swapchainImageIndex];
+        
+        // Transition swapchain image to transfer destination
+        VkImageMemoryBarrier copyBarrier = {};
+        copyBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        copyBarrier.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+        copyBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        copyBarrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        copyBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        copyBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        copyBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        copyBarrier.image = swapchainImage;
+        copyBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copyBarrier.subresourceRange.baseMipLevel = 0;
+        copyBarrier.subresourceRange.levelCount = 1;
+        copyBarrier.subresourceRange.baseArrayLayer = 0;
+        copyBarrier.subresourceRange.layerCount = 1;
+        
+        swapchainData->device->CmdPipelineBarrier(
+            swapchainData->commandBuffer,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0,
+            0, nullptr,
+            0, nullptr,
+            1, &copyBarrier);
+        
+        // Copy generated frame to swapchain image
+        // Note: We need a new command buffer for this, or use the compute fence
+        VkImageCopy copyRegion = {};
+        copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copyRegion.srcSubresource.layerCount = 1;
+        copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copyRegion.dstSubresource.layerCount = 1;
+        copyRegion.extent.width = swapchainData->extent.width;
+        copyRegion.extent.height = swapchainData->extent.height;
+        copyRegion.extent.depth = 1;
+        
+        // Transition generated frame to transfer source
+        VkImageMemoryBarrier genBarrier = {};
+        genBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        genBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+        genBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        genBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+        genBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        genBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        genBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        genBarrier.image = frameToPresent;
+        genBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        genBarrier.subresourceRange.baseMipLevel = 0;
+        genBarrier.subresourceRange.levelCount = 1;
+        genBarrier.subresourceRange.baseArrayLayer = 0;
+        genBarrier.subresourceRange.layerCount = 1;
+        
+        swapchainData->device->CmdPipelineBarrier(
+            swapchainData->commandBuffer,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0,
+            0, nullptr,
+            0, nullptr,
+            1, &genBarrier);
+        
+        swapchainData->device->CmdCopyImage(
+            swapchainData->commandBuffer,
+            frameToPresent, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            swapchainImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1, &copyRegion);
+        
+        // Transition swapchain image back to present
+        copyBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        copyBarrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+        copyBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        copyBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        
+        swapchainData->device->CmdPipelineBarrier(
+            swapchainData->commandBuffer,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+            0,
+            0, nullptr,
+            0, nullptr,
+            1, &copyBarrier);
+        
+        LOGI("GN-Framegen: Copied generated frame to swapchain image %d", swapchainImageIndex);
+    }
+    
+    // Now present the swapchain image (contains real or generated frame)
     result = swapchainData->device->QueuePresentKHR(queue, pPresentInfo);
     
     // Update frame counter for tracking previous/current frames
