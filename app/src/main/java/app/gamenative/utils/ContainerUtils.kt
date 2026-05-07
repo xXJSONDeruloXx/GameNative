@@ -329,6 +329,9 @@ object ContainerUtils {
             gamescopeVkModel = container.getExtra(GamescopeVkManager.EXTRA_MODEL, "0").toIntOrNull() ?: 0,
             // GN Framegen Layer
             gnFramegenEnabled = container.getExtra(GNFramegenManager.EXTRA_ENABLED, "false").toBoolean(),
+            gnFramegenMultiplier = container.getExtra(GNFramegenManager.EXTRA_MULTIPLIER, "2").toIntOrNull() ?: 2,
+            gnFramegenFlowScale = container.getExtra(GNFramegenManager.EXTRA_FLOW_SCALE, "0.6").toFloatOrNull() ?: 0.6f,
+            gnFramegenModel = container.getExtra(GNFramegenManager.EXTRA_MODEL, "0").toIntOrNull() ?: 0,
         )
     }
 
@@ -504,6 +507,9 @@ object ContainerUtils {
         container.putExtra(GamescopeVkManager.EXTRA_MODEL, containerData.gamescopeVkModel.toString())
         // GN Framegen Layer
         container.putExtra(GNFramegenManager.EXTRA_ENABLED, containerData.gnFramegenEnabled.toString())
+        container.putExtra(GNFramegenManager.EXTRA_MULTIPLIER, containerData.gnFramegenMultiplier.toString())
+        container.putExtra(GNFramegenManager.EXTRA_FLOW_SCALE, containerData.gnFramegenFlowScale.toString())
+        container.putExtra(GNFramegenManager.EXTRA_MODEL, containerData.gnFramegenModel.toString())
         try {
             container.language = containerData.language
         } catch (e: Exception) {

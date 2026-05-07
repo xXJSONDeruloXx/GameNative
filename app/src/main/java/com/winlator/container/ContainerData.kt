@@ -104,6 +104,9 @@ data class ContainerData(
     val gamescopeVkModel: Int = 0,
     // GN Framegen Layer (Vulkan explicit layer, alternative to GameScopeVK/LSFG-VK)
     val gnFramegenEnabled: Boolean = false,
+    val gnFramegenMultiplier: Int = 2,
+    val gnFramegenFlowScale: Float = 0.6f,
+    val gnFramegenModel: Int = 0,
 ) {
     companion object {
         val Saver = mapSaver(
@@ -173,6 +176,9 @@ data class ContainerData(
                     "gamescopeVkFlowScale" to state.gamescopeVkFlowScale,
                     "gamescopeVkModel" to state.gamescopeVkModel,
                     "gnFramegenEnabled" to state.gnFramegenEnabled,
+                    "gnFramegenMultiplier" to state.gnFramegenMultiplier,
+                    "gnFramegenFlowScale" to state.gnFramegenFlowScale,
+                    "gnFramegenModel" to state.gnFramegenModel,
                 )
             },
             restore = { savedMap ->
@@ -241,6 +247,9 @@ data class ContainerData(
                     gamescopeVkFlowScale = (savedMap["gamescopeVkFlowScale"] as? Float) ?: 0.6f,
                     gamescopeVkModel = (savedMap["gamescopeVkModel"] as? Int) ?: 0,
                     gnFramegenEnabled = (savedMap["gnFramegenEnabled"] as? Boolean) ?: false,
+                    gnFramegenMultiplier = (savedMap["gnFramegenMultiplier"] as? Int) ?: 2,
+                    gnFramegenFlowScale = (savedMap["gnFramegenFlowScale"] as? Float) ?: 0.6f,
+                    gnFramegenModel = (savedMap["gnFramegenModel"] as? Int) ?: 0,
                 )
             },
         )

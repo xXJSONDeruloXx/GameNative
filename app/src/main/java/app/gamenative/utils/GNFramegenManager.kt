@@ -55,11 +55,11 @@ import java.io.File
 object GNFramegenManager {
     private const val TAG = "GNFramegen"
 
-    // Container extra keys (same as GamescopeVkManager for UI compatibility)
-    const val EXTRA_ENABLED = "gamescopeVkEnabled"  // Reuse same key
-    const val EXTRA_MULTIPLIER = "gamescopeVkMultiplier"
-    const val EXTRA_FLOW_SCALE = "gamescopeVkFlowScale"
-    const val EXTRA_MODEL = "gamescopeVkModel"
+    // Container extra keys
+    const val EXTRA_ENABLED = "gnFramegenEnabled"
+    const val EXTRA_MULTIPLIER = "gnFramegenMultiplier"
+    const val EXTRA_FLOW_SCALE = "gnFramegenFlowScale"
+    const val EXTRA_MODEL = "gnFramegenModel"
 
     // Paths inside the container rootDir
     // Using same pattern as LSFG-VK for consistency
@@ -113,21 +113,42 @@ object GNFramegenManager {
 
     /**
      * Get multiplier setting (2-4, where 2 = 2x frame rate).
+     * Reads from gnFramegenMultiplier extra, falls back to gamescopeVkMultiplier for migration.
      */
-    fun multiplier(container: Container): Int =
-        (container.getExtra(EXTRA_MULTIPLIER, "2").toIntOrNull() ?: 2).coerceIn(2, 4)
+    fun multiplier(container: Container): Int {
+        val raw = container.getExtra(EXTRA_MULTIPLIER, "")
+        if (raw.isNotEmpty()) {
+            return (raw.toIntOrNull() ?: 2).coerceIn(2, 4)
+        }
+        // Fall back to GameScopeVK setting for smooth migration
+        return (container.getExtra("gamescopeVkMultiplier", "2").toIntOrNull() ?: 2).coerceIn(2, 4)
+    }
 
     /**
      * Get flow scale setting (0.2-1.0, lower = more sensitive).
+     * Reads from gnFramegenFlowScale extra, falls back to gamescopeVkFlowScale for migration.
      */
-    fun flowScale(container: Container): Float =
-        (container.getExtra(EXTRA_FLOW_SCALE, "0.6").toFloatOrNull() ?: 0.6f).coerceIn(0.2f, 1.0f)
+    fun flowScale(container: Container): Float {
+        val raw = container.getExtra(EXTRA_FLOW_SCALE, "")
+        if (raw.isNotEmpty()) {
+            return (raw.toFloatOrNull() ?: 0.6f).coerceIn(0.2f, 1.0f)
+        }
+        // Fall back to GameScopeVK setting for smooth migration
+        return (container.getExtra("gamescopeVkFlowScale", "0.6").toFloatOrNull() ?: 0.6f).coerceIn(0.2f, 1.0f)
+    }
 
     /**
      * Get model setting (0 = default, 1 = clear/high-quality).
+     * Reads from gnFramegenModel extra, falls back to gamescopeVkModel for migration.
      */
-    fun model(container: Container): Int =
-        (container.getExtra(EXTRA_MODEL, "0").toIntOrNull() ?: 0).coerceIn(0, 1)
+    fun model(container: Container): Int {
+        val raw = container.getExtra(EXTRA_MODEL, "")
+        if (raw.isNotEmpty()) {
+            return (raw.toIntOrNull() ?: 0).coerceIn(0, 1)
+        }
+        // Fall back to GameScopeVK setting for smooth migration
+        return (container.getExtra("gamescopeVkModel", "0").toIntOrNull() ?: 0).coerceIn(0, 1)
+    }
 
     /**
      * Install the GN Framegen layer from APK assets into the container.

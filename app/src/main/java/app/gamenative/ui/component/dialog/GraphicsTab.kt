@@ -621,23 +621,22 @@ private fun GNFramegenSection(state: ContainerConfigState) {
         )
 
         if (config.gnFramegenEnabled) {
-            // Reuse GameScopeVK settings (they're compatible)
             // Multiplier: 2×, 3×, 4×
             SettingsListDropdown(
                 colors = settingsTileColorsAlt(),
                 title = { Text("Multiplier") },
                 subtitle = { Text("Generated frames per real frame") },
                 items = multiplierLabels,
-                value = (config.gamescopeVkMultiplier - 2).coerceIn(0, 2),
+                value = (config.gnFramegenMultiplier - 2).coerceIn(0, 2),
                 onItemSelected = { idx ->
-                    state.config.value = config.copy(gamescopeVkMultiplier = idx + 2)
+                    state.config.value = config.copy(gnFramegenMultiplier = idx + 2)
                 },
             )
 
             // Flow scale slider (0.2 – 1.0)
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text(
-                    text = "Flow Scale: ${"%.2f".format(config.gamescopeVkFlowScale)}",
+                    text = "Flow Scale: ${"%.2f".format(config.gnFramegenFlowScale)}",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Text(
@@ -646,10 +645,10 @@ private fun GNFramegenSection(state: ContainerConfigState) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Slider(
-                    value = config.gamescopeVkFlowScale,
+                    value = config.gnFramegenFlowScale,
                     onValueChange = { v ->
                         val snapped = (v * 20).roundToInt() / 20f // snap to 0.05 steps
-                        state.config.value = config.copy(gamescopeVkFlowScale = snapped.coerceIn(0.2f, 1.0f))
+                        state.config.value = config.copy(gnFramegenFlowScale = snapped.coerceIn(0.2f, 1.0f))
                     },
                     valueRange = 0.2f..1.0f,
                     steps = 15,
@@ -662,9 +661,9 @@ private fun GNFramegenSection(state: ContainerConfigState) {
                 title = { Text("Model") },
                 subtitle = { Text("Default: balanced. Clear: higher quality, fewer artifacts.") },
                 items = modelLabels,
-                value = config.gamescopeVkModel.coerceIn(0, 1),
+                value = config.gnFramegenModel.coerceIn(0, 1),
                 onItemSelected = { idx ->
-                    state.config.value = config.copy(gamescopeVkModel = idx)
+                    state.config.value = config.copy(gnFramegenModel = idx)
                 },
             )
         }
