@@ -31,7 +31,8 @@ set(HEADERS
 
 # Embedded shaders
 if(EMBED_SHADERS)
-    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../extracted_shaders)
+    # shaders_embedded.hpp is in src/ directory
+    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
     add_compile_definitions(EMBED_SHADERS=1)
 endif()
 
