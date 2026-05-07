@@ -1,21 +1,33 @@
 {
-  "file_format_version": "1.0.0",
-  "layer": {
-    "name": "VK_LAYER_GN_gamescope_framegen",
-    "type": "GLOBAL",
-    "api_version": "1.3.0",
-    "library_path": "libgn-framegen.so",
-    "implementation_version": "1",
-    "description": "GameNative frame generation layer using GameScopeVK shaders",
-    "functions": {
-      "vkGetInstanceProcAddr": "layer_GetInstanceProcAddr",
-      "vkGetDeviceProcAddr": "layer_GetDeviceProcAddr"
-    },
-    "enable_environment": {
-      "GN_FG_ENABLE": "1"
-    },
-    "disable_environment": {
-      "DISABLE_GN_FG": "1"
+    "file_format_version": "1.0.0",
+    "layer": {
+        "name": "VK_LAYER_GN_gamescope_framegen",
+        "type": "GLOBAL",
+        "library_path": "libgn-framegen.so",
+        "api_version": "1.3.216",
+        "implementation_version": "1",
+        "description": "GameNative Vulkan Frame Generation Layer",
+        "functions": {
+            "vkEnumerateInstanceLayerProperties": "vkEnumerateInstanceLayerProperties",
+            "vkEnumerateInstanceExtensionProperties": "vkEnumerateInstanceExtensionProperties",
+            "vkCreateInstance": "LayerCreateInstance",
+            "vkDestroyInstance": "LayerDestroyInstance",
+            "vkCreateDevice": "LayerCreateDevice",
+            "vkDestroyDevice": "LayerDestroyDevice",
+            "vkCreateSwapchainKHR": "LayerCreateSwapchainKHR",
+            "vkDestroySwapchainKHR": "LayerDestroySwapchainKHR",
+            "vkQueuePresentKHR": "LayerQueuePresentKHR",
+            "vkEnumeratePhysicalDevices": "LayerEnumeratePhysicalDevices",
+            "vkEnumeratePhysicalDeviceGroups": "LayerEnumeratePhysicalDeviceGroups"
+        },
+        "enable": {
+            "env": "GN_FG_ENABLE",
+            "value": "1"
+        },
+        "disable": {
+            "env": "GN_FG_DISABLE",
+            "value": "1"
+        },
+        "app_keys": []
     }
-  }
 }

@@ -62,10 +62,15 @@ cd native_layer
 # Set NDK path (if not already set)
 export ANDROID_NDK=/path/to/android-ndk
 
-# Full build
+# Quick build (using Makefile)
+make
+
+# Or using build script directly
 ./build-android.sh
 
-# Or with specific options:
+# With specific options
+make build ABI=arm64-v8a PLATFORM=android-30 BUILD_TYPE=Release
+# Or
 ./build-android.sh arm64-v8a android-30 Release
 ```
 
