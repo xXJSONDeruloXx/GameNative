@@ -157,7 +157,7 @@ Real Frame N+1
 |--------|---------|--------|--------|
 | `gn-lsfg-shader-swap` | 5 | SPIR-V extraction complete | ✅ |
 | `gn-native-layer` | 28 | Complete Vulkan layer with documentation, tooling, and APK bundling support | ✅ |
-| `feat/gamescope-vk-experiment` | 5 | GameNative integration with APK asset deployment (LSFG-VK style) | ✅ |
+| `feat/gamescope-vk-experiment` | 7 | GameNative integration with independent settings, UI, and launcher integration | ✅ |
 
 Both branches available at: `github.com/xXJSONDeruloXx/GameNative.git`
 
