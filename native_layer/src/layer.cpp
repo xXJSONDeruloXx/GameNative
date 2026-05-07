@@ -507,13 +507,66 @@ VKAPI_ATTR VkResult VKAPI_CALL LayerCreateDevice(
     deviceData->UpdateDescriptorSets = reinterpret_cast<PFN_vkUpdateDescriptorSets>(
         nextGetDeviceProcAddr(*pDevice, "vkUpdateDescriptorSets"));
     
+    // Query queue family properties for this physical device
+    // This is needed for creating command pools with the right queue family
+    uint32_t queueFamilyCount = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, nullptr);
+    
+    if (queueFamilyCount > 0) {
+        std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+        vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilies.data());
+        
+        // Find graphics and compute queue families
+        for (uint32_t i = 0; i < queueFamilyCount; i++) {
+            const auto& family = queueFamilies[i];
+            
+            // Check for graphics support
+            if (family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+                if (deviceData->graphicsQueueFamily == UINT32_MAX) {
+                    deviceData->graphicsQueueFamily = i;
+                    LOGI("GN-Framegen: Found graphics queue family: %d", i);
+                }
+            }
+            
+            // Check for compute support (may be same as graphics)
+            if (family.queueFlags & VK_QUEUE_COMPUTE_BIT) {
+                if (deviceData->computeQueueFamily == UINT32_MAX) {
+                    deviceData->computeQueueFamily = i;
+                    LOGI("GN-Framegen: Found compute queue family: %d", i);
+                }
+                
+                // Prefer dedicated compute queue (not graphics) if available
+                if ((family.queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0) {
+                    LOGI("GN-Framegen: Found dedicated compute queue family: %d", i);
+                }
+            }
+        }
+        
+        // If no dedicated compute queue, use graphics queue for compute
+        if (deviceData->computeQueueFamily == UINT32_MAX && deviceData->graphicsQueueFamily != UINT32_MAX) {
+            deviceData->computeQueueFamily = deviceData->graphicsQueueFamily;
+            LOGI("GN-Framegen: Using graphics queue for compute: %d", deviceData->computeQueueFamily);
+        }
+        
+        // Validate we have required queues
+        if (deviceData->computeQueueFamily == UINT32_MAX) {
+            LOGW("GN-Framegen: No compute queue family found, using fallback 0");
+            deviceData->computeQueueFamily = 0;
+        }
+    } else {
+        LOGW("GN-Framegen: Failed to query queue families, using fallback 0");
+        deviceData->graphicsQueueFamily = 0;
+        deviceData->computeQueueFamily = 0;
+    }
+    
     {
         auto& state = LayerState::Get();
         std::lock_guard<std::mutex> lock(state.deviceMutex);
         state.devices[*pDevice] = std::move(deviceData);
     }
     
-    LOGI("GN-Framegen: Device created successfully (cached %d function pointers)", 30);
+    LOGI("GN-Framegen: Device created successfully (cached %d function pointers, graphics=%d, compute=%d)", 
+         30, deviceData->graphicsQueueFamily, deviceData->computeQueueFamily);
     return VK_SUCCESS;
 }
 
@@ -889,14 +942,13 @@ VKAPI_ATTR VkResult VKAPI_CALL LayerQueuePresentKHR(
     
     // Initialize command pool if not already created
     if (swapchainData->commandPool == VK_NULL_HANDLE) {
-        // We need a compute-capable queue family
-        // For now, use the same queue (assuming compute capability)
-        // In production, query queue family properties
+        // Use the compute queue family discovered during device creation
+        // Falls back to 0 if discovery failed
         
         VkCommandPoolCreateInfo poolInfo = {};
         poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-        poolInfo.queueFamilyIndex = 0;  // TODO: Query actual compute queue family
+        poolInfo.queueFamilyIndex = swapchainData->device->computeQueueFamily;
         
         VkResult result = swapchainData->device->CreateCommandPool(
             swapchainData->device->device, &poolInfo, nullptr, &swapchainData->commandPool);
