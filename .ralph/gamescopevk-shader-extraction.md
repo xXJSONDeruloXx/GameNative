@@ -156,7 +156,7 @@ Real Frame N+1
 | Branch | Commits | Status | Pushed |
 |--------|---------|--------|--------|
 | `gn-lsfg-shader-swap` | 5 | SPIR-V extraction complete | ✅ |
-| `gn-native-layer` | 16 | Layer + frame generation + memory management + queue discovery + build scripts | ✅ |
+| `gn-native-layer` | 17 | Layer + frame generation + memory management + queue discovery + build scripts + generated frame presentation | ✅ |
 
 Both branches available at: `github.com/xXJSONDeruloXx/GameNative.git`
 
@@ -311,23 +311,31 @@ make
 
 ### 3. Known Limitations / Next Steps
 
-**Generated Frame Presentation**:
-The current implementation:
-- ✅ Captures real frames from swapchain
-- ✅ Generates interpolated frames via GenerateFrames()
-- ✅ Presents real frame
-- ⚠️ Generated frames are computed but not presented
+**Generated Frame Presentation**: ✅ IMPLEMENTED (Swapchain Injection)
 
-To present generated frames, need strategy:
-- **Option A**: Multiple `vkQueuePresentKHR` calls
-  - Problem: Swapchain has limited images (2-3 typically)
-  - Need additional swapchain images for generated frames
-- **Option B**: Application render loop integration
-  - Present real frame, immediately present generated frame(s)
-  - May require modifying swapchain present mode
-- **Option C**: Custom presentation mechanism
-  - Present generated frames as additional swapchain images
-  - Requires swapchain recreation with more images
+**Strategy Selected**: **Option A variant - Swapchain Injection**
+
+Implementation:
+- Store generated frames in `SwapchainData::generatedFrames` vector
+- Track `pendingGeneratedFrames` counter and `nextGeneratedFrameIndex`
+- Before generating new frames, check if pending frames exist
+- If pending: copy generated frame to swapchain image via `vkCmdCopyImage`
+- If no pending frames: generate new batch and queue for presentation
+- Frame presentation pattern: [Real] → [Generated 1] → [Generated 2] → ... → [Real]
+
+Why this approach:
+- Reuses existing swapchain without recreation
+- Compatible with most Vulkan applications
+- No need to modify swapchain image count
+- Generated frames appear as regular presents
+
+Command buffer flow per present:
+1. If presenting generated frame:
+   - Transition swapchain image: `PRESENT_SRC_KHR` → `TRANSFER_DST_OPTIMAL`
+   - Transition generated frame: `GENERAL` → `TRANSFER_SRC_OPTIMAL`
+   - Copy generated frame to swapchain image
+   - Transition swapchain image: `TRANSFER_DST_OPTIMAL` → `PRESENT_SRC_KHR`
+2. Submit and present as normal
 
 **Queue Family Selection**: ✅ IMPLEMENTED
 - ✅ Queries queue family properties via `vkGetPhysicalDeviceQueueFamilyProperties`
@@ -370,6 +378,7 @@ For production, use semaphore-based synchronization between compute and present.
 20. ✅ **Frame counting** Track generated frames from GenerateFrames() return value
 21. ✅ **Memory type selection** FindMemoryType() for device-local image memory
 22. ✅ **Queue family discovery** Automatic detection of graphics/compute queues
+23. ✅ **Generated frame presentation** Swapchain injection strategy implemented
 
 ---
 
@@ -449,6 +458,7 @@ For production, use semaphore-based synchronization between compute and present.
 | Frame counting | Track return value, log count | ✅ |
 | Memory type selection | `FindMemoryType()` for device-local | ✅ |
 | Queue family discovery | Automatic graphics/compute detection | ✅ |
+| Generated frame presentation | Swapchain injection strategy | ✅ |
 | Layer manifest | `VkLayer_GN_gamescope_framegen.json` | ✅ |
 | CMake build config | `CMakeLists.txt` | ✅ |
 | Build scripts | `build-android.sh`, `install-to-apk.sh` | ✅ |
@@ -483,11 +493,11 @@ For production, use semaphore-based synchronization between compute and present.
 - **Workflow**: Capture frames → GenerateFrames() → Present real frame
 
 The implementation is **feature-complete** for the extraction and integration phase.
-Frame generation is fully integrated with proper memory management and queue discovery.
+Frame generation is fully integrated with proper memory management, queue discovery, and generated frame presentation.
 
 Remaining work:
-1. Generated frame presentation strategy (multiple presents per frame)
-2. Android NDK build and runtime testing
-3. Wine/DXVK integration testing
+1. Android NDK build and runtime testing
+2. Wine/DXVK integration testing
+3. Performance optimization (async compute, semaphore sync)
 
 <promise>COMPLETE</promise>
