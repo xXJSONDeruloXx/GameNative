@@ -132,6 +132,12 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL layer_GetInstanceProcAddr(
     if (std::strcmp(pName, "vkEnumerateDeviceExtensionProperties") == 0) {
         return reinterpret_cast<PFN_vkVoidFunction>(vkEnumerateDeviceExtensionProperties);
     }
+    if (std::strcmp(pName, "vkEnumeratePhysicalDevices") == 0) {
+        return reinterpret_cast<PFN_vkVoidFunction>(LayerEnumeratePhysicalDevices);
+    }
+    if (std::strcmp(pName, "vkEnumeratePhysicalDeviceGroups") == 0) {
+        return reinterpret_cast<PFN_vkVoidFunction>(LayerEnumeratePhysicalDeviceGroups);
+    }
     
     // Get instance data to chain to next layer
     InstanceData* data = GetInstanceData(instance);
@@ -227,6 +233,75 @@ VKAPI_ATTR VkResult VKAPI_CALL LayerCreateInstance(
     return VK_SUCCESS;
 }
 
+// Track physical device to instance mapping during enumeration
+VKAPI_ATTR VkResult VKAPI_CALL LayerEnumeratePhysicalDevices(
+    VkInstance instance,
+    uint32_t* pPhysicalDeviceCount,
+    VkPhysicalDevice* pPhysicalDevices) {
+    
+    InstanceData* data = GetInstanceData(instance);
+    if (!data) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    
+    PFN_vkEnumeratePhysicalDevices nextEnumeratePhysicalDevices = 
+        reinterpret_cast<PFN_vkEnumeratePhysicalDevices>(
+            data->nextGetInstanceProcAddr(instance, "vkEnumeratePhysicalDevices"));
+    
+    if (!nextEnumeratePhysicalDevices) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    
+    VkResult result = nextEnumeratePhysicalDevices(instance, pPhysicalDeviceCount, pPhysicalDevices);
+    
+    // If we got the list, store the mapping
+    if (result == VK_SUCCESS && pPhysicalDevices) {
+        auto& state = LayerState::Get();
+        std::lock_guard<std::mutex> lock(state.physicalDeviceMutex);
+        for (uint32_t i = 0; i < *pPhysicalDeviceCount; i++) {
+            state.physicalDeviceToInstance[pPhysicalDevices[i]] = instance;
+        }
+    }
+    
+    return result;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL LayerEnumeratePhysicalDeviceGroups(
+    VkInstance instance,
+    uint32_t* pPhysicalDeviceGroupCount,
+    VkPhysicalDeviceGroupProperties* pPhysicalDeviceGroupProperties) {
+    
+    InstanceData* data = GetInstanceData(instance);
+    if (!data) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    
+    PFN_vkEnumeratePhysicalDeviceGroups nextEnumeratePhysicalDeviceGroups = 
+        reinterpret_cast<PFN_vkEnumeratePhysicalDeviceGroups>(
+            data->nextGetInstanceProcAddr(instance, "vkEnumeratePhysicalDeviceGroups"));
+    
+    if (!nextEnumeratePhysicalDeviceGroups) {
+        // Not all Vulkan versions have this, chain to next layer
+        return data->nextGetInstanceProcAddr(instance, "vkEnumeratePhysicalDeviceGroups") ?
+            VK_ERROR_INITIALIZATION_FAILED : VK_ERROR_EXTENSION_NOT_PRESENT;
+    }
+    
+    VkResult result = nextEnumeratePhysicalDeviceGroups(instance, pPhysicalDeviceGroupCount, pPhysicalDeviceGroupProperties);
+    
+    // If we got the list, store the mapping
+    if (result == VK_SUCCESS && pPhysicalDeviceGroupProperties) {
+        auto& state = LayerState::Get();
+        std::lock_guard<std::mutex> lock(state.physicalDeviceMutex);
+        for (uint32_t i = 0; i < *pPhysicalDeviceGroupCount; i++) {
+            for (uint32_t j = 0; j < pPhysicalDeviceGroupProperties[i].physicalDeviceCount; j++) {
+                state.physicalDeviceToInstance[pPhysicalDeviceGroupProperties[i].physicalDevices[j]] = instance;
+            }
+        }
+    }
+    
+    return result;
+}
+
 VKAPI_ATTR void VKAPI_CALL LayerDestroyInstance(
     VkInstance instance,
     const VkAllocationCallbacks* pAllocator) {
@@ -318,10 +393,22 @@ VKAPI_ATTR VkResult VKAPI_CALL LayerCreateDevice(
     VkInstance instance = nullptr; // We need to track this somehow
     // TODO: Link instance to device
     
+    // Find instance for this physical device
+    auto& state = LayerState::Get();
+    VkInstance instance = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(state.physicalDeviceMutex);
+        auto it = state.physicalDeviceToInstance.find(physicalDevice);
+        if (it != state.physicalDeviceToInstance.end()) {
+            instance = it->second;
+        }
+    }
+    
     // Store device data
     auto deviceData = std::make_unique<DeviceData>();
     deviceData->device = *pDevice;
     deviceData->physicalDevice = physicalDevice;
+    deviceData->instance = GetInstanceData(instance);  // May be nullptr if not found
     deviceData->nextGetDeviceProcAddr = nextGetDeviceProcAddr;
     
     // Cache function pointers - swapchain

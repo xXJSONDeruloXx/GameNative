@@ -139,6 +139,12 @@ struct LayerDispatch {
     PFN_vkGetDeviceProcAddr GetDeviceProcAddr;
 };
 
+// Physical device to instance mapping (needed for device creation)
+struct PhysicalDeviceInstanceMapping {
+    VkPhysicalDevice physicalDevice;
+    VkInstance instance;
+};
+
 // Global layer data
 class LayerState {
 public:
@@ -150,6 +156,10 @@ public:
     // Instance data map
     std::mutex instanceMutex;
     std::unordered_map<VkInstance, std::unique_ptr<InstanceData>> instances;
+    
+    // Physical device to instance mapping (populated during enumeration)
+    std::mutex physicalDeviceMutex;
+    std::unordered_map<VkPhysicalDevice, VkInstance> physicalDeviceToInstance;
     
     // Device data map
     std::mutex deviceMutex;
@@ -173,6 +183,14 @@ extern "C" {
 
 // Helper functions
 void* GetChainInfo(const void* pNext, VkStructureType type);
+VKAPI_ATTR VkResult VKAPI_CALL LayerEnumeratePhysicalDevices(
+    VkInstance instance,
+    uint32_t* pPhysicalDeviceCount,
+    VkPhysicalDevice* pPhysicalDevices);
+VKAPI_ATTR VkResult VKAPI_CALL LayerEnumeratePhysicalDeviceGroups(
+    VkInstance instance,
+    uint32_t* pPhysicalDeviceGroupCount,
+    VkPhysicalDeviceGroupProperties* pPhysicalDeviceGroupProperties);
 VKAPI_ATTR VkResult VKAPI_CALL LayerCreateInstance(
     const VkInstanceCreateInfo* pCreateInfo,
     const VkAllocationCallbacks* pAllocator,
