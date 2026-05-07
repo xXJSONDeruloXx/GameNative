@@ -450,16 +450,18 @@ VKAPI_ATTR VkResult VKAPI_CALL LayerQueuePresentKHR(
     VkQueue queue,
     const VkPresentInfoKHR* pPresentInfo) {
     
-    // Get device from queue (we need to track this)
-    // For now, try to get swapchain data
     VkSwapchainKHR swapchain = pPresentInfo->pSwapchains[0];
     SwapchainData* swapchainData = GetSwapchainData(swapchain);
     
     if (!swapchainData) {
         // Not our swapchain, pass through
-        DeviceData* deviceData = nullptr; // TODO: Get from queue
-        if (deviceData && deviceData->QueuePresentKHR) {
-            return deviceData->QueuePresentKHR(queue, pPresentInfo);
+        // Find device from queue by checking all devices
+        auto& state = LayerState::Get();
+        std::lock_guard<std::mutex> lock(state.deviceMutex);
+        for (auto& [device, data] : state.devices) {
+            if (data->QueuePresentKHR) {
+                return data->QueuePresentKHR(queue, pPresentInfo);
+            }
         }
         return VK_ERROR_DEVICE_LOST;
     }
@@ -474,14 +476,52 @@ VKAPI_ATTR VkResult VKAPI_CALL LayerQueuePresentKHR(
     LOGI("GN-Framegen: Presenting with frame generation (multiplier=%d)",
          state.config.multiplier);
     
-    // TODO: Implement actual frame generation
-    // 1. Run optical flow on current and previous frames
-    // 2. Warp previous frame using flow vectors
-    // 3. Blend to generate intermediate frames
-    // 4. Present real frame + generated frames
+    // Initialize frame generator on first use
+    if (!swapchainData->frameGenerator) {
+        LOGI("GN-Framegen: Initializing FrameGenerator");
+        swapchainData->frameGenerator = std::make_unique<FrameGenerator>(
+            swapchainData->device->device,
+            swapchainData->device->physicalDevice);
+        
+        VkResult result = swapchainData->frameGenerator->Initialize(
+            swapchainData->extent,
+            swapchainData->format,
+            swapchainData->generationCount);
+        
+        if (result != VK_SUCCESS) {
+            LOGE("GN-Framegen: Failed to initialize FrameGenerator: %d", result);
+            // Fall back to pass-through
+            return swapchainData->device->QueuePresentKHR(queue, pPresentInfo);
+        }
+        
+        // Apply configuration
+        swapchainData->frameGenerator->SetFlowScale(state.config.flowScale);
+        swapchainData->frameGenerator->SetModel(state.config.model);
+        swapchainData->frameGenerator->SetMultiplier(state.config.multiplier);
+    }
     
-    // For now, just pass through
-    return swapchainData->device->QueuePresentKHR(queue, pPresentInfo);
+    // Frame generation is complex and requires:
+    // 1. Command buffer allocation for compute work
+    // 2. Acquiring swapchain images for read-back
+    // 3. Running optical flow, warp, and blend compute shaders
+    // 4. Presenting generated frames
+    // 
+    // For now, we present the real frame and note that full implementation
+    // requires additional infrastructure:
+    // - Command buffer management from the device's queue family
+    // - Swapchain image acquisition for current/previous frame access
+    // - Multiple present calls for generated frames (if supported)
+    // - Or: Integration with the application's render loop
+    
+    LOGI("GN-Framegen: FrameGenerator ready, presenting real frame (generated frames require render loop integration)");
+    
+    // Present the real frame
+    VkResult result = swapchainData->device->QueuePresentKHR(queue, pPresentInfo);
+    
+    // Update frame counter for tracking previous/current frames
+    swapchainData->currentFrame++;
+    
+    return result;
 }
 
 } // namespace Framegen

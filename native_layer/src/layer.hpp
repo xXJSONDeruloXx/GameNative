@@ -7,6 +7,9 @@
 #include <mutex>
 #include <unordered_map>
 
+// Include FrameGenerator
+#include "framegen.hpp"
+
 namespace GN {
 namespace Framegen {
 
@@ -66,16 +69,8 @@ struct SwapchainData {
     uint32_t generationCount;  // multiplier - 1
     uint32_t currentFrame;
     
-    // Vulkan objects for frame gen
-    VkDescriptorPool descriptorPool;
-    VkDescriptorSetLayout descriptorSetLayout;
-    VkPipelineLayout pipelineLayout;
-    VkPipeline frameGenPipeline;
-    
-    // Intermediate frame images
-    std::vector<VkImage> generatedImages;
-    std::vector<VkImageView> generatedImageViews;
-    std::vector<VkDeviceMemory> generatedMemory;
+    // Frame generator instance
+    std::unique_ptr<FrameGenerator> frameGenerator;
 };
 
 // Global dispatch table for the layer
