@@ -1,0 +1,530 @@
+[
+  {
+    "file": "shader_000.spv",
+    "size": 32388,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 3473,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_001.spv",
+    "size": 54952,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 24654,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_002.spv",
+    "size": 50876,
+    "valid": false,
+    "error": "error: line 2785: Invalid instruction word count: 0\n"
+  },
+  {
+    "file": "shader_003.spv",
+    "size": 8900,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 403,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_004.spv",
+    "size": 3456,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 154,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_005.spv",
+    "size": 4372,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 219,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_006.spv",
+    "size": 6284,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 321,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_007.spv",
+    "size": 10576,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 544,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_008.spv",
+    "size": 18940,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 980,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_009.spv",
+    "size": 10380,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 513,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_010.spv",
+    "size": 23488,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 1193,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_011.spv",
+    "size": 23584,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 1199,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_012.spv",
+    "size": 23440,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 1190,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_013.spv",
+    "size": 11620,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 549,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_014.spv",
+    "size": 5320,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 245,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_015.spv",
+    "size": 28840,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 1458,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_016.spv",
+    "size": 23616,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 1201,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_017.spv",
+    "size": 41352,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 2118,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_018.spv",
+    "size": 19388,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 1002,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_019.spv",
+    "size": 9012,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 458,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_020.spv",
+    "size": 5320,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 245,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_021.spv",
+    "size": 28904,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 1462,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_022.spv",
+    "size": 23408,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 1188,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_023.spv",
+    "size": 23504,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 1194,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_024.spv",
+    "size": 8948,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 454,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_025.spv",
+    "size": 15540,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 764,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_026.spv",
+    "size": 8720,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 436,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_027.spv",
+    "size": 8720,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 436,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_028.spv",
+    "size": 8752,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 438,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_029.spv",
+    "size": 6172,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 313,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_030.spv",
+    "size": 5984,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 302,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_031.spv",
+    "size": 18940,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 980,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_032.spv",
+    "size": 34500,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 1786,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_033.spv",
+    "size": 64820,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 3354,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_034.spv",
+    "size": 13476,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 656,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_035.spv",
+    "size": 23520,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 1195,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_036.spv",
+    "size": 23536,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 1196,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_037.spv",
+    "size": 23456,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 1191,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_038.spv",
+    "size": 11604,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 548,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_039.spv",
+    "size": 7512,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 346,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_040.spv",
+    "size": 46784,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 2391,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_041.spv",
+    "size": 65536,
+    "valid": false,
+    "error": "error: line 0: Missing OpFunctionEnd at end of module.\n",
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 3729,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_042.spv",
+    "size": 65536,
+    "valid": false,
+    "error": "error: line 0: Missing OpFunctionEnd at end of module.\n",
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 3719,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_043.spv",
+    "size": 15108,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 777,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_044.spv",
+    "size": 7512,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 346,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_045.spv",
+    "size": 46800,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 2392,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_046.spv",
+    "size": 65536,
+    "valid": false,
+    "error": "error: line 3546: End of input reached while decoding OpFAdd starting at word 16383: missing type ID operand at word offset 1.\n"
+  },
+  {
+    "file": "shader_047.spv",
+    "size": 65536,
+    "valid": false,
+    "error": "error: line 0: Missing OpFunctionEnd at end of module.\n",
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 3734,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_048.spv",
+    "size": 15204,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 783,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_049.spv",
+    "size": 26140,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 1304,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_050.spv",
+    "size": 23536,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 1196,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_051.spv",
+    "size": 23552,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 1197,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_052.spv",
+    "size": 23536,
+    "valid": true,
+    "error": null,
+    "version": "1.0",
+    "generator": "Google Shaderc over Glslang; 11",
+    "bound": 1196,
+    "local_size": "16 16 1"
+  },
+  {
+    "file": "shader_053.spv",
+    "size": 65536,
+    "valid": false,
+    "error": "error: line 569: Invalid instruction word count: 0\n"
+  }
+]
