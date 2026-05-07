@@ -1,4 +1,6 @@
 #include "framegen.hpp"
+#include "shader_manager.hpp"
+#include "descriptor_manager.hpp"
 
 #include <cstring>
 #include <algorithm>

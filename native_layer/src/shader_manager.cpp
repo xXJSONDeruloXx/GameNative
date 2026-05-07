@@ -1,4 +1,5 @@
 #include "shader_manager.hpp"
+#include "shaders_embedded.hpp"
 
 #ifdef __ANDROID__
 #include <android/log.h>
@@ -9,9 +10,6 @@
 #define LOGI(...) printf(__VA_ARGS__); printf("\n")
 #define LOGE(...) fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n")
 #endif
-
-// TODO: Include embedded shader header when ready
-// #include "shaders_embedded.hpp"
 
 namespace GN {
 namespace Framegen {
@@ -32,21 +30,45 @@ ShaderManager::~ShaderManager() {
 }
 
 VkResult ShaderManager::LoadAll() {
-    LOGI("ShaderManager::LoadAll");
+    LOGI("ShaderManager::LoadAll - loading %zu embedded shaders", GameScopeVK::Shaders::SHADER_REGISTRY.size());
     
-    // TODO: Load all embedded shaders
-    // This will iterate through shaders_embedded.hpp and create VkShaderModules
+    // Load all embedded shaders from shaders_embedded.hpp
+    for (const auto& [name, data] : GameScopeVK::Shaders::SHADER_REGISTRY) {
+        const uint8_t* shaderBytes = data.first;
+        size_t byteSize = data.second;
+        
+        // Validate SPIR-V header
+        if (byteSize < 20) {
+            LOGE("Shader '%s' too small (%zu bytes), skipping", name.c_str(), byteSize);
+            continue;
+        }
+        
+        // Check magic number (SPIR-V: 0x07230203, little-endian as bytes)
+        const uint32_t magic = 0x07230203;
+        if (memcmp(shaderBytes, &magic, 4) != 0) {
+            LOGE("Shader '%s' has invalid SPIR-V magic, skipping", name.c_str());
+            continue;
+        }
+        
+        // Load shader (size must be multiple of 4 for SPIR-V)
+        if (byteSize % 4 != 0) {
+            LOGE("Shader '%s' size (%zu) not word-aligned, skipping", name.c_str(), byteSize);
+            continue;
+        }
+        
+        VkResult result = LoadShader(name.c_str(),
+                                     reinterpret_cast<const uint32_t*>(shaderBytes),
+                                     byteSize / sizeof(uint32_t));
+        if (result != VK_SUCCESS) {
+            LOGE("Failed to load shader '%s': %d", name.c_str(), result);
+            // Continue with other shaders
+        }
+    }
     
-    // Example of how it will work:
-    // for (const auto& [name, data, size] : GameScopeVK::Shaders::SHADER_REGISTRY) {
-    //     LoadShader(name.c_str(), 
-    //                reinterpret_cast<const uint32_t*>(data.first), 
-    //                data.second / sizeof(uint32_t));
-    // }
+    LOGI("Shader loading complete: %zu/%zu shaders loaded", shaders.size(), 
+         GameScopeVK::Shaders::SHADER_REGISTRY.size());
     
-    LOGI("Shader loading is stubbed - will use embedded shaders when integrated");
-    
-    return VK_SUCCESS;
+    return shaders.empty() ? VK_ERROR_INITIALIZATION_FAILED : VK_SUCCESS;
 }
 
 VkResult ShaderManager::LoadShader(const char* name, const uint32_t* data, size_t wordCount) {
