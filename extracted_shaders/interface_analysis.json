@@ -1,0 +1,3112 @@
+[
+  {
+    "file": "shader_000.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "704",
+        "binding": 1,
+        "descriptor_set": 0
+      },
+      {
+        "id": "982",
+        "binding": 0,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [
+      "OpDecorate %_struct_702 BufferBlock",
+      "OpDecorate %_struct_980 BufferBlock"
+    ],
+    "uniform_buffers": [
+      "%704 = OpVariable %_ptr_Uniform__struct_702 Uniform",
+      "%982 = OpVariable %_ptr_Uniform__struct_980 Uniform"
+    ],
+    "images": [],
+    "samplers": [],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_001.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "383",
+        "binding": 1,
+        "descriptor_set": 0
+      },
+      {
+        "id": "3124",
+        "binding": 0,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [
+      "OpDecorate %_struct_381 BufferBlock",
+      "OpDecorate %_struct_3122 BufferBlock"
+    ],
+    "uniform_buffers": [
+      "%383 = OpVariable %_ptr_Uniform__struct_381 Uniform",
+      "%3124 = OpVariable %_ptr_Uniform__struct_3122 Uniform"
+    ],
+    "images": [],
+    "samplers": [],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_003.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "6",
+        "binding": 0,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "8",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "9",
+        "binding": 49,
+        "descriptor_set": 0
+      },
+      {
+        "id": "10",
+        "binding": 50,
+        "descriptor_set": 0
+      },
+      {
+        "id": "11",
+        "binding": 51,
+        "descriptor_set": 0
+      },
+      {
+        "id": "12",
+        "binding": 52,
+        "descriptor_set": 0
+      },
+      {
+        "id": "13",
+        "binding": 53,
+        "descriptor_set": 0
+      },
+      {
+        "id": "14",
+        "binding": 54,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%6 = OpVariable %_ptr_Uniform__struct_5 Uniform",
+      "%7 = OpVariable %_ptr_UniformConstant_31 UniformConstant",
+      "%8 = OpVariable %_ptr_UniformConstant_53 UniformConstant",
+      "%9 = OpVariable %_ptr_UniformConstant_53 UniformConstant",
+      "%10 = OpVariable %_ptr_UniformConstant_53 UniformConstant",
+      "%11 = OpVariable %_ptr_UniformConstant_53 UniformConstant",
+      "%12 = OpVariable %_ptr_UniformConstant_53 UniformConstant",
+      "%13 = OpVariable %_ptr_UniformConstant_53 UniformConstant",
+      "%14 = OpVariable %_ptr_UniformConstant_53 UniformConstant"
+    ],
+    "images": [
+      "%30 = OpTypeImage %float 2D 0 0 0 1 Unknown",
+      "%53 = OpTypeImage %float 2D 0 0 0 2 R8"
+    ],
+    "samplers": [
+      "%31 = OpTypeSampledImage %30"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_004.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 34,
+        "descriptor_set": 0
+      },
+      {
+        "id": "8",
+        "binding": 0,
+        "descriptor_set": 0
+      },
+      {
+        "id": "9",
+        "binding": 35,
+        "descriptor_set": 0
+      },
+      {
+        "id": "10",
+        "binding": 36,
+        "descriptor_set": 0
+      },
+      {
+        "id": "11",
+        "binding": 33,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_22 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_27 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_27 UniformConstant",
+      "%8 = OpVariable %_ptr_Uniform__struct_7 Uniform",
+      "%9 = OpVariable %_ptr_UniformConstant_27 UniformConstant",
+      "%10 = OpVariable %_ptr_UniformConstant_27 UniformConstant",
+      "%11 = OpVariable %_ptr_UniformConstant_27 UniformConstant"
+    ],
+    "images": [
+      "%22 = OpTypeImage %float 2D 0 0 0 2 Unknown",
+      "%26 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%27 = OpTypeSampledImage %26"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_005.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_16 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_21 UniformConstant"
+    ],
+    "images": [
+      "%16 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%20 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%21 = OpTypeSampledImage %20"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_006.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_16 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_21 UniformConstant"
+    ],
+    "images": [
+      "%16 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%20 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%21 = OpTypeSampledImage %20"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_007.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 49,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_17 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_22 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_17 UniformConstant"
+    ],
+    "images": [
+      "%17 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%21 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%22 = OpTypeSampledImage %21"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_008.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 49,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_18 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_18 UniformConstant"
+    ],
+    "images": [
+      "%18 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%22 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%23 = OpTypeSampledImage %22"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_009.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 34,
+        "descriptor_set": 0
+      },
+      {
+        "id": "8",
+        "binding": 35,
+        "descriptor_set": 0
+      },
+      {
+        "id": "9",
+        "binding": 36,
+        "descriptor_set": 0
+      },
+      {
+        "id": "10",
+        "binding": 37,
+        "descriptor_set": 0
+      },
+      {
+        "id": "11",
+        "binding": 49,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_22 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_27 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_27 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_27 UniformConstant",
+      "%8 = OpVariable %_ptr_UniformConstant_27 UniformConstant",
+      "%9 = OpVariable %_ptr_UniformConstant_27 UniformConstant",
+      "%10 = OpVariable %_ptr_UniformConstant_27 UniformConstant",
+      "%11 = OpVariable %_ptr_UniformConstant_22 UniformConstant"
+    ],
+    "images": [
+      "%22 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%26 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%27 = OpTypeSampledImage %26"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_010.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 49,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_18 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_18 UniformConstant"
+    ],
+    "images": [
+      "%18 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%22 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%23 = OpTypeSampledImage %22"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_011.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 49,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_18 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_18 UniformConstant"
+    ],
+    "images": [
+      "%18 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%22 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%23 = OpTypeSampledImage %22"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_012.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 49,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_18 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_18 UniformConstant"
+    ],
+    "images": [
+      "%18 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%22 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%23 = OpTypeSampledImage %22"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_013.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "8",
+        "binding": 0,
+        "descriptor_set": 0
+      },
+      {
+        "id": "9",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "10",
+        "binding": 49,
+        "descriptor_set": 0
+      },
+      {
+        "id": "11",
+        "binding": 50,
+        "descriptor_set": 0
+      },
+      {
+        "id": "12",
+        "binding": 51,
+        "descriptor_set": 0
+      },
+      {
+        "id": "13",
+        "binding": 52,
+        "descriptor_set": 0
+      },
+      {
+        "id": "14",
+        "binding": 53,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%5 = OpVariable %_ptr_UniformConstant_28 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_28 UniformConstant",
+      "%8 = OpVariable %_ptr_Uniform__struct_7 Uniform",
+      "%9 = OpVariable %_ptr_UniformConstant_145 UniformConstant",
+      "%10 = OpVariable %_ptr_UniformConstant_145 UniformConstant",
+      "%11 = OpVariable %_ptr_UniformConstant_145 UniformConstant",
+      "%12 = OpVariable %_ptr_UniformConstant_145 UniformConstant",
+      "%13 = OpVariable %_ptr_UniformConstant_145 UniformConstant",
+      "%14 = OpVariable %_ptr_UniformConstant_145 UniformConstant"
+    ],
+    "images": [
+      "%27 = OpTypeImage %float 2D 0 0 0 1 Unknown",
+      "%145 = OpTypeImage %float 2D 0 0 0 2 R8"
+    ],
+    "samplers": [
+      "%28 = OpTypeSampledImage %27"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_014.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 34,
+        "descriptor_set": 0
+      },
+      {
+        "id": "8",
+        "binding": 35,
+        "descriptor_set": 0
+      },
+      {
+        "id": "9",
+        "binding": 49,
+        "descriptor_set": 0
+      },
+      {
+        "id": "10",
+        "binding": 50,
+        "descriptor_set": 0
+      },
+      {
+        "id": "11",
+        "binding": 36,
+        "descriptor_set": 0
+      },
+      {
+        "id": "13",
+        "binding": 0,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_24 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_29 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_29 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_29 UniformConstant",
+      "%8 = OpVariable %_ptr_UniformConstant_29 UniformConstant",
+      "%9 = OpVariable %_ptr_UniformConstant_24 UniformConstant",
+      "%10 = OpVariable %_ptr_UniformConstant_24 UniformConstant",
+      "%11 = OpVariable %_ptr_UniformConstant_29 UniformConstant",
+      "%13 = OpVariable %_ptr_Uniform__struct_12 Uniform"
+    ],
+    "images": [
+      "%24 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%28 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%29 = OpTypeSampledImage %28"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_015.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 34,
+        "descriptor_set": 0
+      },
+      {
+        "id": "8",
+        "binding": 49,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_19 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_24 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_24 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_24 UniformConstant",
+      "%8 = OpVariable %_ptr_UniformConstant_19 UniformConstant"
+    ],
+    "images": [
+      "%19 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%23 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%24 = OpTypeSampledImage %23"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_016.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 49,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_18 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_18 UniformConstant"
+    ],
+    "images": [
+      "%18 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%22 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%23 = OpTypeSampledImage %22"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_017.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "7",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "8",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "9",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "10",
+        "binding": 49,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%7 = OpVariable %_ptr_UniformConstant_25 UniformConstant",
+      "%8 = OpVariable %_ptr_UniformConstant_25 UniformConstant",
+      "%9 = OpVariable %_ptr_UniformConstant_820 UniformConstant",
+      "%10 = OpVariable %_ptr_UniformConstant_820 UniformConstant"
+    ],
+    "images": [
+      "%24 = OpTypeImage %float 2D 0 0 0 1 Unknown",
+      "%820 = OpTypeImage %float 2D 0 0 0 2 Rgba8"
+    ],
+    "samplers": [
+      "%25 = OpTypeSampledImage %24"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_018.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "7",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "8",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "9",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "10",
+        "binding": 49,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%7 = OpVariable %_ptr_UniformConstant_21 UniformConstant",
+      "%8 = OpVariable %_ptr_UniformConstant_26 UniformConstant",
+      "%9 = OpVariable %_ptr_UniformConstant_26 UniformConstant",
+      "%10 = OpVariable %_ptr_UniformConstant_21 UniformConstant"
+    ],
+    "images": [
+      "%21 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%25 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%26 = OpTypeSampledImage %25"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_019.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 34,
+        "descriptor_set": 0
+      },
+      {
+        "id": "8",
+        "binding": 35,
+        "descriptor_set": 0
+      },
+      {
+        "id": "10",
+        "binding": 0,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_21 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_26 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_26 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_26 UniformConstant",
+      "%8 = OpVariable %_ptr_UniformConstant_26 UniformConstant",
+      "%10 = OpVariable %_ptr_Uniform__struct_9 Uniform"
+    ],
+    "images": [
+      "%21 = OpTypeImage %float 2D 0 0 0 2 Rgba16f",
+      "%25 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%26 = OpTypeSampledImage %25"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_020.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 34,
+        "descriptor_set": 0
+      },
+      {
+        "id": "8",
+        "binding": 35,
+        "descriptor_set": 0
+      },
+      {
+        "id": "9",
+        "binding": 49,
+        "descriptor_set": 0
+      },
+      {
+        "id": "10",
+        "binding": 50,
+        "descriptor_set": 0
+      },
+      {
+        "id": "11",
+        "binding": 36,
+        "descriptor_set": 0
+      },
+      {
+        "id": "13",
+        "binding": 0,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_24 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_29 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_29 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_29 UniformConstant",
+      "%8 = OpVariable %_ptr_UniformConstant_29 UniformConstant",
+      "%9 = OpVariable %_ptr_UniformConstant_24 UniformConstant",
+      "%10 = OpVariable %_ptr_UniformConstant_24 UniformConstant",
+      "%11 = OpVariable %_ptr_UniformConstant_29 UniformConstant",
+      "%13 = OpVariable %_ptr_Uniform__struct_12 Uniform"
+    ],
+    "images": [
+      "%24 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%28 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%29 = OpTypeSampledImage %28"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_021.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 34,
+        "descriptor_set": 0
+      },
+      {
+        "id": "8",
+        "binding": 49,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_19 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_24 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_24 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_24 UniformConstant",
+      "%8 = OpVariable %_ptr_UniformConstant_19 UniformConstant"
+    ],
+    "images": [
+      "%19 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%23 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%24 = OpTypeSampledImage %23"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_022.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 49,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_18 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_18 UniformConstant"
+    ],
+    "images": [
+      "%18 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%22 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%23 = OpTypeSampledImage %22"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_023.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 49,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_18 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_18 UniformConstant"
+    ],
+    "images": [
+      "%18 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%22 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%23 = OpTypeSampledImage %22"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_024.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 34,
+        "descriptor_set": 0
+      },
+      {
+        "id": "8",
+        "binding": 35,
+        "descriptor_set": 0
+      },
+      {
+        "id": "10",
+        "binding": 0,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_21 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_26 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_26 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_26 UniformConstant",
+      "%8 = OpVariable %_ptr_UniformConstant_26 UniformConstant",
+      "%10 = OpVariable %_ptr_Uniform__struct_9 Uniform"
+    ],
+    "images": [
+      "%21 = OpTypeImage %float 2D 0 0 0 2 Rgba16f",
+      "%25 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%26 = OpTypeSampledImage %25"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_025.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 0,
+        "descriptor_set": 0
+      },
+      {
+        "id": "8",
+        "binding": 36,
+        "descriptor_set": 0
+      },
+      {
+        "id": "9",
+        "binding": 37,
+        "descriptor_set": 0
+      },
+      {
+        "id": "10",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "11",
+        "binding": 34,
+        "descriptor_set": 0
+      },
+      {
+        "id": "12",
+        "binding": 35,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_28 UniformConstant",
+      "%7 = OpVariable %_ptr_Uniform__struct_6 Uniform",
+      "%8 = OpVariable %_ptr_UniformConstant_28 UniformConstant",
+      "%9 = OpVariable %_ptr_UniformConstant_28 UniformConstant",
+      "%10 = OpVariable %_ptr_UniformConstant_28 UniformConstant",
+      "%11 = OpVariable %_ptr_UniformConstant_28 UniformConstant",
+      "%12 = OpVariable %_ptr_UniformConstant_28 UniformConstant"
+    ],
+    "images": [
+      "%23 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%27 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%28 = OpTypeSampledImage %27"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_026.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_16 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_21 UniformConstant"
+    ],
+    "images": [
+      "%16 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%20 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%21 = OpTypeSampledImage %20"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_027.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_16 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_21 UniformConstant"
+    ],
+    "images": [
+      "%16 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%20 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%21 = OpTypeSampledImage %20"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_028.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_16 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_21 UniformConstant"
+    ],
+    "images": [
+      "%16 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%20 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%21 = OpTypeSampledImage %20"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_029.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_17 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_22 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_22 UniformConstant"
+    ],
+    "images": [
+      "%17 = OpTypeImage %float 2D 0 0 0 2 Rgba16f",
+      "%21 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%22 = OpTypeSampledImage %21"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_030.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 49,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_17 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_22 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_17 UniformConstant"
+    ],
+    "images": [
+      "%17 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%21 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%22 = OpTypeSampledImage %21"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_031.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 49,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_18 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_18 UniformConstant"
+    ],
+    "images": [
+      "%18 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%22 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%23 = OpTypeSampledImage %22"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_032.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 49,
+        "descriptor_set": 0
+      },
+      {
+        "id": "8",
+        "binding": 50,
+        "descriptor_set": 0
+      },
+      {
+        "id": "9",
+        "binding": 51,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_20 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_25 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_25 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_20 UniformConstant",
+      "%8 = OpVariable %_ptr_UniformConstant_20 UniformConstant",
+      "%9 = OpVariable %_ptr_UniformConstant_20 UniformConstant"
+    ],
+    "images": [
+      "%20 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%24 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%25 = OpTypeSampledImage %24"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_033.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 34,
+        "descriptor_set": 0
+      },
+      {
+        "id": "8",
+        "binding": 35,
+        "descriptor_set": 0
+      },
+      {
+        "id": "9",
+        "binding": 49,
+        "descriptor_set": 0
+      },
+      {
+        "id": "10",
+        "binding": 50,
+        "descriptor_set": 0
+      },
+      {
+        "id": "11",
+        "binding": 51,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_22 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_27 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_27 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_27 UniformConstant",
+      "%8 = OpVariable %_ptr_UniformConstant_27 UniformConstant",
+      "%9 = OpVariable %_ptr_UniformConstant_22 UniformConstant",
+      "%10 = OpVariable %_ptr_UniformConstant_22 UniformConstant",
+      "%11 = OpVariable %_ptr_UniformConstant_22 UniformConstant"
+    ],
+    "images": [
+      "%22 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%26 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%27 = OpTypeSampledImage %26"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_034.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 34,
+        "descriptor_set": 0
+      },
+      {
+        "id": "8",
+        "binding": 35,
+        "descriptor_set": 0
+      },
+      {
+        "id": "9",
+        "binding": 36,
+        "descriptor_set": 0
+      },
+      {
+        "id": "10",
+        "binding": 37,
+        "descriptor_set": 0
+      },
+      {
+        "id": "11",
+        "binding": 38,
+        "descriptor_set": 0
+      },
+      {
+        "id": "12",
+        "binding": 39,
+        "descriptor_set": 0
+      },
+      {
+        "id": "13",
+        "binding": 40,
+        "descriptor_set": 0
+      },
+      {
+        "id": "14",
+        "binding": 41,
+        "descriptor_set": 0
+      },
+      {
+        "id": "15",
+        "binding": 42,
+        "descriptor_set": 0
+      },
+      {
+        "id": "16",
+        "binding": 43,
+        "descriptor_set": 0
+      },
+      {
+        "id": "17",
+        "binding": 49,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_28 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%8 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%9 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%10 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%11 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%12 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%13 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%14 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%15 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%16 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%17 = OpVariable %_ptr_UniformConstant_28 UniformConstant"
+    ],
+    "images": [
+      "%28 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%32 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%33 = OpTypeSampledImage %32"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_035.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 49,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_18 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_18 UniformConstant"
+    ],
+    "images": [
+      "%18 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%22 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%23 = OpTypeSampledImage %22"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_036.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 49,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_18 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_18 UniformConstant"
+    ],
+    "images": [
+      "%18 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%22 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%23 = OpTypeSampledImage %22"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_037.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 49,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_18 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_18 UniformConstant"
+    ],
+    "images": [
+      "%18 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%22 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%23 = OpTypeSampledImage %22"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_038.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "8",
+        "binding": 0,
+        "descriptor_set": 0
+      },
+      {
+        "id": "9",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "10",
+        "binding": 49,
+        "descriptor_set": 0
+      },
+      {
+        "id": "11",
+        "binding": 50,
+        "descriptor_set": 0
+      },
+      {
+        "id": "12",
+        "binding": 51,
+        "descriptor_set": 0
+      },
+      {
+        "id": "13",
+        "binding": 52,
+        "descriptor_set": 0
+      },
+      {
+        "id": "14",
+        "binding": 53,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%5 = OpVariable %_ptr_UniformConstant_28 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_28 UniformConstant",
+      "%8 = OpVariable %_ptr_Uniform__struct_7 Uniform",
+      "%9 = OpVariable %_ptr_UniformConstant_144 UniformConstant",
+      "%10 = OpVariable %_ptr_UniformConstant_144 UniformConstant",
+      "%11 = OpVariable %_ptr_UniformConstant_144 UniformConstant",
+      "%12 = OpVariable %_ptr_UniformConstant_144 UniformConstant",
+      "%13 = OpVariable %_ptr_UniformConstant_144 UniformConstant",
+      "%14 = OpVariable %_ptr_UniformConstant_144 UniformConstant"
+    ],
+    "images": [
+      "%27 = OpTypeImage %float 2D 0 0 0 1 Unknown",
+      "%144 = OpTypeImage %float 2D 0 0 0 2 R8"
+    ],
+    "samplers": [
+      "%28 = OpTypeSampledImage %27"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_039.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 40,
+        "descriptor_set": 0
+      },
+      {
+        "id": "8",
+        "binding": 0,
+        "descriptor_set": 0
+      },
+      {
+        "id": "9",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "10",
+        "binding": 34,
+        "descriptor_set": 0
+      },
+      {
+        "id": "11",
+        "binding": 35,
+        "descriptor_set": 0
+      },
+      {
+        "id": "12",
+        "binding": 36,
+        "descriptor_set": 0
+      },
+      {
+        "id": "13",
+        "binding": 37,
+        "descriptor_set": 0
+      },
+      {
+        "id": "14",
+        "binding": 38,
+        "descriptor_set": 0
+      },
+      {
+        "id": "15",
+        "binding": 39,
+        "descriptor_set": 0
+      },
+      {
+        "id": "16",
+        "binding": 49,
+        "descriptor_set": 0
+      },
+      {
+        "id": "17",
+        "binding": 50,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_28 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%8 = OpVariable %_ptr_Uniform__struct_7 Uniform",
+      "%9 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%10 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%11 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%12 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%13 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%14 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%15 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%16 = OpVariable %_ptr_UniformConstant_28 UniformConstant",
+      "%17 = OpVariable %_ptr_UniformConstant_28 UniformConstant"
+    ],
+    "images": [
+      "%28 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%32 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%33 = OpTypeSampledImage %32"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_040.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 34,
+        "descriptor_set": 0
+      },
+      {
+        "id": "8",
+        "binding": 49,
+        "descriptor_set": 0
+      },
+      {
+        "id": "9",
+        "binding": 50,
+        "descriptor_set": 0
+      },
+      {
+        "id": "10",
+        "binding": 51,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_21 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_26 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_26 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_26 UniformConstant",
+      "%8 = OpVariable %_ptr_UniformConstant_21 UniformConstant",
+      "%9 = OpVariable %_ptr_UniformConstant_21 UniformConstant",
+      "%10 = OpVariable %_ptr_UniformConstant_21 UniformConstant"
+    ],
+    "images": [
+      "%21 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%25 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%26 = OpTypeSampledImage %25"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_041.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 34,
+        "descriptor_set": 0
+      },
+      {
+        "id": "8",
+        "binding": 35,
+        "descriptor_set": 0
+      },
+      {
+        "id": "9",
+        "binding": 49,
+        "descriptor_set": 0
+      },
+      {
+        "id": "10",
+        "binding": 50,
+        "descriptor_set": 0
+      },
+      {
+        "id": "11",
+        "binding": 51,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_22 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_27 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_27 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_27 UniformConstant",
+      "%8 = OpVariable %_ptr_UniformConstant_27 UniformConstant",
+      "%9 = OpVariable %_ptr_UniformConstant_22 UniformConstant",
+      "%10 = OpVariable %_ptr_UniformConstant_22 UniformConstant",
+      "%11 = OpVariable %_ptr_UniformConstant_22 UniformConstant"
+    ],
+    "images": [
+      "%22 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%26 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%27 = OpTypeSampledImage %26"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_042.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 34,
+        "descriptor_set": 0
+      },
+      {
+        "id": "8",
+        "binding": 35,
+        "descriptor_set": 0
+      },
+      {
+        "id": "9",
+        "binding": 49,
+        "descriptor_set": 0
+      },
+      {
+        "id": "10",
+        "binding": 50,
+        "descriptor_set": 0
+      },
+      {
+        "id": "11",
+        "binding": 51,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_22 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_27 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_27 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_27 UniformConstant",
+      "%8 = OpVariable %_ptr_UniformConstant_27 UniformConstant",
+      "%9 = OpVariable %_ptr_UniformConstant_22 UniformConstant",
+      "%10 = OpVariable %_ptr_UniformConstant_22 UniformConstant",
+      "%11 = OpVariable %_ptr_UniformConstant_22 UniformConstant"
+    ],
+    "images": [
+      "%22 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%26 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%27 = OpTypeSampledImage %26"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_043.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 34,
+        "descriptor_set": 0
+      },
+      {
+        "id": "8",
+        "binding": 35,
+        "descriptor_set": 0
+      },
+      {
+        "id": "9",
+        "binding": 36,
+        "descriptor_set": 0
+      },
+      {
+        "id": "10",
+        "binding": 37,
+        "descriptor_set": 0
+      },
+      {
+        "id": "12",
+        "binding": 0,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_28 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_28 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_28 UniformConstant",
+      "%8 = OpVariable %_ptr_UniformConstant_28 UniformConstant",
+      "%9 = OpVariable %_ptr_UniformConstant_28 UniformConstant",
+      "%10 = OpVariable %_ptr_UniformConstant_28 UniformConstant",
+      "%12 = OpVariable %_ptr_Uniform__struct_11 Uniform"
+    ],
+    "images": [
+      "%23 = OpTypeImage %float 2D 0 0 0 2 Rgba16f",
+      "%27 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%28 = OpTypeSampledImage %27"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_044.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 40,
+        "descriptor_set": 0
+      },
+      {
+        "id": "8",
+        "binding": 0,
+        "descriptor_set": 0
+      },
+      {
+        "id": "9",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "10",
+        "binding": 34,
+        "descriptor_set": 0
+      },
+      {
+        "id": "11",
+        "binding": 35,
+        "descriptor_set": 0
+      },
+      {
+        "id": "12",
+        "binding": 36,
+        "descriptor_set": 0
+      },
+      {
+        "id": "13",
+        "binding": 37,
+        "descriptor_set": 0
+      },
+      {
+        "id": "14",
+        "binding": 38,
+        "descriptor_set": 0
+      },
+      {
+        "id": "15",
+        "binding": 39,
+        "descriptor_set": 0
+      },
+      {
+        "id": "16",
+        "binding": 49,
+        "descriptor_set": 0
+      },
+      {
+        "id": "17",
+        "binding": 50,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_28 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%8 = OpVariable %_ptr_Uniform__struct_7 Uniform",
+      "%9 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%10 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%11 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%12 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%13 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%14 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%15 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%16 = OpVariable %_ptr_UniformConstant_28 UniformConstant",
+      "%17 = OpVariable %_ptr_UniformConstant_28 UniformConstant"
+    ],
+    "images": [
+      "%28 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%32 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%33 = OpTypeSampledImage %32"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_045.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 34,
+        "descriptor_set": 0
+      },
+      {
+        "id": "8",
+        "binding": 49,
+        "descriptor_set": 0
+      },
+      {
+        "id": "9",
+        "binding": 50,
+        "descriptor_set": 0
+      },
+      {
+        "id": "10",
+        "binding": 51,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_21 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_26 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_26 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_26 UniformConstant",
+      "%8 = OpVariable %_ptr_UniformConstant_21 UniformConstant",
+      "%9 = OpVariable %_ptr_UniformConstant_21 UniformConstant",
+      "%10 = OpVariable %_ptr_UniformConstant_21 UniformConstant"
+    ],
+    "images": [
+      "%21 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%25 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%26 = OpTypeSampledImage %25"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_047.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 34,
+        "descriptor_set": 0
+      },
+      {
+        "id": "8",
+        "binding": 35,
+        "descriptor_set": 0
+      },
+      {
+        "id": "9",
+        "binding": 49,
+        "descriptor_set": 0
+      },
+      {
+        "id": "10",
+        "binding": 50,
+        "descriptor_set": 0
+      },
+      {
+        "id": "11",
+        "binding": 51,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_22 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_27 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_27 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_27 UniformConstant",
+      "%8 = OpVariable %_ptr_UniformConstant_27 UniformConstant",
+      "%9 = OpVariable %_ptr_UniformConstant_22 UniformConstant",
+      "%10 = OpVariable %_ptr_UniformConstant_22 UniformConstant",
+      "%11 = OpVariable %_ptr_UniformConstant_22 UniformConstant"
+    ],
+    "images": [
+      "%22 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%26 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%27 = OpTypeSampledImage %26"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_048.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 34,
+        "descriptor_set": 0
+      },
+      {
+        "id": "8",
+        "binding": 35,
+        "descriptor_set": 0
+      },
+      {
+        "id": "9",
+        "binding": 36,
+        "descriptor_set": 0
+      },
+      {
+        "id": "10",
+        "binding": 37,
+        "descriptor_set": 0
+      },
+      {
+        "id": "12",
+        "binding": 0,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_28 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_28 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_28 UniformConstant",
+      "%8 = OpVariable %_ptr_UniformConstant_28 UniformConstant",
+      "%9 = OpVariable %_ptr_UniformConstant_28 UniformConstant",
+      "%10 = OpVariable %_ptr_UniformConstant_28 UniformConstant",
+      "%12 = OpVariable %_ptr_Uniform__struct_11 Uniform"
+    ],
+    "images": [
+      "%23 = OpTypeImage %float 2D 0 0 0 2 Rgba16f",
+      "%27 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%28 = OpTypeSampledImage %27"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_049.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 40,
+        "descriptor_set": 0
+      },
+      {
+        "id": "8",
+        "binding": 0,
+        "descriptor_set": 0
+      },
+      {
+        "id": "9",
+        "binding": 41,
+        "descriptor_set": 0
+      },
+      {
+        "id": "10",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "11",
+        "binding": 34,
+        "descriptor_set": 0
+      },
+      {
+        "id": "12",
+        "binding": 35,
+        "descriptor_set": 0
+      },
+      {
+        "id": "13",
+        "binding": 36,
+        "descriptor_set": 0
+      },
+      {
+        "id": "14",
+        "binding": 37,
+        "descriptor_set": 0
+      },
+      {
+        "id": "15",
+        "binding": 38,
+        "descriptor_set": 0
+      },
+      {
+        "id": "16",
+        "binding": 39,
+        "descriptor_set": 0
+      },
+      {
+        "id": "17",
+        "binding": 49,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_28 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%8 = OpVariable %_ptr_Uniform__struct_7 Uniform",
+      "%9 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%10 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%11 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%12 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%13 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%14 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%15 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%16 = OpVariable %_ptr_UniformConstant_33 UniformConstant",
+      "%17 = OpVariable %_ptr_UniformConstant_28 UniformConstant"
+    ],
+    "images": [
+      "%28 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%32 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%33 = OpTypeSampledImage %32"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_050.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 49,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_18 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_18 UniformConstant"
+    ],
+    "images": [
+      "%18 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%22 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%23 = OpTypeSampledImage %22"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_051.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 49,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_18 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_18 UniformConstant"
+    ],
+    "images": [
+      "%18 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%22 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%23 = OpTypeSampledImage %22"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  },
+  {
+    "file": "shader_052.spv",
+    "entry_point": {
+      "execution_model": "GLCompute",
+      "name": "main"
+    },
+    "execution_mode": null,
+    "push_constants": [],
+    "descriptors": [
+      {
+        "id": "4",
+        "binding": 48,
+        "descriptor_set": 0
+      },
+      {
+        "id": "5",
+        "binding": 32,
+        "descriptor_set": 0
+      },
+      {
+        "id": "6",
+        "binding": 33,
+        "descriptor_set": 0
+      },
+      {
+        "id": "7",
+        "binding": 49,
+        "descriptor_set": 0
+      }
+    ],
+    "storage_buffers": [],
+    "uniform_buffers": [
+      "%4 = OpVariable %_ptr_UniformConstant_18 UniformConstant",
+      "%5 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%6 = OpVariable %_ptr_UniformConstant_23 UniformConstant",
+      "%7 = OpVariable %_ptr_UniformConstant_18 UniformConstant"
+    ],
+    "images": [
+      "%18 = OpTypeImage %float 2D 0 0 0 2 Rgba8",
+      "%22 = OpTypeImage %float 2D 0 0 0 1 Unknown"
+    ],
+    "samplers": [
+      "%23 = OpTypeSampledImage %22"
+    ],
+    "local_size": {
+      "x": 16,
+      "y": 16,
+      "z": 1
+    }
+  }
+]
