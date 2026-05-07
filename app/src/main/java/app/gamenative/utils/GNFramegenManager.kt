@@ -2,6 +2,7 @@ package app.gamenative.utils
 
 import android.content.Context
 import com.winlator.container.Container
+import com.winlator.core.FileUtils
 import com.winlator.core.envvars.EnvVars
 import timber.log.Timber
 import java.io.File
@@ -12,19 +13,35 @@ import java.io.File
  * This is an alternative implementation to GameScopeVK that uses the same SPIR-V shaders
  * but implements them as a proper Vulkan explicit layer with cleaner architecture.
  *
- * GN Framegen Layer vs GameScopeVK:
+ * Similar to LSFG-VK, this manager installs the layer from APK assets into the container
+ * at launch time, then configures it via environment variables.
+ *
+ * GN Framegen Layer vs GameScopeVK vs LSFG-VK:
  *   GameScopeVK:
  *     - Vulkan ICD wrapper (replaces driver)
  *     - Uses control file + mmap protocol
  *     - Requires X11/XCB libraries
  *     - Complex DirectRendering integration
  *
+ *   LSFG-VK:
+ *     - Vulkan implicit layer
+ *     - Requires Lossless.dll from Steam
+ *     - Uses config file (conf.toml)
+ *     - Hook-based approach
+ *
  *   GN Framegen Layer:
  *     - Vulkan explicit layer (sits between app and driver)
+ *     - Self-contained (no external dependencies)
  *     - Uses environment variables for configuration
- *     - No external dependencies
- *     - Simpler presentation via swapchain injection
- *     - Same SPIR-V shaders (optical flow, warp, blend)
+ *     - Same SPIR-V shaders as GameScopeVK
+ *     - Cleaner architecture, easier to debug
+ *
+ * Installation Flow:
+ * 1. At launch time: install layer .so + manifest from APK assets into container
+ *    at paths where Vulkan loader discovers explicit layers.
+ * 2. Set environment variables to enable and configure the layer.
+ * 3. At runtime: Vulkan loader loads the layer, which intercepts presentation
+ *    and runs frame generation using embedded SPIR-V shaders.
  *
  * Environment Variables:
  *   GN_FG_ENABLE=1              - Enable frame generation
@@ -34,11 +51,6 @@ import java.io.File
  *   GN_FG_FPS_LIMIT=0           - FPS limit (0=unlimited)
  *   VK_LAYER_PATH=<path>        - Path to layer manifest JSON
  *   VK_INSTANCE_LAYERS=VK_LAYER_GN_gamescope_framegen
- *
- * Installation:
- *   1. Build layer: ./build-android.sh (produces libgn-framegen.so)
- *   2. Install to APK: ./install-to-apk.sh GameNative.apk
- *   3. Set environment variables in GameNative container settings
  */
 object GNFramegenManager {
     private const val TAG = "GNFramegen"
@@ -49,11 +61,25 @@ object GNFramegenManager {
     const val EXTRA_FLOW_SCALE = "gamescopeVkFlowScale"
     const val EXTRA_MODEL = "gamescopeVkModel"
 
-    // Layer library and manifest paths (inside container)
-    private const val LAYER_LIB_FILENAME = "libgn-framegen.so"
-    private const val LAYER_JSON_FILENAME = "VkLayer_GN_gamescope_framegen.json"
-    private const val LAYER_RELATIVE_PATH = "usr/lib/$LAYER_LIB_FILENAME"
-    private const val MANIFEST_RELATIVE_PATH = "usr/share/vulkan/explicit_layer.d/$LAYER_JSON_FILENAME"
+    // Paths inside the container rootDir
+    // Using same pattern as LSFG-VK for consistency
+    private const val LIB_RELATIVE_DIR = ".local/lib"
+    private const val LAYER_RELATIVE_DIR = ".local/share/vulkan/explicit_layer.d"
+    private const val LIB_FILENAME = "libgn-framegen.so"
+    private const val MANIFEST_FILENAME = "VkLayer_GN_gamescope_framegen.json"
+    private const val VERSION_FILENAME = ".gn_framegen_runtime_version"
+
+    // Relative path from explicit_layer.d back to lib/
+    private const val MANIFEST_LIBRARY_PATH = "../../../lib/$LIB_FILENAME"
+
+    // Current runtime version (bump when bundled .so changes)
+    // Format: gn-framegen-v<version>-android-<abi>
+    private const val RUNTIME_VERSION = "gn-framegen-v1.0.0-android-arm64-v8a"
+
+    // Asset paths (bundled in APK at app/src/main/assets/)
+    private const val ASSET_DIR = "gn_framegen/android_arm64_v8a"
+    private const val ASSET_LIB = "$ASSET_DIR/$LIB_FILENAME"
+    private const val ASSET_MANIFEST = "$ASSET_DIR/$MANIFEST_FILENAME"
 
     // Layer name for VK_INSTANCE_LAYERS
     private const val LAYER_NAME = "VK_LAYER_GN_gamescope_framegen"
@@ -67,17 +93,7 @@ object GNFramegenManager {
     private const val ENV_LAYER_PATH = "VK_LAYER_PATH"
     private const val ENV_INSTANCE_LAYERS = "VK_INSTANCE_LAYERS"
 
-    /**
-     * Check if the GN Framegen layer is available in the container.
-     * Layer must be installed via install-to-apk.sh or manually copied.
-     */
-    @JvmStatic
-    fun isLayerInstalled(container: Container): Boolean {
-        val rootDir = container.rootDir
-        val libFile = File(rootDir, LAYER_RELATIVE_PATH)
-        val manifestFile = File(rootDir, MANIFEST_RELATIVE_PATH)
-        return libFile.isFile && manifestFile.isFile
-    }
+    // ---- Public API --------------------------------------------------------
 
     /**
      * Only supported inside Bionic containers (same as GameScopeVK/LSFG-VK).
@@ -114,7 +130,76 @@ object GNFramegenManager {
         (container.getExtra(EXTRA_MODEL, "0").toIntOrNull() ?: 0).coerceIn(0, 1)
 
     /**
+     * Install the GN Framegen layer from APK assets into the container.
+     * Similar to LSFG-VK, this copies the layer .so and manifest into the
+     * container's filesystem where the Vulkan loader can discover it.
+     *
+     * Uses version caching to skip if already up-to-date.
+     *
+     * @return true if installation succeeded or was already current
+     */
+    @JvmStatic
+    fun ensureRuntimeInstalled(context: Context, container: Container): Boolean {
+        if (!isSupported(container)) return false
+
+        val rootDir = container.rootDir
+        val localLibDir = File(rootDir, LIB_RELATIVE_DIR)
+        val layerDir = File(rootDir, LAYER_RELATIVE_DIR)
+        val libFile = File(localLibDir, LIB_FILENAME)
+        val manifestFile = File(layerDir, MANIFEST_FILENAME)
+        val versionFile = File(layerDir, VERSION_FILENAME)
+
+        val installedVersion = versionFile.takeIf { it.exists() }?.readText()?.trim().orEmpty()
+        val needsInstall = installedVersion != RUNTIME_VERSION ||
+            !libFile.isFile || !manifestFile.isFile
+
+        if (!needsInstall) {
+            Timber.tag(TAG).d("Runtime %s already installed in %s", RUNTIME_VERSION, rootDir)
+            return true
+        }
+
+        return try {
+            localLibDir.mkdirs()
+            layerDir.mkdirs()
+
+            // Copy the layer .so from assets
+            FileUtils.copy(context, ASSET_LIB, libFile)
+
+            // Copy and patch the manifest with correct library_path
+            val manifestText = context.assets.open(ASSET_MANIFEST)
+                .bufferedReader().use { it.readText() }
+                .replace(
+                    "\"library_path\": \"$LIB_FILENAME\"",
+                    "\"library_path\": \"$MANIFEST_LIBRARY_PATH\""
+                )
+            FileUtils.writeString(manifestFile, manifestText)
+
+            // Write version file
+            FileUtils.writeString(versionFile, RUNTIME_VERSION)
+
+            // Set executable permissions
+            if (libFile.exists()) FileUtils.chmod(libFile, 0b111101101) // rwxr-xr-x
+            if (manifestFile.exists()) FileUtils.chmod(manifestFile, 0b110100100) // rw-r--r--
+            if (versionFile.exists()) FileUtils.chmod(versionFile, 0b110100100) // rw-r--r--
+
+            val ok = libFile.isFile && manifestFile.isFile
+            if (ok) {
+                Timber.tag(TAG).i("Installed GN Framegen %s into %s", RUNTIME_VERSION, rootDir)
+            } else {
+                Timber.tag(TAG).e("Runtime installation verification failed")
+            }
+            ok
+        } catch (t: Throwable) {
+            Timber.tag(TAG).e(t, "Failed to install GN Framegen runtime")
+            false
+        }
+    }
+
+    /**
      * Apply environment variables to enable the GN Framegen layer.
+     *
+     * This should be called after ensureRuntimeInstalled() to ensure
+     * the layer files are in place.
      *
      * Sets:
      *   GN_FG_ENABLE=1
@@ -124,7 +209,7 @@ object GNFramegenManager {
      *   VK_LAYER_PATH=<manifest directory>
      *   VK_INSTANCE_LAYERS=VK_LAYER_GN_gamescope_framegen
      *
-     * Note: Disable GameScopeVK (remove ICD JSON) to avoid conflicts.
+     * Also disables conflicting systems (GameScopeVK, LSFG-VK).
      *
      * @return true if layer is armed and ready
      */
@@ -135,17 +220,17 @@ object GNFramegenManager {
             return false
         }
 
-        if (!isLayerInstalled(container)) {
-            Timber.tag(TAG).e("GN Framegen layer not installed. Run: ./install-to-apk.sh")
-            return false
-        }
+        // Ensure runtime is installed first
+        // Note: This requires context, so caller should ensure it's installed
+        // before calling this method, or we need to pass context here too.
+        // For now, assume caller handles installation.
 
         val rootDir = container.rootDir
-        val manifestFile = File(rootDir, MANIFEST_RELATIVE_PATH)
+        val manifestFile = File(rootDir, "$LAYER_RELATIVE_DIR/$MANIFEST_FILENAME")
         val manifestDir = manifestFile.parentFile?.absolutePath
 
-        if (manifestDir == null) {
-            Timber.tag(TAG).e("Cannot determine manifest directory")
+        if (manifestDir == null || !manifestFile.isFile) {
+            Timber.tag(TAG).e("Layer manifest not found. Run ensureRuntimeInstalled() first.")
             return false
         }
 
@@ -168,10 +253,10 @@ object GNFramegenManager {
             Timber.tag(TAG).d("Removed GameScopeVK ICD JSON to prevent conflict")
         }
 
-        // Remove LSFG-VK env vars
+        // Remove LSFG-VK env vars (but don't delete files, just disable via env)
         envVars.remove("LSFG_CONFIG")
         envVars.remove("LSFG_PROCESS")
-        envVars.remove("VK_ICD_FILENAMES")  // GameScopeVK sets this
+        envVars.remove("DISABLE_LSFG")  // Don't disable, just don't enable
 
         Timber.tag(TAG).i(
             "GN Framegen armed: multiplier=%d, flowScale=%.2f, model=%d",
@@ -181,25 +266,45 @@ object GNFramegenManager {
     }
 
     /**
-     * Disable frame generation by removing layer configuration.
+     * Disable frame generation and clean up layer configuration.
      */
     @JvmStatic
     fun disableInContainer(container: Container) {
-        // Nothing special needed - just don't set env vars
-        Timber.tag(TAG).d("GN Framegen disabled (no env vars set)")
+        // Remove the layer manifest so Vulkan loader doesn't load it
+        val rootDir = container.rootDir
+        val manifestFile = File(rootDir, "$LAYER_RELATIVE_DIR/$MANIFEST_FILENAME")
+        if (manifestFile.exists()) {
+            manifestFile.delete()
+            Timber.tag(TAG).d("Removed GN Framegen manifest to disable")
+        }
     }
 
     /**
      * Get layer installation status and version info for UI display.
      */
     @JvmStatic
-    fun getLayerInfo(container: Container): Map<String, String> {
+    fun getLayerInfo(context: Context, container: Container): Map<String, String> {
         val rootDir = container.rootDir
-        val libFile = File(rootDir, LAYER_RELATIVE_PATH)
-        val manifestFile = File(rootDir, MANIFEST_RELATIVE_PATH)
+        val libFile = File(rootDir, "$LIB_RELATIVE_DIR/$LIB_FILENAME")
+        val manifestFile = File(rootDir, "$LAYER_RELATIVE_DIR/$MANIFEST_FILENAME")
+        val versionFile = File(rootDir, "$LAYER_RELATIVE_DIR/$VERSION_FILENAME")
+
+        val installedVersion = versionFile.takeIf { it.exists() }?.readText()?.trim().orEmpty()
+        val bundledVersion = RUNTIME_VERSION
+
+        // Check if assets exist in APK
+        val assetsAvailable = try {
+            context.assets.list(ASSET_DIR)?.containsAll(listOf(LIB_FILENAME, MANIFEST_FILENAME)) == true
+        } catch (e: Exception) {
+            false
+        }
 
         return mapOf(
-            "installed" to isLayerInstalled(container).toString(),
+            "installed" to (libFile.isFile && manifestFile.isFile).toString(),
+            "installed_version" to installedVersion,
+            "bundled_version" to bundledVersion,
+            "needs_update" to (installedVersion != bundledVersion).toString(),
+            "assets_available" to assetsAvailable.toString(),
             "lib_path" to libFile.absolutePath,
             "lib_exists" to libFile.exists().toString(),
             "manifest_path" to manifestFile.absolutePath,
@@ -207,5 +312,24 @@ object GNFramegenManager {
             "supported" to isSupported(container).toString(),
             "enabled" to isEnabled(container).toString(),
         )
+    }
+
+    /**
+     * Check if the GN Framegen layer is installed and ready to use.
+     * Convenience method that checks both installation and version.
+     */
+    @JvmStatic
+    fun isRuntimeInstalled(container: Container): Boolean {
+        val rootDir = container.rootDir
+        val libFile = File(rootDir, "$LIB_RELATIVE_DIR/$LIB_FILENAME")
+        val manifestFile = File(rootDir, "$LAYER_RELATIVE_DIR/$MANIFEST_FILENAME")
+        val versionFile = File(rootDir, "$LAYER_RELATIVE_DIR/$VERSION_FILENAME")
+
+        if (!libFile.isFile || !manifestFile.isFile) {
+            return false
+        }
+
+        val installedVersion = versionFile.takeIf { it.exists() }?.readText()?.trim().orEmpty()
+        return installedVersion == RUNTIME_VERSION
     }
 }

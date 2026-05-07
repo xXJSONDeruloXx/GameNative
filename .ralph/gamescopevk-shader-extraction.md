@@ -156,7 +156,7 @@ Real Frame N+1
 | Branch | Commits | Status | Pushed |
 |--------|---------|--------|--------|
 | `gn-lsfg-shader-swap` | 5 | SPIR-V extraction complete | ✅ |
-| `gn-native-layer` | 17 | Layer + frame generation + memory management + queue discovery + build scripts + generated frame presentation | ✅ |
+| `gn-native-layer` | 26 | Complete Vulkan layer implementation with full documentation suite and tooling | ✅ |
 
 Both branches available at: `github.com/xXJSONDeruloXx/GameNative.git`
 
