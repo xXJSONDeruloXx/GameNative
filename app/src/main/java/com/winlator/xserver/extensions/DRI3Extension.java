@@ -116,6 +116,9 @@ public class DRI3Extension implements Extension {
         byte depth = inputStream.readByte();
         inputStream.skip(1);
 
+        Log.d("DRI3Extension", String.format("pixmapFromBuffer: pixmap=%08x win=%08x %dx%d stride=%d depth=%d size=%d",
+            pixmapId, windowId, width, height, stride, depth, size));
+
         Window window = client.xServer.windowManager.getWindow(windowId);
         if (window == null) throw new BadWindow(windowId);
 
@@ -139,6 +142,9 @@ public class DRI3Extension implements Extension {
         inputStream.skip(3);
         long modifiers = inputStream.readLong();
 
+        Log.d("DRI3Extension", String.format("pixmapFromBuffers: pixmap=%08x win=%08x %dx%d stride=%d offset=%d depth=%d modifiers=%d fd_count=N/A",
+            pixmapId, windowId, width, height, stride, offset, depth, modifiers));
+
         Window window = client.xServer.windowManager.getWindow(windowId);
         if (window == null) throw new BadWindow(windowId);
         Pixmap pixmap = client.xServer.pixmapManager.getPixmap(pixmapId);
@@ -148,10 +154,23 @@ public class DRI3Extension implements Extension {
         long size = (long)stride * height;
 
         if (modifiers == 1255) {
+            Log.d("DRI3Extension", "  → AHardwareBuffer path (modifier 1255)");
             pixmapFromHardwareBuffer(client, pixmapId, width, height, depth, fd);
         }
         else if (modifiers == 1274) {
+            Log.d("DRI3Extension", "  → DMA-BUF mmap path (modifier 1274)");
             pixmapFromFd(client, pixmapId, width, height, stride, offset, depth, fd, size);
+        }
+        else {
+            // Fallback: try AHardwareBuffer path for any modifier
+            // GameScopeVK may send DRM_FORMAT_MOD_LINEAR (0) or other values
+            Log.w("DRI3Extension", "  → Unknown modifier " + modifiers + ", trying AHardwareBuffer path");
+            try {
+                pixmapFromHardwareBuffer(client, pixmapId, width, height, depth, fd);
+            } catch (Exception e) {
+                Log.e("DRI3Extension", "  → AHardwareBuffer path failed, trying mmap", e);
+                pixmapFromFd(client, pixmapId, width, height, stride, offset, depth, fd, size);
+            }
         }
     }
 

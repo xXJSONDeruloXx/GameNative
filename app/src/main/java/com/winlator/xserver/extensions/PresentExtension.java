@@ -173,6 +173,9 @@ public class PresentExtension implements Extension {
         int idleFence = inputStream.readInt();
         inputStream.skip(client.getRemainingRequestLength());
 
+        android.util.Log.d("PresentExtension", String.format("presentPixmap: win=%08x pixmap=%08x serial=%d off=%d,%d",
+            windowId, pixmapId, serial, xOff, yOff));
+
         final Window window = client.xServer.windowManager.getWindow(windowId);
         if (window == null) throw new BadWindow(windowId);
 
