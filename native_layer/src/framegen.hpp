@@ -56,14 +56,23 @@ private:
     std::vector<VkImageView> generatedImageViews;
     std::vector<VkDeviceMemory> generatedMemory;
     
-    // Parameters (from GameScopeVK control file)
-    float flowScale = 0.6f;
-    uint32_t model = 0;
+    // Configuration
+    struct Config {
+        float flowScale = 0.6f;
+        uint32_t model = 0;
+        uint32_t multiplier = 2;
+    } config;
+    
+    // Stored extent for dispatch calculations
+    VkExtent2D extent;
     
     // Load embedded SPIR-V shaders
     VkResult LoadShaders();
     VkResult CreatePipelines(VkExtent2D extent, VkFormat format);
     VkResult CreateIntermediateImages(VkExtent2D extent, VkFormat format, uint32_t count);
+    
+    // Memory type helper
+    uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
 };
 
 } // namespace Framegen
