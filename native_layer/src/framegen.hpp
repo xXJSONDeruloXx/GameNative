@@ -28,8 +28,9 @@ public:
                            uint32_t maxFrames);
     
     // Shader control parameters (from GameScopeVK)
-    void SetFlowScale(float scale) { flowScale = scale; }
-    void SetModel(uint32_t m) { model = m; }
+    void SetFlowScale(float scale) { config.flowScale = scale; }
+    void SetModel(uint32_t m) { config.model = m; }
+    void SetMultiplier(uint32_t m) { config.multiplier = m; }
     
 private:
     VkDevice device;
