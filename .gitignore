@@ -38,6 +38,7 @@ gen/
 # Native
 .cxx
 app/.cxx/
+native_layer/build-android-*/
 
 # Kotlin 2.0
 .kotlin/sessions

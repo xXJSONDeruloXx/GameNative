@@ -1,7 +1,0 @@
-/Users/kurt/Developer/gn-native-layer/native_layer/build-android-arm64-v8a/CMakeFiles/gn-framegen.dir
-/Users/kurt/Developer/gn-native-layer/native_layer/build-android-arm64-v8a/CMakeFiles/edit_cache.dir
-/Users/kurt/Developer/gn-native-layer/native_layer/build-android-arm64-v8a/CMakeFiles/rebuild_cache.dir
-/Users/kurt/Developer/gn-native-layer/native_layer/build-android-arm64-v8a/CMakeFiles/list_install_components.dir
-/Users/kurt/Developer/gn-native-layer/native_layer/build-android-arm64-v8a/CMakeFiles/install.dir
-/Users/kurt/Developer/gn-native-layer/native_layer/build-android-arm64-v8a/CMakeFiles/install/local.dir
-/Users/kurt/Developer/gn-native-layer/native_layer/build-android-arm64-v8a/CMakeFiles/install/strip.dir
