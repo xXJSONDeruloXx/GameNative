@@ -389,11 +389,7 @@ VKAPI_ATTR VkResult VKAPI_CALL LayerCreateDevice(
         return result;
     }
     
-    // Get instance data
-    VkInstance instance = nullptr; // We need to track this somehow
-    // TODO: Link instance to device
-    
-    // Find instance for this physical device
+    // Find instance for this physical device (set up during enumeration)
     auto& state = LayerState::Get();
     VkInstance instance = nullptr;
     {
@@ -605,9 +601,29 @@ VKAPI_ATTR void VKAPI_CALL LayerDestroySwapchainKHR(
     
     LOGI("GN-Framegen: Destroying swapchain");
     
+    // Clean up swapchain-specific resources before removing from map
     {
         auto& state = LayerState::Get();
         std::lock_guard<std::mutex> lock(state.swapchainMutex);
+        auto it = state.swapchains.find(swapchain);
+        if (it != state.swapchains.end() && it->second) {
+            SwapchainData* swapchainData = it->second.get();
+            
+            // Destroy command buffer
+            if (swapchainData->commandBuffer != VK_NULL_HANDLE) {
+                deviceData->FreeCommandBuffers(device, swapchainData->commandPool, 1, &swapchainData->commandBuffer);
+            }
+            
+            // Destroy command pool
+            if (swapchainData->commandPool != VK_NULL_HANDLE) {
+                deviceData->DestroyCommandPool(device, swapchainData->commandPool, pAllocator);
+            }
+            
+            // Destroy fence
+            if (swapchainData->computeFence != VK_NULL_HANDLE) {
+                deviceData->DestroyFence(device, swapchainData->computeFence, pAllocator);
+            }
+        }
         state.swapchains.erase(swapchain);
     }
     
@@ -671,26 +687,75 @@ VKAPI_ATTR VkResult VKAPI_CALL LayerQueuePresentKHR(
         swapchainData->frameGenerator->SetMultiplier(state.config.multiplier);
     }
     
-    // Frame generation is complex and requires:
+    // Frame generation requires:
     // 1. Command buffer allocation for compute work
     // 2. Acquiring swapchain images for read-back
     // 3. Running optical flow, warp, and blend compute shaders
     // 4. Presenting generated frames
-    // 
-    // For now, we present the real frame and note that full implementation
-    // requires additional infrastructure:
-    // - Command buffer management from the device's queue family
-    // - Swapchain image acquisition for current/previous frame access
-    // - Multiple present calls for generated frames (if supported)
-    // - Or: Integration with the application's render loop
     
-    LOGI("GN-Framegen: FrameGenerator ready, presenting real frame (generated frames require render loop integration)");
+    // Initialize command pool if not already created
+    if (swapchainData->commandPool == VK_NULL_HANDLE) {
+        // We need a compute-capable queue family
+        // For now, use the same queue (assuming compute capability)
+        // In production, query queue family properties
+        
+        VkCommandPoolCreateInfo poolInfo = {};
+        poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+        poolInfo.queueFamilyIndex = 0;  // TODO: Query actual compute queue family
+        
+        VkResult result = swapchainData->device->CreateCommandPool(
+            swapchainData->device->device, &poolInfo, nullptr, &swapchainData->commandPool);
+        if (result != VK_SUCCESS) {
+            LOGE("GN-Framegen: Failed to create command pool: %d", result);
+            // Fall back to pass-through
+            return swapchainData->device->QueuePresentKHR(queue, pPresentInfo);
+        }
+        
+        // Allocate command buffer
+        VkCommandBufferAllocateInfo allocInfo = {};
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.commandPool = swapchainData->commandPool;
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandBufferCount = 1;
+        
+        result = swapchainData->device->AllocateCommandBuffers(
+            swapchainData->device->device, &allocInfo, &swapchainData->commandBuffer);
+        if (result != VK_SUCCESS) {
+            LOGE("GN-Framegen: Failed to allocate command buffer: %d", result);
+            // Fall back to pass-through
+            return swapchainData->device->QueuePresentKHR(queue, pPresentInfo);
+        }
+        
+        // Create fence for synchronization
+        VkFenceCreateInfo fenceInfo = {};
+        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        
+        result = swapchainData->device->CreateFence(
+            swapchainData->device->device, &fenceInfo, nullptr, &swapchainData->computeFence);
+        if (result != VK_SUCCESS) {
+            LOGE("GN-Framegen: Failed to create fence: %d", result);
+            // Fall back to pass-through
+            return swapchainData->device->QueuePresentKHR(queue, pPresentInfo);
+        }
+    }
     
-    // Present the real frame
+    // TODO: Implement frame history capture
+    // To capture swapchain images for frame generation, we need to:
+    // 1. Create intermediate images for frame history (swapchainData->frameHistory)
+    // 2. Use vkCmdCopyImage to capture current swapchain image
+    // 3. Maintain circular buffer of previous/current frames
+    // 4. Pass these images to GenerateFrames()
+    //
+    // For now, we present the real frame and prepare the infrastructure
+    
     VkResult result = swapchainData->device->QueuePresentKHR(queue, pPresentInfo);
     
     // Update frame counter for tracking previous/current frames
     swapchainData->currentFrame++;
+    
+    LOGI("GN-Framegen: Presented frame %d (command pool/buffer/fence ready for compute integration)",
+         swapchainData->currentFrame);
     
     return result;
 }
