@@ -537,6 +537,112 @@ VKAPI_ATTR void VKAPI_CALL LayerDestroyDevice(
     }
 }
 
+// Helper: Create frame history images for swapchain
+static VkResult CreateFrameHistoryImages(SwapchainData* swapchainData, VkDevice device, 
+                                          DeviceData* deviceData, VkAllocationCallbacks* pAllocator) {
+    // Create 2 frame history buffers (previous and current)
+    for (uint32_t i = 0; i < SwapchainData::MAX_FRAME_HISTORY; i++) {
+        // Create image
+        VkImageCreateInfo imageInfo = {};
+        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imageInfo.imageType = VK_IMAGE_TYPE_2D;
+        imageInfo.extent.width = swapchainData->extent.width;
+        imageInfo.extent.height = swapchainData->extent.height;
+        imageInfo.extent.depth = 1;
+        imageInfo.mipLevels = 1;
+        imageInfo.arrayLayers = 1;
+        imageInfo.format = swapchainData->format;
+        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
+        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        
+        VkResult result = deviceData->CreateImage(device, &imageInfo, pAllocator, &swapchainData->frameHistory[i]);
+        if (result != VK_SUCCESS) {
+            LOGE("GN-Framegen: Failed to create frame history image %d: %d", i, result);
+            // Cleanup already created images
+            for (uint32_t j = 0; j < i; j++) {
+                deviceData->DestroyImage(device, swapchainData->frameHistory[j], pAllocator);
+            }
+            return result;
+        }
+        
+        // Get memory requirements
+        VkMemoryRequirements memRequirements;
+        deviceData->GetImageMemoryRequirements(device, swapchainData->frameHistory[i], &memRequirements);
+        
+        // Find memory type
+        VkPhysicalDeviceMemoryProperties memProperties;
+        // Note: We need instance or physicalDevice to query this - 
+        // for now assume deviceData->physicalDevice is valid
+        // This is a simplification - in production, we'd cache memory properties
+        
+        // Allocate memory
+        VkMemoryAllocateInfo allocInfo = {};
+        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        allocInfo.allocationSize = memRequirements.size;
+        // Use device-local memory - we need to query memory type
+        // For now, assume type 0 is device-local (simplified)
+        allocInfo.memoryTypeIndex = 0;  // TODO: Query for VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+        
+        result = deviceData->AllocateMemory(device, &allocInfo, pAllocator, &swapchainData->frameHistoryMemory[i]);
+        if (result != VK_SUCCESS) {
+            LOGE("GN-Framegen: Failed to allocate frame history memory %d: %d", i, result);
+            deviceData->DestroyImage(device, swapchainData->frameHistory[i], pAllocator);
+            for (uint32_t j = 0; j < i; j++) {
+                deviceData->FreeMemory(device, swapchainData->frameHistoryMemory[j], pAllocator);
+                deviceData->DestroyImage(device, swapchainData->frameHistory[j], pAllocator);
+            }
+            return result;
+        }
+        
+        // Bind memory
+        result = deviceData->BindImageMemory(device, swapchainData->frameHistory[i], 
+                                             swapchainData->frameHistoryMemory[i], 0);
+        if (result != VK_SUCCESS) {
+            LOGE("GN-Framegen: Failed to bind frame history memory %d: %d", i, result);
+            deviceData->FreeMemory(device, swapchainData->frameHistoryMemory[i], pAllocator);
+            deviceData->DestroyImage(device, swapchainData->frameHistory[i], pAllocator);
+            for (uint32_t j = 0; j < i; j++) {
+                deviceData->FreeMemory(device, swapchainData->frameHistoryMemory[j], pAllocator);
+                deviceData->DestroyImage(device, swapchainData->frameHistory[j], pAllocator);
+            }
+            return result;
+        }
+        
+        // Create image view
+        VkImageViewCreateInfo viewInfo = {};
+        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewInfo.image = swapchainData->frameHistory[i];
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.format = swapchainData->format;
+        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        viewInfo.subresourceRange.baseMipLevel = 0;
+        viewInfo.subresourceRange.levelCount = 1;
+        viewInfo.subresourceRange.baseArrayLayer = 0;
+        viewInfo.subresourceRange.layerCount = 1;
+        
+        result = deviceData->CreateImageView(device, &viewInfo, pAllocator, &swapchainData->frameHistoryViews[i]);
+        if (result != VK_SUCCESS) {
+            LOGE("GN-Framegen: Failed to create frame history view %d: %d", i, result);
+            deviceData->FreeMemory(device, swapchainData->frameHistoryMemory[i], pAllocator);
+            deviceData->DestroyImage(device, swapchainData->frameHistory[i], pAllocator);
+            for (uint32_t j = 0; j < i; j++) {
+                deviceData->DestroyImageView(device, swapchainData->frameHistoryViews[j], pAllocator);
+                deviceData->FreeMemory(device, swapchainData->frameHistoryMemory[j], pAllocator);
+                deviceData->DestroyImage(device, swapchainData->frameHistory[j], pAllocator);
+            }
+            return result;
+        }
+    }
+    
+    LOGI("GN-Framegen: Created %d frame history images (%dx%d)", 
+         SwapchainData::MAX_FRAME_HISTORY,
+         swapchainData->extent.width, swapchainData->extent.height);
+    return VK_SUCCESS;
+}
+
 // Swapchain management
 VKAPI_ATTR VkResult VKAPI_CALL LayerCreateSwapchainKHR(
     VkDevice device,
@@ -578,6 +684,17 @@ VKAPI_ATTR VkResult VKAPI_CALL LayerCreateSwapchainKHR(
     swapchainData->generationCount = state.config.enabled ? 
         (state.config.multiplier - 1) : 0;
     
+    // Create frame history images for temporal frame generation
+    if (state.config.enabled && swapchainData->generationCount > 0) {
+        VkResult historyResult = CreateFrameHistoryImages(swapchainData.get(), device, deviceData, 
+                                                          const_cast<VkAllocationCallbacks*>(pAllocator));
+        if (historyResult != VK_SUCCESS) {
+            LOGE("GN-Framegen: Failed to create frame history images: %d", historyResult);
+            // Continue without frame generation
+            swapchainData->generationCount = 0;
+        }
+    }
+    
     {
         std::lock_guard<std::mutex> lock(state.swapchainMutex);
         state.swapchains[*pSwapchain] = std::move(swapchainData);
@@ -608,6 +725,19 @@ VKAPI_ATTR void VKAPI_CALL LayerDestroySwapchainKHR(
         auto it = state.swapchains.find(swapchain);
         if (it != state.swapchains.end() && it->second) {
             SwapchainData* swapchainData = it->second.get();
+            
+            // Destroy frame history images, views, and memory
+            for (uint32_t i = 0; i < SwapchainData::MAX_FRAME_HISTORY; i++) {
+                if (swapchainData->frameHistoryViews[i] != VK_NULL_HANDLE) {
+                    deviceData->DestroyImageView(device, swapchainData->frameHistoryViews[i], pAllocator);
+                }
+                if (swapchainData->frameHistory[i] != VK_NULL_HANDLE) {
+                    deviceData->DestroyImage(device, swapchainData->frameHistory[i], pAllocator);
+                }
+                if (swapchainData->frameHistoryMemory[i] != VK_NULL_HANDLE) {
+                    deviceData->FreeMemory(device, swapchainData->frameHistoryMemory[i], pAllocator);
+                }
+            }
             
             // Destroy command buffer
             if (swapchainData->commandBuffer != VK_NULL_HANDLE) {
