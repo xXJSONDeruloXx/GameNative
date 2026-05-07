@@ -11,7 +11,7 @@ import java.nio.ByteOrder
 import java.nio.channels.FileChannel
 
 /**
- * Manages the GameScopeVK Vulkan ICD for frame generation.
+ * Manages the GameScopeVK Vulkan ICD and GN Framegen Layer for frame generation.
  *
  * Unlike LSFG-VK (which is a Vulkan implicit layer that requires Lossless.dll),
  * GameScopeVK is a Vulkan ICD *wrapper*:
@@ -19,6 +19,12 @@ import java.nio.channels.FileChannel
  *   - Intercepts swapchain presentation, inserts generated frames
  *   - Forwards all other Vulkan calls to the real GPU driver (Turnip/wrapper)
  *   - Has 54 proprietary SPIR-V compute shaders embedded — no Lossless.dll needed
+ *
+ * GN Framegen Layer (New Implementation):
+ *   - Vulkan explicit layer that sits between application and driver
+ *   - Uses same SPIR-V shaders extracted from GameScopeVK
+ *   - Cleaner architecture, easier to integrate and debug
+ *   - Supports same frame generation features via environment variables
  *
  * Control protocol: a 10-byte little-endian mmap file, path in GAMESCOPE_CONTROL_PATH:
  *   offset 0 (u16): FPS limit (0 = no limit)
