@@ -58,6 +58,7 @@ struct DeviceData {
     PFN_vkCmdBindPipeline CmdBindPipeline;
     PFN_vkCmdDispatch CmdDispatch;
     PFN_vkCmdPipelineBarrier CmdPipelineBarrier;
+    PFN_vkCmdCopyImage CmdCopyImage;
     
     // Command buffer management
     PFN_vkCreateCommandPool CreateCommandPool;
@@ -104,6 +105,9 @@ struct SwapchainData {
     VkExtent2D extent;
     VkFormat format;
     uint32_t imageCount;
+    
+    // Swapchain images (for copying to frame history)
+    std::vector<VkImage> swapchainImages;
     
     // Frame generation state
     uint32_t generationCount;  // multiplier - 1

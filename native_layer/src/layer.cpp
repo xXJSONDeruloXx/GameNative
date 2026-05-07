@@ -436,6 +436,8 @@ VKAPI_ATTR VkResult VKAPI_CALL LayerCreateDevice(
         nextGetDeviceProcAddr(*pDevice, "vkCmdDispatch"));
     deviceData->CmdPipelineBarrier = reinterpret_cast<PFN_vkCmdPipelineBarrier>(
         nextGetDeviceProcAddr(*pDevice, "vkCmdPipelineBarrier"));
+    deviceData->CmdCopyImage = reinterpret_cast<PFN_vkCmdCopyImage>(
+        nextGetDeviceProcAddr(*pDevice, "vkCmdCopyImage"));
     
     // Cache function pointers - command buffer
     deviceData->CreateCommandPool = reinterpret_cast<PFN_vkCreateCommandPool>(
@@ -674,10 +676,23 @@ VKAPI_ATTR VkResult VKAPI_CALL LayerCreateSwapchainKHR(
     swapchainData->format = pCreateInfo->imageFormat;
     swapchainData->currentFrame = 0;
     
-    // Get actual image count
+    // Get actual image count and retrieve swapchain images
     uint32_t imageCount = 0;
     deviceData->GetSwapchainImagesKHR(device, *pSwapchain, &imageCount, nullptr);
     swapchainData->imageCount = imageCount;
+    
+    // Store swapchain image handles for copying to frame history
+    swapchainData->swapchainImages.resize(imageCount);
+    if (imageCount > 0) {
+        VkResult imageResult = deviceData->GetSwapchainImagesKHR(device, *pSwapchain, &imageCount, 
+                                                                  swapchainData->swapchainImages.data());
+        if (imageResult != VK_SUCCESS) {
+            LOGI("GN-Framegen: Failed to get swapchain images: %d", imageResult);
+            swapchainData->swapchainImages.clear();
+        } else {
+            LOGI("GN-Framegen: Retrieved %d swapchain images", imageCount);
+        }
+    }
     
     // Set generation count based on config
     auto& state = LayerState::Get();
@@ -870,16 +885,194 @@ VKAPI_ATTR VkResult VKAPI_CALL LayerQueuePresentKHR(
         }
     }
     
-    // TODO: Implement frame history capture
-    // To capture swapchain images for frame generation, we need to:
-    // 1. Create intermediate images for frame history (swapchainData->frameHistory)
-    // 2. Use vkCmdCopyImage to capture current swapchain image
-    // 3. Maintain circular buffer of previous/current frames
-    // 4. Pass these images to GenerateFrames()
-    //
-    // For now, we present the real frame and prepare the infrastructure
+    // Capture frame history and generate interpolated frames
+    // Frame generation workflow:
+    // 1. Record command buffer: capture current swapchain image to frameHistory
+    // 2. If we have previous frame, run compute: optical flow -> warp -> blend
+    // 3. Submit compute work
+    // 4. Wait for compute completion
+    // 5. Present real frame + generated frames
     
-    VkResult result = swapchainData->device->QueuePresentKHR(queue, pPresentInfo);
+    // We need access to the current swapchain image index
+    // This is available from the application's acquire next image call
+    // For now, we'll use a placeholder approach
+    
+    // Record command buffer to capture current frame
+    VkCommandBufferBeginInfo beginInfo = {};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    
+    VkResult result = swapchainData->device->BeginCommandBuffer(swapchainData->commandBuffer, &beginInfo);
+    if (result != VK_SUCCESS) {
+        LOGE("GN-Framegen: Failed to begin command buffer: %d", result);
+        return swapchainData->device->QueuePresentKHR(queue, pPresentInfo);
+    }
+    
+    // Get current history index (where we'll store this frame)
+    uint32_t currentHistoryIdx = swapchainData->historyIndex % SwapchainData::MAX_FRAME_HISTORY;
+    uint32_t previousHistoryIdx = (swapchainData->historyIndex + 1) % SwapchainData::MAX_FRAME_HISTORY;
+    
+    // Transition frame history image to TRANSFER_DST for capture
+    // Note: We need the current swapchain image index from the present info
+    // VkImage swapchainImage = pPresentInfo->pImages[0]; // Not available in present info
+    // 
+    // Since we don't have direct access to the swapchain image being presented,
+    // we need to maintain our own copy. The application renders to the swapchain
+    // image, then calls QueuePresentKHR. We need to copy that image before present.
+    //
+    // One approach: The pPresentInfo contains indices via pImageIndices, but not
+    // the actual VkImage handles. We'd need to track which images belong to which
+    // indices from CreateSwapchainKHR/GetSwapchainImagesKHR.
+    
+    // Transition frame history image to TRANSFER_DST for capture
+    VkImageMemoryBarrier historyBarrier = {};
+    historyBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    historyBarrier.srcAccessMask = 0;
+    historyBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    historyBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    historyBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    historyBarrier.image = swapchainData->frameHistory[currentHistoryIdx];
+    historyBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    historyBarrier.subresourceRange.levelCount = 1;
+    historyBarrier.subresourceRange.layerCount = 1;
+    
+    swapchainData->device->CmdPipelineBarrier(
+        swapchainData->commandBuffer,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0,
+        0, nullptr,
+        0, nullptr,
+        1, &historyBarrier);
+    
+    // Copy current swapchain image to frame history
+    // pPresentInfo->pImageIndices contains the indices of swapchain images being presented
+    if (swapchainData->swapchainImages.size() > 0 && pPresentInfo->pImageIndices) {
+        uint32_t swapchainImageIndex = pPresentInfo->pImageIndices[0];
+        if (swapchainImageIndex < swapchainData->swapchainImages.size()) {
+            VkImage swapchainImage = swapchainData->swapchainImages[swapchainImageIndex];
+            
+            // Transition swapchain image from PRESENT to TRANSFER_SRC
+            VkImageMemoryBarrier swapchainBarrier = {};
+            swapchainBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            swapchainBarrier.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+            swapchainBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            swapchainBarrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+            swapchainBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            swapchainBarrier.image = swapchainImage;
+            swapchainBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            swapchainBarrier.subresourceRange.levelCount = 1;
+            swapchainBarrier.subresourceRange.layerCount = 1;
+            
+            swapchainData->device->CmdPipelineBarrier(
+                swapchainData->commandBuffer,
+                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                0,
+                0, nullptr,
+                0, nullptr,
+                1, &swapchainBarrier);
+            
+            // Copy swapchain image to frame history
+            VkImageCopy copyRegion = {};
+            copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            copyRegion.srcSubresource.layerCount = 1;
+            copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            copyRegion.dstSubresource.layerCount = 1;
+            copyRegion.extent.width = swapchainData->extent.width;
+            copyRegion.extent.height = swapchainData->extent.height;
+            copyRegion.extent.depth = 1;
+            
+            // Copy from swapchain image to frame history buffer
+            swapchainData->device->CmdCopyImage(
+                swapchainData->commandBuffer,
+                swapchainImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                swapchainData->frameHistory[currentHistoryIdx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                1, &copyRegion);
+            
+            LOGI("GN-Framegen: Copied swapchain image %d to history[%d] (%dx%d)",
+                 swapchainImageIndex, currentHistoryIdx,
+                 swapchainData->extent.width, swapchainData->extent.height);
+            
+            // Transition swapchain image back to PRESENT
+            swapchainBarrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            swapchainBarrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+            swapchainBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            swapchainBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+            
+            swapchainData->device->CmdPipelineBarrier(
+                swapchainData->commandBuffer,
+                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                0,
+                0, nullptr,
+                0, nullptr,
+                1, &swapchainBarrier);
+        }
+    }
+    
+    // Transition history buffer to SHADER_READ_ONLY for compute
+    historyBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    historyBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    historyBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    historyBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    
+    swapchainData->device->CmdPipelineBarrier(
+        swapchainData->commandBuffer,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        0,
+        0, nullptr,
+        0, nullptr,
+        1, &historyBarrier);
+    
+    // If we have enough history, run frame generation
+    if (swapchainData->currentFrame >= 1) {
+        // We have at least previous and current frames
+        // GenerateFrames will handle the compute dispatches
+        // For now, just log - full integration needs swapchain image access
+        LOGI("GN-Framegen: Would generate frames between history[%d] and history[%d]",
+             previousHistoryIdx, currentHistoryIdx);
+        
+        // GenerateFrames(swapchainData->commandBuffer,
+        //               swapchainData->frameHistory[currentHistoryIdx],   // current
+        //               swapchainData->frameHistory[previousHistoryIdx],  // previous
+        //               generatedImages, swapchainData->generationCount);
+    }
+    
+    // End command buffer
+    result = swapchainData->device->EndCommandBuffer(swapchainData->commandBuffer);
+    if (result != VK_SUCCESS) {
+        LOGE("GN-Framegen: Failed to end command buffer: %d", result);
+        return swapchainData->device->QueuePresentKHR(queue, pPresentInfo);
+    }
+    
+    // Submit compute work
+    VkSubmitInfo submitInfo = {};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &swapchainData->commandBuffer;
+    
+    // Reset fence before submission
+    swapchainData->device->ResetFences(swapchainData->device->device, 1, &swapchainData->computeFence);
+    
+    result = swapchainData->device->QueueSubmit(queue, 1, &submitInfo, swapchainData->computeFence);
+    if (result != VK_SUCCESS) {
+        LOGE("GN-Framegen: Failed to submit compute work: %d", result);
+        return swapchainData->device->QueuePresentKHR(queue, pPresentInfo);
+    }
+    
+    // Wait for compute to complete before present
+    // In production, use proper synchronization (semaphores) instead of blocking wait
+    result = swapchainData->device->WaitForFences(swapchainData->device->device, 1, 
+                                                   &swapchainData->computeFence, VK_TRUE, UINT64_MAX);
+    if (result != VK_SUCCESS) {
+        LOGE("GN-Framegen: Failed to wait for compute fence: %d", result);
+        // Continue with present even if compute failed
+    }
+    
+    // Now present the real frame
+    result = swapchainData->device->QueuePresentKHR(queue, pPresentInfo);
     
     // Update frame counter for tracking previous/current frames
     swapchainData->currentFrame++;
