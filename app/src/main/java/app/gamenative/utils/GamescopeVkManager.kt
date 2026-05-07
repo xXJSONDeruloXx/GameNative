@@ -68,7 +68,7 @@ object GamescopeVkManager {
     private const val CTRL_FILE_SIZE = 10
 
     // Bump when the bundled .so changes
-    private const val RUNTIME_VERSION = "gamescope-vk-v1.0.0"
+    private const val RUNTIME_VERSION = "gamescope-vk-v1.0.2"
 
     // Candidate real-driver .so names, checked in order
     // We check both the container's usr/lib AND the adrenotools content dir
@@ -192,6 +192,25 @@ object GamescopeVkManager {
         if (!writeControlFile(container, controlFile)) {
             Timber.tag(TAG).e("Failed to write control file")
             return false
+        }
+
+        // Add shared imagefs/usr/lib to LD_LIBRARY_PATH so libGameScopeVK.so
+        // can find libX11.so, libX11-xcb.so, libxcb.so, etc.
+        // rootDir canonical = <filesDir>/imagefs_shared/home/xuser-STEAM_XXX
+        // <filesDir>/imagefs/usr/lib has the X11/XCB shared libraries.
+        val drvFilesDir = rootDir.canonicalFile?.parentFile?.parentFile?.parentFile
+        if (drvFilesDir != null) {
+            val sharedImagefsLib = File(drvFilesDir, "imagefs/usr/lib")
+            if (sharedImagefsLib.isDirectory) {
+                val currentLdPath = envVars.get("LD_LIBRARY_PATH") ?: ""
+                val newLdPath = if (currentLdPath.isNotEmpty()) {
+                    sharedImagefsLib.absolutePath + ":" + currentLdPath
+                } else {
+                    sharedImagefsLib.absolutePath
+                }
+                envVars.put("LD_LIBRARY_PATH", newLdPath)
+                Timber.tag(TAG).d("Added shared imagefs lib path: " + sharedImagefsLib.absolutePath)
+            }
         }
 
         // VK_ICD_FILENAMES: GameScopeVK replaces the existing ICD
@@ -351,7 +370,7 @@ object GamescopeVkManager {
             if (f.isFile) return f.absolutePath
         }
         // Fallback: shared imagefs usr/lib (where wrapper usually is after extra_libs extraction)
-        val sharedLib = rootDir.parentFile?.let { File(it, "imagefs/usr/lib") }
+        val sharedLib = appFilesDir?.let { File(it, "imagefs/usr/lib") }
         for (name in DRIVER_CANDIDATES) {
             val f = sharedLib?.let { File(it, name) } ?: continue
             if (f.isFile) return f.absolutePath
