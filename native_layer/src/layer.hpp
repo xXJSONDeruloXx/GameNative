@@ -40,6 +40,10 @@ struct DeviceData {
     VkPhysicalDevice physicalDevice;
     InstanceData* instance;
     
+    // Queue family indices
+    uint32_t graphicsQueueFamily = UINT32_MAX;
+    uint32_t computeQueueFamily = UINT32_MAX;
+    
     // Cached function pointers from next layer/driver
     PFN_vkCreateSwapchainKHR CreateSwapchainKHR;
     PFN_vkDestroySwapchainKHR DestroySwapchainKHR;
@@ -54,6 +58,42 @@ struct DeviceData {
     PFN_vkCmdBindPipeline CmdBindPipeline;
     PFN_vkCmdDispatch CmdDispatch;
     PFN_vkCmdPipelineBarrier CmdPipelineBarrier;
+    
+    // Command buffer management
+    PFN_vkCreateCommandPool CreateCommandPool;
+    PFN_vkDestroyCommandPool DestroyCommandPool;
+    PFN_vkAllocateCommandBuffers AllocateCommandBuffers;
+    PFN_vkFreeCommandBuffers FreeCommandBuffers;
+    PFN_vkBeginCommandBuffer BeginCommandBuffer;
+    PFN_vkEndCommandBuffer EndCommandBuffer;
+    PFN_vkQueueSubmit QueueSubmit;
+    PFN_vkCreateFence CreateFence;
+    PFN_vkDestroyFence DestroyFence;
+    PFN_vkWaitForFences WaitForFences;
+    PFN_vkResetFences ResetFences;
+    
+    // Image/memory management
+    PFN_vkCreateImage CreateImage;
+    PFN_vkDestroyImage DestroyImage;
+    PFN_vkCreateImageView CreateImageView;
+    PFN_vkDestroyImageView DestroyImageView;
+    PFN_vkAllocateMemory AllocateMemory;
+    PFN_vkFreeMemory FreeMemory;
+    PFN_vkBindImageMemory BindImageMemory;
+    PFN_vkGetImageMemoryRequirements GetImageMemoryRequirements;
+    PFN_vkCreateBuffer CreateBuffer;
+    PFN_vkDestroyBuffer DestroyBuffer;
+    PFN_vkBindBufferMemory BindBufferMemory;
+    PFN_vkGetBufferMemoryRequirements GetBufferMemoryRequirements;
+    PFN_vkMapMemory MapMemory;
+    PFN_vkUnmapMemory UnmapMemory;
+    
+    // Descriptor management
+    PFN_vkCreateDescriptorPool CreateDescriptorPool;
+    PFN_vkDestroyDescriptorPool DestroyDescriptorPool;
+    PFN_vkAllocateDescriptorSets AllocateDescriptorSets;
+    PFN_vkFreeDescriptorSets FreeDescriptorSets;
+    PFN_vkUpdateDescriptorSets UpdateDescriptorSets;
 };
 
 // Per-swapchain framegen data
@@ -71,6 +111,18 @@ struct SwapchainData {
     
     // Frame generator instance
     std::unique_ptr<FrameGenerator> frameGenerator;
+    
+    // Command pool for compute operations
+    VkCommandPool commandPool = VK_NULL_HANDLE;
+    VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+    VkFence computeFence = VK_NULL_HANDLE;
+    
+    // Frame history for temporal interpolation
+    static constexpr uint32_t MAX_FRAME_HISTORY = 2;
+    VkImage frameHistory[MAX_FRAME_HISTORY] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+    VkImageView frameHistoryViews[MAX_FRAME_HISTORY] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+    VkDeviceMemory frameHistoryMemory[MAX_FRAME_HISTORY] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+    uint32_t historyIndex = 0;  // Current index in circular buffer
 };
 
 // Global dispatch table for the layer

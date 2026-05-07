@@ -324,7 +324,7 @@ VKAPI_ATTR VkResult VKAPI_CALL LayerCreateDevice(
     deviceData->physicalDevice = physicalDevice;
     deviceData->nextGetDeviceProcAddr = nextGetDeviceProcAddr;
     
-    // Cache function pointers
+    // Cache function pointers - swapchain
     deviceData->CreateSwapchainKHR = reinterpret_cast<PFN_vkCreateSwapchainKHR>(
         nextGetDeviceProcAddr(*pDevice, "vkCreateSwapchainKHR"));
     deviceData->DestroySwapchainKHR = reinterpret_cast<PFN_vkDestroySwapchainKHR>(
@@ -336,13 +336,97 @@ VKAPI_ATTR VkResult VKAPI_CALL LayerCreateDevice(
     deviceData->QueuePresentKHR = reinterpret_cast<PFN_vkQueuePresentKHR>(
         nextGetDeviceProcAddr(*pDevice, "vkQueuePresentKHR"));
     
+    // Cache function pointers - shader/pipeline
+    deviceData->CreateShaderModule = reinterpret_cast<PFN_vkCreateShaderModule>(
+        nextGetDeviceProcAddr(*pDevice, "vkCreateShaderModule"));
+    deviceData->DestroyShaderModule = reinterpret_cast<PFN_vkDestroyShaderModule>(
+        nextGetDeviceProcAddr(*pDevice, "vkDestroyShaderModule"));
+    deviceData->CreateDescriptorSetLayout = reinterpret_cast<PFN_vkCreateDescriptorSetLayout>(
+        nextGetDeviceProcAddr(*pDevice, "vkCreateDescriptorSetLayout"));
+    deviceData->CreatePipelineLayout = reinterpret_cast<PFN_vkCreatePipelineLayout>(
+        nextGetDeviceProcAddr(*pDevice, "vkCreatePipelineLayout"));
+    deviceData->CreateComputePipelines = reinterpret_cast<PFN_vkCreateComputePipelines>(
+        nextGetDeviceProcAddr(*pDevice, "vkCreateComputePipelines"));
+    deviceData->CmdBindPipeline = reinterpret_cast<PFN_vkCmdBindPipeline>(
+        nextGetDeviceProcAddr(*pDevice, "vkCmdBindPipeline"));
+    deviceData->CmdDispatch = reinterpret_cast<PFN_vkCmdDispatch>(
+        nextGetDeviceProcAddr(*pDevice, "vkCmdDispatch"));
+    deviceData->CmdPipelineBarrier = reinterpret_cast<PFN_vkCmdPipelineBarrier>(
+        nextGetDeviceProcAddr(*pDevice, "vkCmdPipelineBarrier"));
+    
+    // Cache function pointers - command buffer
+    deviceData->CreateCommandPool = reinterpret_cast<PFN_vkCreateCommandPool>(
+        nextGetDeviceProcAddr(*pDevice, "vkCreateCommandPool"));
+    deviceData->DestroyCommandPool = reinterpret_cast<PFN_vkDestroyCommandPool>(
+        nextGetDeviceProcAddr(*pDevice, "vkDestroyCommandPool"));
+    deviceData->AllocateCommandBuffers = reinterpret_cast<PFN_vkAllocateCommandBuffers>(
+        nextGetDeviceProcAddr(*pDevice, "vkAllocateCommandBuffers"));
+    deviceData->FreeCommandBuffers = reinterpret_cast<PFN_vkFreeCommandBuffers>(
+        nextGetDeviceProcAddr(*pDevice, "vkFreeCommandBuffers"));
+    deviceData->BeginCommandBuffer = reinterpret_cast<PFN_vkBeginCommandBuffer>(
+        nextGetDeviceProcAddr(*pDevice, "vkBeginCommandBuffer"));
+    deviceData->EndCommandBuffer = reinterpret_cast<PFN_vkEndCommandBuffer>(
+        nextGetDeviceProcAddr(*pDevice, "vkEndCommandBuffer"));
+    deviceData->QueueSubmit = reinterpret_cast<PFN_vkQueueSubmit>(
+        nextGetDeviceProcAddr(*pDevice, "vkQueueSubmit"));
+    deviceData->CreateFence = reinterpret_cast<PFN_vkCreateFence>(
+        nextGetDeviceProcAddr(*pDevice, "vkCreateFence"));
+    deviceData->DestroyFence = reinterpret_cast<PFN_vkDestroyFence>(
+        nextGetDeviceProcAddr(*pDevice, "vkDestroyFence"));
+    deviceData->WaitForFences = reinterpret_cast<PFN_vkWaitForFences>(
+        nextGetDeviceProcAddr(*pDevice, "vkWaitForFences"));
+    deviceData->ResetFences = reinterpret_cast<PFN_vkResetFences>(
+        nextGetDeviceProcAddr(*pDevice, "vkResetFences"));
+    
+    // Cache function pointers - image/memory
+    deviceData->CreateImage = reinterpret_cast<PFN_vkCreateImage>(
+        nextGetDeviceProcAddr(*pDevice, "vkCreateImage"));
+    deviceData->DestroyImage = reinterpret_cast<PFN_vkDestroyImage>(
+        nextGetDeviceProcAddr(*pDevice, "vkDestroyImage"));
+    deviceData->CreateImageView = reinterpret_cast<PFN_vkCreateImageView>(
+        nextGetDeviceProcAddr(*pDevice, "vkCreateImageView"));
+    deviceData->DestroyImageView = reinterpret_cast<PFN_vkDestroyImageView>(
+        nextGetDeviceProcAddr(*pDevice, "vkDestroyImageView"));
+    deviceData->AllocateMemory = reinterpret_cast<PFN_vkAllocateMemory>(
+        nextGetDeviceProcAddr(*pDevice, "vkAllocateMemory"));
+    deviceData->FreeMemory = reinterpret_cast<PFN_vkFreeMemory>(
+        nextGetDeviceProcAddr(*pDevice, "vkFreeMemory"));
+    deviceData->BindImageMemory = reinterpret_cast<PFN_vkBindImageMemory>(
+        nextGetDeviceProcAddr(*pDevice, "vkBindImageMemory"));
+    deviceData->GetImageMemoryRequirements = reinterpret_cast<PFN_vkGetImageMemoryRequirements>(
+        nextGetDeviceProcAddr(*pDevice, "vkGetImageMemoryRequirements"));
+    deviceData->CreateBuffer = reinterpret_cast<PFN_vkCreateBuffer>(
+        nextGetDeviceProcAddr(*pDevice, "vkCreateBuffer"));
+    deviceData->DestroyBuffer = reinterpret_cast<PFN_vkDestroyBuffer>(
+        nextGetDeviceProcAddr(*pDevice, "vkDestroyBuffer"));
+    deviceData->BindBufferMemory = reinterpret_cast<PFN_vkBindBufferMemory>(
+        nextGetDeviceProcAddr(*pDevice, "vkBindBufferMemory"));
+    deviceData->GetBufferMemoryRequirements = reinterpret_cast<PFN_vkGetBufferMemoryRequirements>(
+        nextGetDeviceProcAddr(*pDevice, "vkGetBufferMemoryRequirements"));
+    deviceData->MapMemory = reinterpret_cast<PFN_vkMapMemory>(
+        nextGetDeviceProcAddr(*pDevice, "vkMapMemory"));
+    deviceData->UnmapMemory = reinterpret_cast<PFN_vkUnmapMemory>(
+        nextGetDeviceProcAddr(*pDevice, "vkUnmapMemory"));
+    
+    // Cache function pointers - descriptor
+    deviceData->CreateDescriptorPool = reinterpret_cast<PFN_vkCreateDescriptorPool>(
+        nextGetDeviceProcAddr(*pDevice, "vkCreateDescriptorPool"));
+    deviceData->DestroyDescriptorPool = reinterpret_cast<PFN_vkDestroyDescriptorPool>(
+        nextGetDeviceProcAddr(*pDevice, "vkDestroyDescriptorPool"));
+    deviceData->AllocateDescriptorSets = reinterpret_cast<PFN_vkAllocateDescriptorSets>(
+        nextGetDeviceProcAddr(*pDevice, "vkAllocateDescriptorSets"));
+    deviceData->FreeDescriptorSets = reinterpret_cast<PFN_vkFreeDescriptorSets>(
+        nextGetDeviceProcAddr(*pDevice, "vkFreeDescriptorSets"));
+    deviceData->UpdateDescriptorSets = reinterpret_cast<PFN_vkUpdateDescriptorSets>(
+        nextGetDeviceProcAddr(*pDevice, "vkUpdateDescriptorSets"));
+    
     {
         auto& state = LayerState::Get();
         std::lock_guard<std::mutex> lock(state.deviceMutex);
         state.devices[*pDevice] = std::move(deviceData);
     }
     
-    LOGI("GN-Framegen: Device created successfully");
+    LOGI("GN-Framegen: Device created successfully (cached %d function pointers)", 30);
     return VK_SUCCESS;
 }
 
