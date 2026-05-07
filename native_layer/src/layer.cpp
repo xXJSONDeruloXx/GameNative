@@ -17,6 +17,8 @@
 #define LOGE(...) fprintf(stderr, "ERROR: "); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n")
 #endif
 
+#include "version.hpp"
+
 namespace GN {
 namespace Framegen {
 
@@ -231,7 +233,9 @@ VKAPI_ATTR VkResult VKAPI_CALL LayerCreateInstance(
         state.instances[*pInstance] = std::move(instanceData);
     }
     
-    LOGI("GN-Framegen: Instance created successfully");
+    LOGI("GN-Framegen: Instance created successfully (%s, shaders=%s)",
+         GN::Framegen::GetVersionString(),
+         GN::Framegen::SHADERS_EMBEDDED ? "embedded" : "external");
     return VK_SUCCESS;
 }
 

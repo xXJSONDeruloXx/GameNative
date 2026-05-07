@@ -11,7 +11,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Find Vulkan
-find_package(Vulkan REQUIRED)
+if(BUILD_FOR_ANDROID)
+    # Android NDK provides Vulkan via the toolchain
+    # We'll use the headers from the NDK
+    set(VULKAN_FOUND TRUE)
+else()
+    find_package(Vulkan REQUIRED)
+endif()
 
 # Source files
 set(SOURCES
@@ -27,6 +33,7 @@ set(HEADERS
     src/framegen.hpp
     src/descriptor_manager.hpp
     src/shader_manager.hpp
+    src/version.hpp
 )
 
 # Embedded shaders
@@ -36,15 +43,27 @@ if(EMBED_SHADERS)
     add_compile_definitions(EMBED_SHADERS=1)
 endif()
 
+# Android NDK include paths for Vulkan and system headers
+if(BUILD_FOR_ANDROID AND DEFINED ANDROID_NDK)
+    # Add NDK system and Vulkan headers
+    include_directories(
+        ${ANDROID_NDK}/sources/android/native_app_glue
+    )
+endif()
+
 # Android-specific settings
 if(BUILD_FOR_ANDROID)
     find_library(ANDROID_LIBRARY android)
     find_library(LOG_LIBRARY log)
     
+    # For Android NDK, Vulkan is available as part of the NDK toolchain
+    # We link against vulkan and add the NDK include paths
+    find_library(VULKAN_LIBRARY vulkan)
+    
     add_library(gn-framegen SHARED ${SOURCES} ${HEADERS})
     
     target_link_libraries(gn-framegen
-        Vulkan::Vulkan
+        ${VULKAN_LIBRARY}
         ${ANDROID_LIBRARY}
         ${LOG_LIBRARY}
     )
