@@ -19,6 +19,7 @@ import app.gamenative.ui.component.settings.SettingsMultiListDropdown
 import app.gamenative.ui.theme.settingsTileColors
 import app.gamenative.ui.theme.settingsTileColorsAlt
 import app.gamenative.utils.LsfgVkManager
+import app.gamenative.utils.GamescopeVkManager
 import com.alorma.compose.settings.ui.SettingsGroup
 import com.alorma.compose.settings.ui.SettingsSwitch
 import com.winlator.contents.ContentProfile
@@ -325,6 +326,10 @@ fun GraphicsTabContent(state: ContainerConfigState) {
         // with a Vortek/Adreno graphics driver.
         LsfgSection(state)
 
+        // GameScopeVK Frame Generation — experimental, no Lossless.dll required.
+        // Uses a Vulkan ICD wrapper with embedded proprietary SPIR-V shaders.
+        GamescopeVkSection(state)
+
         SettingsSwitch(
             colors = settingsTileColorsAlt(),
             title = { Text(text = stringResource(R.string.use_dri3)) },
@@ -507,6 +512,80 @@ private fun LsfgSection(state: ContainerConfigState) {
                     onCheckedChange = {},
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun GamescopeVkSection(state: ContainerConfigState) {
+    val config = state.config.value
+    val supported = config.containerVariant.equals(Container.BIONIC, ignoreCase = true)
+    if (!supported) return
+
+    val multiplierLabels = listOf("2×", "3×", "4×")
+    val modelLabels = listOf("Default", "Clear")
+
+    SettingsGroup(title = { Text("GameScopeVK (Experimental)") }) {
+        SettingsSwitch(
+            colors = settingsTileColorsAlt(),
+            title = { Text("Enable GameScopeVK Frame Generation") },
+            subtitle = { Text("Vulkan ICD wrapper, no Lossless.dll needed. Disables LSFG-VK.") },
+            state = config.gamescopeVkEnabled,
+            onCheckedChange = { enabled ->
+                // Disable LSFG-VK when GameScopeVK is turned on (they conflict)
+                state.config.value = config.copy(
+                    gamescopeVkEnabled = enabled,
+                    lsfgEnabled = if (enabled) false else config.lsfgEnabled,
+                )
+            },
+        )
+
+        if (config.gamescopeVkEnabled) {
+            // Multiplier: 2×, 3×, 4×
+            SettingsListDropdown(
+                colors = settingsTileColorsAlt(),
+                title = { Text("Multiplier") },
+                subtitle = { Text("Generated frames per real frame") },
+                items = multiplierLabels,
+                value = (config.gamescopeVkMultiplier - 2).coerceIn(0, 2),
+                onItemSelected = { idx ->
+                    state.config.value = config.copy(gamescopeVkMultiplier = idx + 2)
+                },
+            )
+
+            // Flow scale slider (0.2 – 1.0)
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Text(
+                    text = "Flow Scale: ${"%.2f".format(config.gamescopeVkFlowScale)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    text = "Lower = faster, fewer artifacts. Higher = smoother motion.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Slider(
+                    value = config.gamescopeVkFlowScale,
+                    onValueChange = { v ->
+                        val snapped = (v * 20).roundToInt() / 20f // snap to 0.05 steps
+                        state.config.value = config.copy(gamescopeVkFlowScale = snapped.coerceIn(0.2f, 1.0f))
+                    },
+                    valueRange = 0.2f..1.0f,
+                    steps = 15,
+                )
+            }
+
+            // Model: Default / Clear
+            SettingsListDropdown(
+                colors = settingsTileColorsAlt(),
+                title = { Text("Model") },
+                subtitle = { Text("Default: balanced. Clear: higher quality, fewer artifacts.") },
+                items = modelLabels,
+                value = config.gamescopeVkModel.coerceIn(0, 1),
+                onItemSelected = { idx ->
+                    state.config.value = config.copy(gamescopeVkModel = idx)
+                },
+            )
         }
     }
 }

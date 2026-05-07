@@ -7,6 +7,7 @@ import app.gamenative.enums.Marker
 import app.gamenative.service.SteamService
 import app.gamenative.service.amazon.AmazonService
 import app.gamenative.utils.LsfgVkManager
+import app.gamenative.utils.GamescopeVkManager
 import app.gamenative.service.epic.EpicService
 import app.gamenative.service.gog.GOGConstants
 import app.gamenative.service.gog.GOGService
@@ -320,6 +321,11 @@ object ContainerUtils {
             sharpnessDenoise = container.getExtra("sharpnessDenoise", "100").toIntOrNull() ?: 100,
             // LSFG Vulkan frame generation
             lsfgEnabled = container.getExtra(LsfgVkManager.EXTRA_ARMED, "false").toBoolean(),
+            // GameScopeVK frame generation
+            gamescopeVkEnabled = container.getExtra(GamescopeVkManager.EXTRA_ENABLED, "false").toBoolean(),
+            gamescopeVkMultiplier = container.getExtra(GamescopeVkManager.EXTRA_MULTIPLIER, "2").toIntOrNull() ?: 2,
+            gamescopeVkFlowScale = container.getExtra(GamescopeVkManager.EXTRA_FLOW_SCALE, "0.6").toFloatOrNull() ?: 0.6f,
+            gamescopeVkModel = container.getExtra(GamescopeVkManager.EXTRA_MODEL, "0").toIntOrNull() ?: 0,
         )
     }
 
@@ -488,6 +494,11 @@ object ContainerUtils {
         container.putExtra("sharpnessDenoise", containerData.sharpnessDenoise.toString())
         // LSFG Vulkan frame generation
         container.putExtra(LsfgVkManager.EXTRA_ARMED, containerData.lsfgEnabled.toString())
+        // GameScopeVK frame generation
+        container.putExtra(GamescopeVkManager.EXTRA_ENABLED, containerData.gamescopeVkEnabled.toString())
+        container.putExtra(GamescopeVkManager.EXTRA_MULTIPLIER, containerData.gamescopeVkMultiplier.toString())
+        container.putExtra(GamescopeVkManager.EXTRA_FLOW_SCALE, containerData.gamescopeVkFlowScale.toString())
+        container.putExtra(GamescopeVkManager.EXTRA_MODEL, containerData.gamescopeVkModel.toString())
         try {
             container.language = containerData.language
         } catch (e: Exception) {

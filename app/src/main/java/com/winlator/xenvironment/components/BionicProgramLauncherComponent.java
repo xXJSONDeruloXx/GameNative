@@ -17,6 +17,7 @@ import androidx.annotation.NonNull;
 
 import com.winlator.PrefManager;
 
+import app.gamenative.utils.GamescopeVkManager;
 import app.gamenative.utils.LsfgVkManager;
 import com.winlator.box86_64.Box86_64Preset;
 import com.winlator.box86_64.Box86_64PresetManager;
@@ -315,7 +316,12 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
             envVars.putAll(this.envVars);
         }
 
-        if (LsfgVkManager.isSupported(container)) {
+        if (GamescopeVkManager.isEnabled(container)) {
+            // GameScopeVK (no Lossless.dll required) — takes over the ICD slot,
+            // so LSFG-VK must not also be installed.
+            GamescopeVkManager.ensureRuntimeInstalled(environment.getContext(), container);
+            GamescopeVkManager.applyLaunchEnv(container, envVars);
+        } else if (LsfgVkManager.isSupported(container)) {
             LsfgVkManager.ensureRuntimeInstalled(environment.getContext(), container);
             LsfgVkManager.writeConfig(container);
             LsfgVkManager.applyLaunchEnv(container, envVars);

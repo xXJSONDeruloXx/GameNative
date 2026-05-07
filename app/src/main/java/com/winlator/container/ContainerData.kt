@@ -97,6 +97,11 @@ data class ContainerData(
     // LSFG Vulkan frame generation
     /** Whether LSFG frame generation is enabled for this container */
     val lsfgEnabled: Boolean = false,
+    // GameScopeVK frame generation (experimental, no Lossless.dll required)
+    val gamescopeVkEnabled: Boolean = false,
+    val gamescopeVkMultiplier: Int = 2,
+    val gamescopeVkFlowScale: Float = 0.6f,
+    val gamescopeVkModel: Int = 0,
 ) {
     companion object {
         val Saver = mapSaver(
@@ -161,6 +166,10 @@ data class ContainerData(
                     "sharpnessLevel" to state.sharpnessLevel,
                     "sharpnessDenoise" to state.sharpnessDenoise,
                     "lsfgEnabled" to state.lsfgEnabled,
+                    "gamescopeVkEnabled" to state.gamescopeVkEnabled,
+                    "gamescopeVkMultiplier" to state.gamescopeVkMultiplier,
+                    "gamescopeVkFlowScale" to state.gamescopeVkFlowScale,
+                    "gamescopeVkModel" to state.gamescopeVkModel,
                 )
             },
             restore = { savedMap ->
@@ -224,6 +233,10 @@ data class ContainerData(
                     sharpnessLevel = (savedMap["sharpnessLevel"] as? Int) ?: 100,
                     sharpnessDenoise = (savedMap["sharpnessDenoise"] as? Int) ?: 100,
                     lsfgEnabled = (savedMap["lsfgEnabled"] as? Boolean) ?: false,
+                    gamescopeVkEnabled = (savedMap["gamescopeVkEnabled"] as? Boolean) ?: false,
+                    gamescopeVkMultiplier = (savedMap["gamescopeVkMultiplier"] as? Int) ?: 2,
+                    gamescopeVkFlowScale = (savedMap["gamescopeVkFlowScale"] as? Float) ?: 0.6f,
+                    gamescopeVkModel = (savedMap["gamescopeVkModel"] as? Int) ?: 0,
                 )
             },
         )
