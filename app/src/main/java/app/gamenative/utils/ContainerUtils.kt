@@ -8,6 +8,7 @@ import app.gamenative.service.SteamService
 import app.gamenative.service.amazon.AmazonService
 import app.gamenative.utils.LsfgVkManager
 import app.gamenative.utils.GamescopeVkManager
+import app.gamenative.utils.GNFramegenManager
 import app.gamenative.service.epic.EpicService
 import app.gamenative.service.gog.GOGConstants
 import app.gamenative.service.gog.GOGService
@@ -326,6 +327,8 @@ object ContainerUtils {
             gamescopeVkMultiplier = container.getExtra(GamescopeVkManager.EXTRA_MULTIPLIER, "2").toIntOrNull() ?: 2,
             gamescopeVkFlowScale = container.getExtra(GamescopeVkManager.EXTRA_FLOW_SCALE, "0.6").toFloatOrNull() ?: 0.6f,
             gamescopeVkModel = container.getExtra(GamescopeVkManager.EXTRA_MODEL, "0").toIntOrNull() ?: 0,
+            // GN Framegen Layer
+            gnFramegenEnabled = container.getExtra(GNFramegenManager.EXTRA_ENABLED, "false").toBoolean(),
         )
     }
 
@@ -499,6 +502,8 @@ object ContainerUtils {
         container.putExtra(GamescopeVkManager.EXTRA_MULTIPLIER, containerData.gamescopeVkMultiplier.toString())
         container.putExtra(GamescopeVkManager.EXTRA_FLOW_SCALE, containerData.gamescopeVkFlowScale.toString())
         container.putExtra(GamescopeVkManager.EXTRA_MODEL, containerData.gamescopeVkModel.toString())
+        // GN Framegen Layer
+        container.putExtra(GNFramegenManager.EXTRA_ENABLED, containerData.gnFramegenEnabled.toString())
         try {
             container.language = containerData.language
         } catch (e: Exception) {

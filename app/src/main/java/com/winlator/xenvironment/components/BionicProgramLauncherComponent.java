@@ -19,6 +19,7 @@ import com.winlator.PrefManager;
 
 import app.gamenative.utils.GamescopeDirectRendering;
 import app.gamenative.utils.GamescopeVkManager;
+import app.gamenative.utils.GNFramegenManager;
 import app.gamenative.utils.LsfgVkManager;
 import com.winlator.box86_64.Box86_64Preset;
 import com.winlator.box86_64.Box86_64PresetManager;
@@ -331,6 +332,10 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
             // Start the DirectRendering socket server so GameScopeVK can present frames.
             // Must be running BEFORE the game process connects.
             GamescopeDirectRendering.INSTANCE.start(container.getRootDir(), null);
+        } else if (GNFramegenManager.isEnabled(container)) {
+            // GN Framegen Layer (self-contained Vulkan explicit layer)
+            GNFramegenManager.ensureRuntimeInstalled(environment.getContext(), container);
+            GNFramegenManager.applyLaunchEnv(container, envVars);
         } else if (LsfgVkManager.isSupported(container)) {
             LsfgVkManager.ensureRuntimeInstalled(environment.getContext(), container);
             LsfgVkManager.writeConfig(container);
