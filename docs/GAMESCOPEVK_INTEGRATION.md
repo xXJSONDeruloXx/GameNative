@@ -1,9 +1,28 @@
 # GameScopeVK Integration into GameNative
 
-## Status: DR Server Implemented — Two Remaining Issues
+## Status: DR Server Implemented — XCB DRI3 Swapchain Is the Real Blocker
 
 1. **DirectRendering socket server** ✅ IMPLEMENTED — `libgamescope_dr.so` listens on `DR_SOCK_PATH`, accepts GameScopeVK connections
-2. **Game-specific hang** — Alan Wake stops at `vkCreateInstance` through GameScopeVK (never reaches `vkCreateDevice`). DreamsOfAether previously worked through `vkCreateDevice` + `Frame interpolation backend created`.
+2. **DR connection never happens** — GameScopeVK only connects to DR server AFTER XCB DRI3 swapchain creation succeeds. Since GameNative's XServer doesn't support the specific DRI3 operations GameScopeVK needs, swapchain creation fails silently at step 2, and GameScopeVK never progresses to the DR stage.
+3. **Game-specific**: Alan Wake stops at `vkCreateInstance` (hangs during physical device enumeration). DreamsOfAether reaches `vkCreateDevice` + `wellknown engine DXVK detected` but no further.
+
+### Sequence comparison
+
+**GameHub (working at 15:39):**
+1. `vkCreateDevice` ✅
+2. `wellknown engine DXVK detected` ✅
+3. `GameScope control enabled` ✅ (control file read)
+4. `Create 3 swapchain images` ✅ (XCB DRI3 swapchain works)
+5. `Frame interpolation backend created` ✅
+6. DR socket connection happens here
+
+**GameNative (DreamsOfAether, 16:05):**
+1. `vkCreateDevice` ✅
+2. `wellknown engine DXVK detected` ✅
+3. ~~control enabled~~ ❌ (never appears)
+4. ~~swapchain~~ ❌ (XCB DRI3 fails silently)
+5. ~~backend created~~ ❌
+6. ~~DR connection~~ ❌ (never attempted)
 
 ---
 
