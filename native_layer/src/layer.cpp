@@ -8,11 +8,13 @@
 #ifdef __ANDROID__
 #include <android/log.h>
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, "GN-Framegen", __VA_ARGS__)
+#define LOGW(...) __android_log_print(ANDROID_LOG_WARN, "GN-Framegen", __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "GN-Framegen", __VA_ARGS__)
 #else
 #include <cstdio>
 #define LOGI(...) printf(__VA_ARGS__); printf("\n")
-#define LOGE(...) fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n")
+#define LOGW(...) fprintf(stderr, "WARN: "); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n")
+#define LOGE(...) fprintf(stderr, "ERROR: "); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n")
 #endif
 
 namespace GN {
@@ -1027,17 +1029,39 @@ VKAPI_ATTR VkResult VKAPI_CALL LayerQueuePresentKHR(
         1, &historyBarrier);
     
     // If we have enough history, run frame generation
-    if (swapchainData->currentFrame >= 1) {
+    uint32_t generatedFrameCount = 0;
+    if (swapchainData->currentFrame >= 1 && swapchainData->frameGenerator) {
         // We have at least previous and current frames
-        // GenerateFrames will handle the compute dispatches
-        // For now, just log - full integration needs swapchain image access
-        LOGI("GN-Framegen: Would generate frames between history[%d] and history[%d]",
-             previousHistoryIdx, currentHistoryIdx);
+        // GenerateFrames will add compute dispatches to the command buffer
+        LOGI("GN-Framegen: Generating %d frames between history[%d] and history[%d]",
+             swapchainData->generationCount, previousHistoryIdx, currentHistoryIdx);
         
-        // GenerateFrames(swapchainData->commandBuffer,
-        //               swapchainData->frameHistory[currentHistoryIdx],   // current
-        //               swapchainData->frameHistory[previousHistoryIdx],  // previous
-        //               generatedImages, swapchainData->generationCount);
+        // Get generated images from FrameGenerator
+        std::vector<VkImage> generatedImages(swapchainData->generationCount);
+        
+        generatedFrameCount = swapchainData->frameGenerator->GenerateFrames(
+            swapchainData->commandBuffer,
+            swapchainData->frameHistory[currentHistoryIdx],   // current
+            swapchainData->frameHistory[previousHistoryIdx],    // previous
+            generatedImages.data(),
+            swapchainData->generationCount);
+        
+        if (generatedFrameCount > 0) {
+            LOGI("GN-Framegen: Successfully generated %d frames", generatedFrameCount);
+            
+            // TODO: Present generated frames
+            // Challenge: generatedImages are VkImage objects, not swapchain images
+            // Options:
+            // 1. Copy generated frames to additional swapchain images (need more swapchain images)
+            // 2. Create a presentation mechanism for non-swapchain images
+            // 3. Use a compositor that can display arbitrary images
+            //
+            // For now, we generate the frames but only present the real frame
+            // Full implementation requires coordination with swapchain creation
+            // to have enough images for real + generated frames
+        } else {
+            LOGW("GN-Framegen: Frame generation returned 0 frames");
+        }
     }
     
     // End command buffer
@@ -1077,8 +1101,11 @@ VKAPI_ATTR VkResult VKAPI_CALL LayerQueuePresentKHR(
     // Update frame counter for tracking previous/current frames
     swapchainData->currentFrame++;
     
-    LOGI("GN-Framegen: Presented frame %d (command pool/buffer/fence ready for compute integration)",
-         swapchainData->currentFrame);
+    // Advance history index for circular buffer (swap current -> previous)
+    swapchainData->historyIndex++;
+    
+    LOGI("GN-Framegen: Presented frame %d (captured history, generated %d frames, historyIndex=%d)",
+         swapchainData->currentFrame, generatedFrameCount, swapchainData->historyIndex % SwapchainData::MAX_FRAME_HISTORY);
     
     return result;
 }
