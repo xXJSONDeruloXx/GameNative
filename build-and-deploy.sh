@@ -5,10 +5,19 @@ set -e
 
 # Configuration
 ANDROID_NDK=${ANDROID_NDK:-${ANDROID_NDK_HOME:-}}
-GAMENATIVE_DIR=$(cd "$(dirname "$0")" && cd .. && pwd)
 BUILD_TYPE=${1:-Release}
 ABI=${2:-arm64-v8a}
 INSTALL=${3:-false}
+
+# Find GameNative directory
+# This script is in gn-native-layer worktree
+# GameNative main checkout is at sibling directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Determine GameNative directory based on where script is located
+# Script is in gn-native-layer/, GameNative is at same level (sibling)
+GAMENATIVE_DIR="$(cd "$SCRIPT_DIR/../GameNative" && pwd 2>/dev/null)" || \
+    GAMENATIVE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 echo "========================================="
 echo "  GN Framegen Layer - Build & Deploy"
@@ -38,7 +47,7 @@ echo ""
 
 # Step 2: Build the layer
 echo "=== Step 1: Building Layer ==="
-cd "$(dirname "$0")/native_layer"
+cd "$SCRIPT_DIR/native_layer"
 echo "Running: make build ABI=$ABI BUILD_TYPE=$BUILD_TYPE"
 make build ABI="$ABI" BUILD_TYPE="$BUILD_TYPE"
 
@@ -54,7 +63,7 @@ echo ""
 
 # Step 3: Copy to assets
 echo "=== Step 2: Copying to GameNative Assets ==="
-cd "$(dirname "$0")"
+cd "$SCRIPT_DIR"
 ./copy-to-assets.sh
 
 # Check if assets were copied

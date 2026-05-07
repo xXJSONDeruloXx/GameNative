@@ -1,6 +1,7 @@
 #include "framegen.hpp"
 #include "shader_manager.hpp"
 #include "descriptor_manager.hpp"
+#include "shaders_embedded.hpp"
 
 #include <cstring>
 #include <algorithm>
@@ -382,7 +383,7 @@ VkResult FrameGenerator::LoadShaders() {
     
     // Try to load optical flow shader
     for (const auto& name : candidateFlowShaders) {
-        auto data = GameScopeVK::Shaders::GetShader(name);
+        auto data = ::GameScopeVK::Shaders::GetShader(name);
         if (!data.empty()) {
             VkShaderModuleCreateInfo createInfo = {};
             createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -399,7 +400,7 @@ VkResult FrameGenerator::LoadShaders() {
     
     // Try to load warp shader
     for (const auto& name : candidateWarpShaders) {
-        auto data = GameScopeVK::Shaders::GetShader(name);
+        auto data = ::GameScopeVK::Shaders::GetShader(name);
         if (!data.empty()) {
             VkShaderModuleCreateInfo createInfo = {};
             createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -416,7 +417,7 @@ VkResult FrameGenerator::LoadShaders() {
     
     // Try to load blend shader
     for (const auto& name : candidateBlendShaders) {
-        auto data = GameScopeVK::Shaders::GetShader(name);
+        auto data = ::GameScopeVK::Shaders::GetShader(name);
         if (!data.empty()) {
             VkShaderModuleCreateInfo createInfo = {};
             createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;

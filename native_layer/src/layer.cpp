@@ -5,6 +5,9 @@
 #include <mutex>
 #include <algorithm>
 
+// Vulkan layer-specific structures (VkLayerInstanceCreateInfo, VkLayerDeviceCreateInfo)
+#include <vulkan/vk_layer.h>
+
 #ifdef __ANDROID__
 #include <android/log.h>
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, "GN-Framegen", __VA_ARGS__)
@@ -22,8 +25,7 @@
 namespace GN {
 namespace Framegen {
 
-// Global layer name
-const char* const LAYER_NAME = "VK_LAYER_GN_gamescope_framegen";
+// Note: LAYER_NAME is defined in version.hpp
 
 LayerState& LayerState::Get() {
     static LayerState state;
@@ -168,8 +170,8 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL layer_GetDeviceProcAddr(
     
     // Get device data to chain to next layer
     DeviceData* data = GetDeviceData(device);
-    if (data && data->nextGetDeviceProcAddr) {
-        return data->nextGetDeviceProcAddr(device, pName);
+    if (data && data->instance && data->instance->nextGetDeviceProcAddr) {
+        return data->instance->nextGetDeviceProcAddr(device, pName);
     }
     
     return nullptr;
@@ -411,7 +413,7 @@ VKAPI_ATTR VkResult VKAPI_CALL LayerCreateDevice(
     deviceData->device = *pDevice;
     deviceData->physicalDevice = physicalDevice;
     deviceData->instance = GetInstanceData(instance);  // May be nullptr if not found
-    deviceData->nextGetDeviceProcAddr = nextGetDeviceProcAddr;
+    // Note: nextGetDeviceProcAddr is stored in InstanceData
     
     // Cache function pointers - swapchain
     deviceData->CreateSwapchainKHR = reinterpret_cast<PFN_vkCreateSwapchainKHR>(
@@ -586,9 +588,9 @@ VKAPI_ATTR void VKAPI_CALL LayerDestroyDevice(
     {
         std::lock_guard<std::mutex> lock(state.deviceMutex);
         auto it = state.devices.find(device);
-        if (it != state.devices.end()) {
+        if (it != state.devices.end() && it->second->instance) {
             nextDestroyDevice = reinterpret_cast<PFN_vkDestroyDevice>(
-                it->second->nextGetDeviceProcAddr(device, "vkDestroyDevice"));
+                it->second->instance->nextGetDeviceProcAddr(device, "vkDestroyDevice"));
             state.devices.erase(it);
         }
     }
@@ -628,17 +630,25 @@ static VkResult CreateFrameHistoryImages(SwapchainData* swapchainData, VkDevice 
     // Get physical device for memory type queries
     auto& state = LayerState::Get();
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+    InstanceData* deviceInstanceData = nullptr;
     {
         std::lock_guard<std::mutex> lock(state.deviceMutex);
         auto it = state.devices.find(device);
         if (it != state.devices.end() && it->second) {
-            // Find physical device from instance mapping
-            std::lock_guard<std::mutex> pdLock(state.physicalDeviceMutex);
-            for (const auto& [pd, inst] : state.physicalDeviceToInstance) {
-                if (inst == it->second->instance) {
-                    physicalDevice = pd;
-                    break;
-                }
+            deviceInstanceData = it->second->instance;
+        }
+    }
+    
+    // Find physical device by checking which VkInstance corresponds to our device
+    {
+        std::lock_guard<std::mutex> pdLock(state.physicalDeviceMutex);
+        std::lock_guard<std::mutex> instLock(state.instanceMutex);
+        for (const auto& [pd, vkInst] : state.physicalDeviceToInstance) {
+            auto instIt = state.instances.find(vkInst);
+            if (instIt != state.instances.end() && 
+                instIt->second.get() == deviceInstanceData) {
+                physicalDevice = pd;
+                break;
             }
         }
     }

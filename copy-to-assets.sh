@@ -6,8 +6,31 @@ set -e
 echo "=== Copy GN Framegen Layer to GameNative Assets ==="
 echo ""
 
-# Find GameNative project directory (parent of gn-native-layer)
-GAMENATIVE_DIR=$(cd "$(dirname "$0")" && cd .. && pwd)
+# Determine script location
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Find GameNative project directory
+# gn-native-layer is a worktree, GameNative main checkout is at sibling level
+if [ -d "$SCRIPT_DIR/../GameNative/app/src/main/assets" ]; then
+    # Called from gn-native-layer, GameNative is sibling
+    GAMENATIVE_DIR=$(cd "$SCRIPT_DIR/../GameNative" && pwd)
+elif [ -d "$SCRIPT_DIR/../app/src/main/assets" ]; then
+    # Called from gn-native-layer, but parent has the structure (weird case)
+    GAMENATIVE_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
+elif [ -d "$(pwd)/app/src/main/assets" ]; then
+    # Called from GameNative directory
+    GAMENATIVE_DIR="$(pwd)"
+else
+    # Try to find GameNative by looking for sibling directory
+    GAMENATIVE_DIR="$(cd "$SCRIPT_DIR/../GameNative" 2>/dev/null && pwd)"
+    if [ -z "$GAMENATIVE_DIR" ] || [ ! -d "$GAMENATIVE_DIR/app/src/main/assets" ]; then
+        echo "ERROR: Cannot find GameNative project directory"
+        echo "Expected: $SCRIPT_DIR/../GameNative/app/src/main/assets"
+        echo "Make sure GameNative and gn-native-layer are siblings"
+        exit 1
+    fi
+fi
+
 ASSETS_DIR="$GAMENATIVE_DIR/app/src/main/assets/gn_framegen/android_arm64_v8a"
 
 echo "GameNative Directory: $GAMENATIVE_DIR"
@@ -17,7 +40,7 @@ echo ""
 # Check if we're in the right place
 if [ ! -d "$GAMENATIVE_DIR/app/src/main/assets" ]; then
     echo "ERROR: Cannot find GameNative assets directory"
-    echo "Make sure this script is run from gn-native-layer directory"
+    echo "Make sure GameNative is the current directory or parent of gn-native-layer"
     exit 1
 fi
 
@@ -28,9 +51,8 @@ echo "Created: $ASSETS_DIR"
 echo ""
 
 # Check for built library
-NATIVE_LAYER_DIR="$(dirname "$0")/native_layer"
-BUILT_LIB="$NATIVE_LAYER_DIR/build-android-arm64-v8a/libgn-framegen.so"
-MANIFEST_SOURCE="$NATIVE_LAYER_DIR/VkLayer_GN_gamescope_framegen.json"
+BUILT_LIB="$SCRIPT_DIR/native_layer/build-android-arm64-v8a/libgn-framegen.so"
+MANIFEST_SOURCE="$SCRIPT_DIR/native_layer/VkLayer_GN_gamescope_framegen.json"
 
 if [ -f "$BUILT_LIB" ]; then
     echo "Found built library: $BUILT_LIB"

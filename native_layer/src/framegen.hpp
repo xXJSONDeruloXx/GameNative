@@ -72,6 +72,14 @@ private:
         uint32_t multiplier = 2;
     } config;
     
+    // Uniform buffer layout (std140 alignment)
+    struct FramegenParams {
+        float flowScale;
+        float reserved;
+        uint32_t frameIndex;
+        uint32_t totalFrames;
+    };
+    
     // Stored extent for dispatch calculations
     VkExtent2D extent;
     

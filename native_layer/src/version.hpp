@@ -41,9 +41,7 @@ constexpr bool SHADERS_EMBEDDED = false;
 
 // Get full version string for logging/debugging
 inline const char* GetVersionString() {
-    static const char* version = 
-        LAYER_NAME " " LAYER_VERSION " (" BUILD_PLATFORM " " BUILD_ARCH ")";
-    return version;
+    return LAYER_VERSION;
 }
 
 } // namespace Framegen
