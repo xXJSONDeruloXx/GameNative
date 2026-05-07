@@ -56,6 +56,11 @@ private:
     std::vector<VkImageView> generatedImageViews;
     std::vector<VkDeviceMemory> generatedMemory;
     
+    // Uniform buffer for frame generation parameters
+    VkBuffer uniformBuffer;
+    VkDeviceMemory uniformBufferMemory;
+    void* uniformBufferMapped;
+    
     // Configuration
     struct Config {
         float flowScale = 0.6f;
@@ -70,9 +75,19 @@ private:
     VkResult LoadShaders();
     VkResult CreatePipelines(VkExtent2D extent, VkFormat format);
     VkResult CreateIntermediateImages(VkExtent2D extent, VkFormat format, uint32_t count);
+    VkResult CreateUniformBuffer();
     
     // Memory type helper
     uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
+    
+    // Update uniform buffer with current parameters
+    void UpdateUniformBuffer(uint32_t frameIndex, uint32_t totalFrames);
+    
+    // Update descriptor set for a frame generation pass
+    void UpdateDescriptorSet(VkDescriptorSet descriptorSet,
+                             VkImageView inputImage,
+                             VkImageView outputImage,
+                             VkImageView flowImage = VK_NULL_HANDLE);
 };
 
 } // namespace Framegen

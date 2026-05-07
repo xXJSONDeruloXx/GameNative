@@ -64,6 +64,13 @@ VkResult FrameGenerator::Initialize(VkExtent2D initExtent, VkFormat format, uint
         return result;
     }
     
+    // Create uniform buffer for parameters
+    result = CreateUniformBuffer();
+    if (result != VK_SUCCESS) {
+        LOGE("Failed to create uniform buffer: %d", result);
+        return result;
+    }
+    
     LOGI("FrameGenerator initialized successfully");
     return VK_SUCCESS;
 }
@@ -117,6 +124,16 @@ void FrameGenerator::Cleanup() {
     generatedImageViews.clear();
     generatedMemory.clear();
     
+    // Destroy uniform buffer
+    if (uniformBufferMemory) {
+        vkFreeMemory(device, uniformBufferMemory, nullptr);
+        uniformBufferMemory = VK_NULL_HANDLE;
+    }
+    if (uniformBuffer) {
+        vkDestroyBuffer(device, uniformBuffer, nullptr);
+        uniformBuffer = VK_NULL_HANDLE;
+    }
+    
     // Destroy shader modules
     if (opticalFlowShader) {
         vkDestroyShaderModule(device, opticalFlowShader, nullptr);
@@ -159,21 +176,7 @@ uint32_t FrameGenerator::GenerateFrames(VkCommandBuffer cmd,
         return 0;
     }
     
-    // Configure uniform buffer data for frame generation parameters
-    struct FramegenParams {
-        float flowScale;      // GN_FG_FLOW_SCALE
-        uint32_t frameIndex;  // Current intermediate frame index
-        uint32_t totalFrames; // Total frames to generate (multiplier - 1)
-        float reserved;
-    } params = {
-        config.flowScale,
-        0,  // Will be updated per frame
-        frameCount,
-        0.0f
-    };
-    
-    // Create uniform buffer (simplified - should use buffer pool in production)
-    // For now, we'll use push constants if available, or skip uniform updates
+    // Update uniform buffer with frame generation parameters
     
     // Step 1: Transition input images to SHADER_READ_OPTIMAL
     VkImageMemoryBarrier barriers[2] = {};
@@ -223,11 +226,17 @@ uint32_t FrameGenerator::GenerateFrames(VkCommandBuffer cmd,
     
     // Step 3: Optical Flow - compute motion vectors
     if (opticalFlowPipeline) {
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, opticalFlowPipeline);
+        // Update uniform buffer with frame parameters
+        UpdateUniformBuffer(0, frameCount);
         
-        // Note: Proper descriptor set updates with image views would go here
-        // For now, we bind the pipeline - descriptor binding requires complete
-        // descriptor set updates with image view handles
+        // Update descriptor set with input/output images
+        UpdateDescriptorSet(descriptorSet, 
+                           generatedImageViews[0],  // Use first generated image as flow output
+                           generatedImageViews[0]);
+        
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, opticalFlowPipeline);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout,
+                               0, 1, &descriptorSet, 0, nullptr);
         
         uint32_t groupCountX = (extent.width + 15) / 16;
         uint32_t groupCountY = (extent.height + 15) / 16;
@@ -253,10 +262,17 @@ uint32_t FrameGenerator::GenerateFrames(VkCommandBuffer cmd,
     
     // Step 5: Warp - warp previous and current frames using flow
     for (uint32_t i = 0; i < frameCount && warpPipeline; i++) {
-        params.frameIndex = i;
-        // Update uniform buffer or push constants here
+        // Update uniform buffer with current frame index
+        UpdateUniformBuffer(i, frameCount);
+        
+        // Update descriptor set with input (flow) and output (warped frame)
+        UpdateDescriptorSet(descriptorSet,
+                           generatedImageViews[0],  // Flow input
+                           generatedImageViews[i]); // Warped frame output
         
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, warpPipeline);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout,
+                               0, 1, &descriptorSet, 0, nullptr);
         
         uint32_t groupCountX = (extent.width + 15) / 16;
         uint32_t groupCountY = (extent.height + 15) / 16;
@@ -294,7 +310,15 @@ uint32_t FrameGenerator::GenerateFrames(VkCommandBuffer cmd,
                             0, nullptr,
                             0, nullptr);
         
+        // For blend, we'll blend into the first generated image
+        UpdateUniformBuffer(0, frameCount);
+        UpdateDescriptorSet(descriptorSet,
+                           generatedImageViews[0],  // Warped frame input
+                           generatedImageViews[0]); // Blended output (reuse)
+        
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, blendPipeline);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout,
+                               0, 1, &descriptorSet, 0, nullptr);
         
         uint32_t groupCountX = (extent.width + 15) / 16;
         uint32_t groupCountY = (extent.height + 15) / 16;
@@ -629,6 +653,128 @@ uint32_t FrameGenerator::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFla
     
     LOGE("Failed to find suitable memory type");
     return 0;  // Fallback
+}
+
+VkResult FrameGenerator::CreateUniformBuffer() {
+    VkDeviceSize bufferSize = sizeof(FramegenParams);
+    
+    VkBufferCreateInfo bufferInfo = {};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = bufferSize;
+    bufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    
+    VkResult result = vkCreateBuffer(device, &bufferInfo, nullptr, &uniformBuffer);
+    if (result != VK_SUCCESS) {
+        LOGE("Failed to create uniform buffer: %d", result);
+        return result;
+    }
+    
+    VkMemoryRequirements memRequirements;
+    vkGetBufferMemoryRequirements(device, uniformBuffer, &memRequirements);
+    
+    VkMemoryAllocateInfo allocInfo = {};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex = FindMemoryType(memRequirements.memoryTypeBits,
+                                               VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | 
+                                               VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    
+    result = vkAllocateMemory(device, &allocInfo, nullptr, &uniformBufferMemory);
+    if (result != VK_SUCCESS) {
+        LOGE("Failed to allocate uniform buffer memory: %d", result);
+        return result;
+    }
+    
+    result = vkBindBufferMemory(device, uniformBuffer, uniformBufferMemory, 0);
+    if (result != VK_SUCCESS) {
+        LOGE("Failed to bind uniform buffer memory: %d", result);
+        return result;
+    }
+    
+    result = vkMapMemory(device, uniformBufferMemory, 0, bufferSize, 0, &uniformBufferMapped);
+    if (result != VK_SUCCESS) {
+        LOGE("Failed to map uniform buffer memory: %d", result);
+        return result;
+    }
+    
+    LOGI("Uniform buffer created: %zu bytes", bufferSize);
+    return VK_SUCCESS;
+}
+
+void FrameGenerator::UpdateUniformBuffer(uint32_t frameIndex, uint32_t totalFrames) {
+    if (!uniformBufferMapped) return;
+    
+    FramegenParams params = {};
+    params.flowScale = config.flowScale;
+    params.frameIndex = frameIndex;
+    params.totalFrames = totalFrames;
+    params.reserved = 0.0f;
+    
+    memcpy(uniformBufferMapped, &params, sizeof(params));
+}
+
+void FrameGenerator::UpdateDescriptorSet(VkDescriptorSet descriptorSet,
+                                       VkImageView inputImage,
+                                       VkImageView outputImage,
+                                       VkImageView flowImage) {
+    std::vector<VkWriteDescriptorSet> descriptorWrites;
+    std::vector<VkDescriptorImageInfo> imageInfos;
+    std::vector<VkDescriptorBufferInfo> bufferInfos;
+    
+    // Binding 0: Uniform buffer
+    VkDescriptorBufferInfo bufferInfo = {};
+    bufferInfo.buffer = uniformBuffer;
+    bufferInfo.offset = 0;
+    bufferInfo.range = sizeof(FramegenParams);
+    bufferInfos.push_back(bufferInfo);
+    
+    VkWriteDescriptorSet write = {};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = descriptorSet;
+    write.dstBinding = 0;
+    write.dstArrayElement = 0;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    write.descriptorCount = 1;
+    write.pBufferInfo = &bufferInfos[0];
+    descriptorWrites.push_back(write);
+    
+    // Binding 32: Input storage image
+    VkDescriptorImageInfo inputImageInfo = {};
+    inputImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    inputImageInfo.imageView = inputImage;
+    inputImageInfo.sampler = VK_NULL_HANDLE;  // Storage images don't use samplers
+    imageInfos.push_back(inputImageInfo);
+    
+    VkWriteDescriptorSet inputWrite = {};
+    inputWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    inputWrite.dstSet = descriptorSet;
+    inputWrite.dstBinding = 32;
+    inputWrite.dstArrayElement = 0;
+    inputWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    inputWrite.descriptorCount = 1;
+    inputWrite.pImageInfo = &imageInfos[0];
+    descriptorWrites.push_back(inputWrite);
+    
+    // Binding 48: Output storage image
+    VkDescriptorImageInfo outputImageInfo = {};
+    outputImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+    outputImageInfo.imageView = outputImage;
+    outputImageInfo.sampler = VK_NULL_HANDLE;
+    imageInfos.push_back(outputImageInfo);
+    
+    VkWriteDescriptorSet outputWrite = {};
+    outputWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    outputWrite.dstSet = descriptorSet;
+    outputWrite.dstBinding = 48;
+    outputWrite.dstArrayElement = 0;
+    outputWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    outputWrite.descriptorCount = 1;
+    outputWrite.pImageInfo = &imageInfos[1];
+    descriptorWrites.push_back(outputWrite);
+    
+    vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()),
+                           descriptorWrites.data(), 0, nullptr);
 }
 
 } // namespace Framegen
