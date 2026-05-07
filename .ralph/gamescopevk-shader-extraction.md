@@ -68,6 +68,29 @@ Extract the 54 SPIR-V shaders from `libGameScopeVK.so` and integrate them into a
    - Blend dispatch
    - Final transition to PRESENT_SRC_KHR
 
+**Layer Infrastructure (✅ COMPLETE)**:
+- **Instance Management**: Create/Destroy with next layer chaining
+- **Physical Device Tracking**: EnumeratePhysicalDevices interception with instance mapping
+- **Device Management**: Create/Destroy with 30+ cached function pointers
+- **Swapchain Management**: Create/Destroy with generation count tracking
+- **Presentation Interception**: QueuePresentKHR with lazy FrameGenerator initialization
+
+**Function Pointer Caching (✅ COMPLETE)**:
+DeviceData caches 30+ function pointers from next layer:
+- Swapchain: Create/Destroy/GetImages/Acquire/Present
+- Shader/Pipeline: Create/DestroyShaderModule, CreateDescriptorSetLayout, CreatePipelineLayout, CreateComputePipelines, CmdBindPipeline, CmdDispatch, CmdPipelineBarrier
+- Command Buffer: Create/DestroyCommandPool, Allocate/FreeCommandBuffers, Begin/EndCommandBuffer, QueueSubmit
+- Synchronization: Create/DestroyFence, Wait/ResetFences
+- Image/Memory: Create/DestroyImage, Create/DestroyImageView, Allocate/FreeMemory, BindImageMemory, GetImageMemoryRequirements
+- Buffer: Create/DestroyBuffer, BindBufferMemory, GetBufferMemoryRequirements, Map/UnmapMemory
+- Descriptor: Create/DestroyDescriptorPool, Allocate/FreeDescriptorSets, UpdateDescriptorSets
+
+**Physical Device Enumeration (✅ NEW)**:
+- `LayerEnumeratePhysicalDevices`: Intercept vkEnumeratePhysicalDevices
+- Store VkPhysicalDevice → VkInstance mapping in LayerState
+- `LayerEnumeratePhysicalDeviceGroups`: Support Vulkan 1.1+ device groups
+- Enable correct DeviceData->instance linking during device creation
+
 **Layer Integration (✅ COMPLETE)**:
 - `LayerCreateSwapchainKHR`: Tracks swapchain dimensions, initializes generation count
 - `LayerQueuePresentKHR`: 
@@ -117,7 +140,7 @@ Generated Frames Output
 | Branch | Commits | Status | Pushed |
 |--------|---------|--------|--------|
 | `gn-lsfg-shader-swap` | 5 | SPIR-V extraction complete | ✅ |
-| `gn-native-layer` | 10 | Layer + frame generation + layer integration | ✅ |
+| `gn-native-layer` | 11 | Layer + frame generation + infrastructure | ✅ |
 
 Both branches available at: `github.com/xXJSONDeruloXx/GameNative.git`
 
@@ -129,38 +152,43 @@ Both branches available at: `github.com/xXJSONDeruloXx/GameNative.git`
 GameNative/Wine/DXVK Application
        │
        ▼
+VK_LAYER_GN_gamescope_framegen (libgn-framegen.so)
 ┌──────────────────────────────────────────────────────────────┐
-│ VK_LAYER_GN_gamescope_framegen (libgn-framegen.so)                │
-│                                                                 │
-│  Layer Entry Points (✅ COMPLETE)                               │
-│  - layer_GetInstanceProcAddr → LayerCreateInstance              │
-│  - layer_GetDeviceProcAddr → LayerCreateDevice                 │
-│  - LayerCreateSwapchainKHR: Track dimensions                   │
-│  - LayerQueuePresentKHR: Lazy init FrameGenerator              │
-│                                                                 │
-│  FrameGenerator (✅ COMPLETE)                                    │
-│  - Initialize() → LoadShaders, CreatePipelines                 │
-│  - LoadShaders() → SPIR-V → VkShaderModule                   │
+│ Layer Infrastructure (✅ COMPLETE)                                │
+│  - LayerEnumeratePhysicalDevices → instance mapping           │
+│  - LayerEnumeratePhysicalDeviceGroups                        │
+│  - LayerCreateInstance/DestroyInstance                        │
+│  - LayerCreateDevice/DestroyDevice                            │
+│  - LayerCreateSwapchainKHR/DestroySwapchainKHR                │
+│  - LayerQueuePresentKHR → FrameGenerator init               │
+│                                                               │
+│ DeviceData Function Pointer Caching (✅ COMPLETE)              │
+│  - 30+ function pointers cached from next layer               │
+│  - Categories: swapchain, shader, pipeline, command, sync     │
+│              image, memory, buffer, descriptor                 │
+│                                                               │
+│ FrameGenerator (✅ COMPLETE)                                  │
+│  - Initialize() → LoadShaders, CreatePipelines               │
+│  - LoadShaders() → SPIR-V → VkShaderModule                 │
 │  - CreatePipelines() → Compute pipelines with layout           │
-│  - CreateUniformBuffer() → Host-visible params buffer          │
-│  - CreateIntermediateImages() → Device-local storage           │
-│  - GenerateFrames() → Full compute pipeline                     │
-│    * Image barriers: PRESENT→SHADER, GENERAL→PRESENT         │
-│    * Uniform updates: flowScale, frameIndex, totalFrames       │
-│    * Descriptor updates: bindings 0, 32, 48                    │
-│    * Optical flow dispatch (16x16 workgroups)                   │
+│  - CreateUniformBuffer() → Host-visible params buffer      │
+│  - CreateIntermediateImages() → Device-local storage         │
+│  - GenerateFrames() → Full compute pipeline                   │
+│    * Image barriers: PRESENT→SHADER, GENERAL→PRESENT       │
+│    * Uniform updates: flowScale, frameIndex, totalFrames     │
+│    * Descriptor updates: bindings 0, 32, 48                │
+│    * Optical flow dispatch (16x16 workgroups)                 │
 │    * Warp dispatch per intermediate frame                       │
 │    * Blend dispatch                                             │
-│                                                                 │
-│  Shader Management (✅ COMPLETE)                                 │
-│  - 49 embedded SPIR-V from GameScopeVK                          │
-│  - LoadAll() validates magic (0x07230203)                       │
-│  - GetShader() for pipeline creation                            │
-│                                                                 │
-│  Configuration (✅ COMPLETE)                                    │
-│  - LayerConfig::FromEnvironment()                               │
-│  - GN_FG_ENABLE, GN_FG_MULTIPLIER, GN_FG_FLOW_SCALE            │
-└──────────────────────────────────────────────────────────────┘
+│                                                               │
+│ Shader Management (✅ COMPLETE)                                 │
+│  - 49 embedded SPIR-V from GameScopeVK                        │
+│  - LoadAll() validates magic (0x07230203)                     │
+│  - GetShader() for pipeline creation                           │
+│                                                               │
+│ Configuration (✅ COMPLETE)                                     │
+│  - LayerConfig::FromEnvironment()                             │
+│  - GN_FG_ENABLE, GN_FG_MULTIPLIER, GN_FG_FLOW_SCALE         └──────────────────────────────────────────────────────────────┘
        │
        ▼
 Real Vulkan Driver → Swapchain → Display
@@ -183,7 +211,7 @@ extracted_shaders/
 └── raw/shader_{000-053}.spv      # 54 SPIR-V files
 ```
 
-### gn-native-layer (10 commits)
+### gn-native-layer (11 commits)
 ```
 native_layer/
 ├── VkLayer_GN_gamescope_framegen.json  # Layer manifest
@@ -254,6 +282,8 @@ Presenting generated frames requires either:
 10. ✅ **Descriptor set updates** runtime binding of images/buffers
 11. ✅ **Layer integration** FrameGenerator lifecycle managed in QueuePresentKHR
 12. ✅ **Lazy initialization** FrameGenerator created on first present with correct dimensions
+13. ✅ **Function pointer caching** 30+ pointers cached in DeviceData
+14. ✅ **Physical device tracking** EnumeratePhysicalDevices interception with instance mapping
 
 ---
 
@@ -285,6 +315,9 @@ Presenting generated frames requires either:
 | - Lazy init | ✅ QueuePresentKHR → Initialize |
 | - Config application | ✅ From environment |
 | - Fallback behavior | ✅ Pass-through on failure |
+| **Infrastructure** | ✅ **COMPLETE** |
+| - Physical device tracking | ✅ EnumeratePhysicalDevices |
+| - Function pointer caching | ✅ 30+ pointers cached |
 | Android NDK build | ⚠️ Not yet tested |
 | Wine/DXVK integration | ⚠️ Not yet tested |
 | Command buffer submission | ⚠️ Needs queue integration |
@@ -303,6 +336,8 @@ Presenting generated frames requires either:
 | Frame generation pipeline | `framegen.cpp` | ✅ |
 | Uniform buffer management | `Create/UpdateUniformBuffer()` | ✅ |
 | Descriptor set updates | `UpdateDescriptorSet()` | ✅ |
+| Function pointer caching | DeviceData (30+ pointers) | ✅ |
+| Physical device tracking | `LayerEnumeratePhysicalDevices()` | ✅ |
 | Layer manifest | `VkLayer_GN_gamescope_framegen.json` | ✅ |
 | CMake build config | `CMakeLists.txt` | ✅ |
 
@@ -319,13 +354,16 @@ Presenting generated frames requires either:
 - Full frame generation pipeline with synchronization
 - Resource management (images, memory, views, uniform buffers)
 - Descriptor management with runtime updates
-- **Layer integration**: FrameGenerator lifecycle, lazy initialization, configuration
+- Layer integration with lazy initialization and configuration
+- **Physical device tracking** via EnumeratePhysicalDevices interception
+- **Function pointer caching** for efficient dispatch table management
 
 **Implementation Summary**:
-- **Lines of code**: ~2,500 C++ across 6 source files
+- **Lines of code**: ~3,000 C++ across 6 source files
 - **Shaders embedded**: 49 SPIR-V modules (~6MB)
-- **Commits**: 10 on gn-native-layer branch
+- **Commits**: 11 on gn-native-layer branch
 - **Architecture**: Complete from vkCreateInstance to GenerateFrames()
+- **Infrastructure**: Physical device tracking, 30+ cached function pointers
 
 The implementation is **feature-complete** for the extraction and integration phase.
 Remaining work is build system validation and runtime testing on Android.
