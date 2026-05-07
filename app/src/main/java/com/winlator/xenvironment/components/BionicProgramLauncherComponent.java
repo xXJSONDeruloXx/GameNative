@@ -17,6 +17,7 @@ import androidx.annotation.NonNull;
 
 import com.winlator.PrefManager;
 
+import app.gamenative.utils.GamescopeDirectRendering;
 import app.gamenative.utils.GamescopeVkManager;
 import app.gamenative.utils.LsfgVkManager;
 import com.winlator.box86_64.Box86_64Preset;
@@ -118,6 +119,11 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
                 SteamService.setKeepAlive(false);
             }
             execShellCommand("wineserver -k");
+
+            // Stop the DirectRendering server when the game exits
+            if (GamescopeVkManager.isEnabled(container)) {
+                GamescopeDirectRendering.INSTANCE.stop();
+            }
         }
     }
 
@@ -321,6 +327,10 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
             // so LSFG-VK must not also be installed.
             GamescopeVkManager.ensureRuntimeInstalled(environment.getContext(), container);
             GamescopeVkManager.applyLaunchEnv(container, envVars);
+
+            // Start the DirectRendering socket server so GameScopeVK can present frames.
+            // Must be running BEFORE the game process connects.
+            GamescopeDirectRendering.INSTANCE.start(container.getRootDir(), null);
         } else if (LsfgVkManager.isSupported(container)) {
             LsfgVkManager.ensureRuntimeInstalled(environment.getContext(), container);
             LsfgVkManager.writeConfig(container);
