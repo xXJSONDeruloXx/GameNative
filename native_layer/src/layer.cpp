@@ -542,8 +542,54 @@ VKAPI_ATTR void VKAPI_CALL LayerDestroyDevice(
 }
 
 // Helper: Create frame history images for swapchain
+// Find memory type that has the required properties
+static uint32_t FindMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties) {
+    VkPhysicalDeviceMemoryProperties memProperties;
+    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
+    
+    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+        if ((typeFilter & (1 << i)) && 
+            (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+            return i;
+        }
+    }
+    
+    // Fallback: return first available type
+    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+        if (typeFilter & (1 << i)) {
+            LOGW("GN-Framegen: Falling back to memory type %d (requested properties 0x%x)", 
+                 i, properties);
+            return i;
+        }
+    }
+    
+    return 0; // Last resort fallback
+}
+
 static VkResult CreateFrameHistoryImages(SwapchainData* swapchainData, VkDevice device, 
                                           DeviceData* deviceData, VkAllocationCallbacks* pAllocator) {
+    // Get physical device for memory type queries
+    auto& state = LayerState::Get();
+    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+    {
+        std::lock_guard<std::mutex> lock(state.deviceMutex);
+        auto it = state.devices.find(device);
+        if (it != state.devices.end() && it->second) {
+            // Find physical device from instance mapping
+            std::lock_guard<std::mutex> pdLock(state.physicalDeviceMutex);
+            for (const auto& [pd, inst] : state.physicalDeviceToInstance) {
+                if (inst == it->second->instance) {
+                    physicalDevice = pd;
+                    break;
+                }
+            }
+        }
+    }
+    
+    if (physicalDevice == VK_NULL_HANDLE) {
+        LOGW("GN-Framegen: Physical device not found, using memory type 0 fallback");
+    }
+    
     // Create 2 frame history buffers (previous and current)
     for (uint32_t i = 0; i < SwapchainData::MAX_FRAME_HISTORY; i++) {
         // Create image
@@ -576,19 +622,20 @@ static VkResult CreateFrameHistoryImages(SwapchainData* swapchainData, VkDevice 
         VkMemoryRequirements memRequirements;
         deviceData->GetImageMemoryRequirements(device, swapchainData->frameHistory[i], &memRequirements);
         
-        // Find memory type
-        VkPhysicalDeviceMemoryProperties memProperties;
-        // Note: We need instance or physicalDevice to query this - 
-        // for now assume deviceData->physicalDevice is valid
-        // This is a simplification - in production, we'd cache memory properties
-        
-        // Allocate memory
+        // Allocate memory with proper type selection
         VkMemoryAllocateInfo allocInfo = {};
         allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         allocInfo.allocationSize = memRequirements.size;
-        // Use device-local memory - we need to query memory type
-        // For now, assume type 0 is device-local (simplified)
-        allocInfo.memoryTypeIndex = 0;  // TODO: Query for VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+        
+        // Find device-local memory type
+        if (physicalDevice != VK_NULL_HANDLE) {
+            allocInfo.memoryTypeIndex = FindMemoryType(
+                physicalDevice, 
+                memRequirements.memoryTypeBits,
+                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        } else {
+            allocInfo.memoryTypeIndex = 0; // Fallback
+        }
         
         result = deviceData->AllocateMemory(device, &allocInfo, pAllocator, &swapchainData->frameHistoryMemory[i]);
         if (result != VK_SUCCESS) {
