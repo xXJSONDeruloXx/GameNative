@@ -153,6 +153,15 @@ public class DRI3Extension implements Extension {
         else if (modifiers == 1274) {
             pixmapFromFd(client, pixmapId, width, height, stride, offset, depth, fd, size);
         }
+        else {
+            // Fallback: try AHardwareBuffer path for unknown modifiers
+            // (GameScopeVK may send DRM_FORMAT_MOD_LINEAR or other values)
+            try {
+                pixmapFromHardwareBuffer(client, pixmapId, width, height, depth, fd);
+            } catch (Exception e) {
+                pixmapFromFd(client, pixmapId, width, height, stride, offset, depth, fd, size);
+            }
+        }
     }
 
     private void pixmapFromHardwareBuffer(XClient client, int pixmapId, short width, short height, byte depth, int fd) throws IOException, XRequestError {

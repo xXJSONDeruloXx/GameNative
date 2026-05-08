@@ -180,7 +180,11 @@ public class PresentExtension implements Extension {
         if (pixmap == null) throw new BadPixmap(pixmapId);
 
         Drawable content = window.getContent();
-        if (content.visual.depth != pixmap.drawable.visual.depth) throw new BadMatch();
+        if (content == null) throw new BadWindow(windowId);
+        if (content.visual != null && pixmap.drawable.visual != null &&
+                content.visual.depth != pixmap.drawable.visual.depth) {
+            throw new BadMatch();
+        }
 
         // Copy pixels immediately so the game's buffer is up-to-date on the XServer side.
         synchronized (content.renderLock) {
