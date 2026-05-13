@@ -4,6 +4,7 @@
 #include <cstring>
 #include <sstream>
 #include <stdexcept>
+#include <algorithm>
 
 namespace gn::framegen {
 
@@ -15,38 +16,29 @@ Pass::Pass(const vk::Device& dev,
            const std::vector<vk::DescriptorBinding>& bindings) {
     if (shaderIdx < 0 || static_cast<size_t>(shaderIdx) >= embedded::kShaderRegistry.size())
         throw std::runtime_error("Pass: shader index out of range");
-
     const auto& blob = embedded::kShaderRegistry[static_cast<size_t>(shaderIdx)];
     if (!embedded::IsValidSpirv(blob))
         throw std::runtime_error(std::string("Pass: invalid SPIR-V for ") + blob.name);
-
-    layout_  = vk::DescriptorSetLayout(dev, bindings);
-    descSet_ = vk::DescriptorSet(dev, descPool, layout_.handle());
-    pipeline_= vk::ComputePipeline(dev, blob.data, blob.size, layout_.handle());
-
-    GNFG_LOGI("Pass: loaded shader %s", blob.name);
+    layout_   = vk::DescriptorSetLayout(dev, bindings);
+    descSet_  = vk::DescriptorSet(dev, descPool, layout_.handle());
+    pipeline_ = vk::ComputePipeline(dev, blob.data, blob.size, layout_.handle());
+    GNFG_LOGI("Pass: loaded %s", blob.name);
 }
-
 void Pass::destroy(const vk::Device& dev) {
     pipeline_.destroy(dev);
     layout_.destroy(dev);
 }
-
-void Pass::bindUBO(const vk::Device& dev, uint32_t binding, const vk::Buffer& buf) {
-    descSet_.bindUBO(dev, binding, buf);
+void Pass::bindUBO(const vk::Device& dev, uint32_t b, const vk::Buffer& buf) {
+    descSet_.bindUBO(dev, b, buf);
 }
-
-void Pass::bindSampled(const vk::Device& dev, uint32_t binding,
-                       const vk::Image& img, const vk::Sampler& sampler) {
-    descSet_.bindCombinedImageSampler(dev, binding, img, sampler,
-        img.external() ? VK_IMAGE_LAYOUT_GENERAL
-                       : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+void Pass::bindSampled(const vk::Device& dev, uint32_t b, const vk::Image& img,
+                       const vk::Sampler& sampler) {
+    descSet_.bindCombinedImageSampler(dev, b, img, sampler,
+        img.external() ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 }
-
-void Pass::bindStorage(const vk::Device& dev, uint32_t binding, const vk::Image& img) {
-    descSet_.bindStorageImage(dev, binding, img);
+void Pass::bindStorage(const vk::Device& dev, uint32_t b, const vk::Image& img) {
+    descSet_.bindStorageImage(dev, b, img);
 }
-
 void Pass::dispatch(VkCommandBuffer cmd, uint32_t gx, uint32_t gy) const {
     pipeline_.bind(cmd);
     pipeline_.bindDescriptorSet(cmd, descSet_.handle());
@@ -66,7 +58,18 @@ static void computeBarrier(VkCommandBuffer cmd) {
         0, 1, &mb, 0, nullptr, 0, nullptr);
 }
 
-static void transitionToShaderRead(VkCommandBuffer cmd, vk::Image& img) {
+static void toStorage(VkCommandBuffer cmd, vk::Image& img) {
+    if (img.external() || img.layout == VK_IMAGE_LAYOUT_GENERAL) return;
+    vk::imageBarrier(cmd, img.handle(),
+        img.layout == VK_IMAGE_LAYOUT_UNDEFINED
+            ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT : VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        0,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
+        img.layout, VK_IMAGE_LAYOUT_GENERAL);
+    img.layout = VK_IMAGE_LAYOUT_GENERAL;
+}
+
+static void toShaderRead(VkCommandBuffer cmd, vk::Image& img) {
     if (img.external()) return;
     if (img.layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) return;
     vk::imageBarrier(cmd, img.handle(),
@@ -76,176 +79,178 @@ static void transitionToShaderRead(VkCommandBuffer cmd, vk::Image& img) {
     img.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 }
 
-static void transitionToStorage(VkCommandBuffer cmd, vk::Image& img) {
-    if (img.external()) return;
-    if (img.layout == VK_IMAGE_LAYOUT_GENERAL) return;
-    vk::imageBarrier(cmd, img.handle(),
-        img.layout == VK_IMAGE_LAYOUT_UNDEFINED
-            ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
-            : VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        0,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
-        img.layout, VK_IMAGE_LAYOUT_GENERAL);
-    img.layout = VK_IMAGE_LAYOUT_GENERAL;
-}
-
-// Build a simple descriptor pool large enough for all passes.
-static VkDescriptorPool createDescPool(const vk::Device& dev, uint32_t maxSets) {
-    std::vector<VkDescriptorPoolSize> sizes = {
-        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,         maxSets * 4 },
-        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, maxSets * 16 },
-        { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,          maxSets * 16 },
-    };
+static VkDescriptorPool makeDescPool(const vk::Device& dev, uint32_t maxSets) {
+    VkDescriptorPoolSize sizes[3]{};
+    sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;            sizes[0].descriptorCount = maxSets * 4;
+    sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;    sizes[1].descriptorCount = maxSets * 16;
+    sizes[2].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;             sizes[2].descriptorCount = maxSets * 16;
     VkDescriptorPoolCreateInfo pci{};
     pci.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     pci.flags         = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
     pci.maxSets       = maxSets;
-    pci.poolSizeCount = static_cast<uint32_t>(sizes.size());
-    pci.pPoolSizes    = sizes.data();
+    pci.poolSizeCount = 3;
+    pci.pPoolSizes    = sizes;
     VkDescriptorPool pool = VK_NULL_HANDLE;
     vkCreateDescriptorPool(dev.handle(), &pci, nullptr, &pool);
     return pool;
 }
 
-// Write an all-white image (confidence placeholder) by submitting a fill command.
-static void clearImageToOne(const vk::Device& dev,
-                            const vk::CommandPool& pool,
-                            vk::Image& img) {
+static void clearImageWhite(const vk::Device& dev, const vk::CommandPool& pool, vk::Image& img) {
     vk::CommandBuffer cb(dev, pool);
     cb.begin();
-    // Transition to TRANSFER_DST
     vk::imageBarrier(cb.handle(), img.handle(),
         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0,
         VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
         VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
     img.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    VkClearColorValue clear{};
-    clear.float32[0] = 1.0f; clear.float32[1] = 1.0f;
-    clear.float32[2] = 1.0f; clear.float32[3] = 1.0f;
-    VkImageSubresourceRange range{};
-    range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    range.levelCount = 1; range.layerCount = 1;
-    vkCmdClearColorImage(cb.handle(), img.handle(),
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear, 1, &range);
-    // Transition to GENERAL so it can be sampled
+    VkClearColorValue c{}; c.float32[0]=c.float32[1]=c.float32[2]=c.float32[3]=1.0f;
+    VkImageSubresourceRange r{}; r.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT; r.levelCount=1; r.layerCount=1;
+    vkCmdClearColorImage(cb.handle(), img.handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &c, 1, &r);
     vk::imageBarrier(cb.handle(), img.handle(),
         VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
     img.layout = VK_IMAGE_LAYOUT_GENERAL;
-    cb.end();
-    cb.submitAndWait(dev);
+    cb.end(); cb.submitAndWait(dev);
     cb.destroy(dev, pool);
+}
+
+// Build a single-sampled + single-storage pass (most feature passes use this).
+static Pass make1Tex1Img(const vk::Device& dev, VkDescriptorPool pool,
+                         int shaderIdx, uint32_t sampledBinding, uint32_t storageBinding,
+                         const vk::Image& src, const vk::Sampler& sampler, const vk::Image& dst) {
+    std::vector<vk::DescriptorBinding> binds = {
+        {sampledBinding,  VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1},
+        {storageBinding,  VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
+    };
+    Pass p(dev, pool, shaderIdx, binds);
+    p.bindSampled(dev, sampledBinding, src, sampler);
+    p.bindStorage(dev, storageBinding, dst);
+    return p;
+}
+
+// Build a UBO + 2-sampled + 2-storage pass (OF refinement passes).
+static Pass make2Tex2Img_UBO(const vk::Device& dev, VkDescriptorPool pool,
+                              int shaderIdx,
+                              const vk::Buffer& ubo,
+                              const vk::Image& inA, const vk::Image& inB,
+                              const vk::Sampler& sampler,
+                              vk::Image& outFwd, vk::Image& outBwd) {
+    std::vector<vk::DescriptorBinding> binds = {
+        {0,  VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
+        {32, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1},
+        {33, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1},
+        {48, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
+        {49, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
+    };
+    Pass p(dev, pool, shaderIdx, binds);
+    p.bindUBO    (dev, 0,  ubo);
+    p.bindSampled(dev, 32, inA, sampler);
+    p.bindSampled(dev, 33, inB, sampler);
+    p.bindStorage(dev, 48, outFwd);
+    p.bindStorage(dev, 49, outBwd);
+    return p;
 }
 
 // ─── FramegenContext::create ─────────────────────────────────────────────────
 
 #ifdef __ANDROID__
 std::unique_ptr<FramegenContext> FramegenContext::create(
-        AHardwareBuffer* prevAhb,
-        AHardwareBuffer* currAhb,
+        AHardwareBuffer* prevAhb, AHardwareBuffer* currAhb,
         const std::vector<AHardwareBuffer*>& outputAhbs,
-        VkExtent2D extent,
-        VkFormat format,
-        const Config& cfg) {
+        VkExtent2D extent, VkFormat format, const Config& cfg) {
     if (!prevAhb || !currAhb || outputAhbs.empty()) {
         GNFG_LOGE("FramegenContext::create: null AHB or empty outputs");
         return nullptr;
     }
     auto ctx = std::make_unique<FramegenContext>();
-    ctx->cfg_    = cfg;
-    ctx->cfg_.sanitize();
-    ctx->extent_ = extent;
-    ctx->format_ = format;
+    ctx->cfg_ = cfg; ctx->cfg_.sanitize();
+    ctx->extent_ = extent; ctx->format_ = format;
+    const uint32_t W = extent.width, H = extent.height;
+    const uint32_t W2 = std::max(1u, W >> 1), H2 = std::max(1u, H >> 1);
+    const uint32_t outputs = ctx->cfg_.multiplier - 1;
 
     try {
-        ctx->device_       = vk::Device::create();
-        ctx->cmdPool_      = vk::CommandPool(ctx->device_);
-        ctx->linearSampler_  = vk::Sampler(ctx->device_, VK_FILTER_LINEAR,
-                                             VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER);
-        ctx->nearestSampler_ = vk::Sampler(ctx->device_, VK_FILTER_NEAREST,
-                                             VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+        ctx->device_        = vk::Device::create();
+        ctx->cmdPool_       = vk::CommandPool(ctx->device_);
+        ctx->linearSampler_ = vk::Sampler(ctx->device_, VK_FILTER_LINEAR,
+                                           VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER);
+        ctx->nearestSampler_= vk::Sampler(ctx->device_, VK_FILTER_NEAREST,
+                                           VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+        ctx->descPool_ = makeDescPool(ctx->device_, 128);
 
-        const uint32_t W = extent.width;
-        const uint32_t H = extent.height;
-        const uint32_t outputs = ctx->cfg_.multiplier - 1;
-
-        ctx->descPool_ = createDescPool(ctx->device_, 64);
-
-        // Import AHB-backed input images
+        // ── AHB-backed images ──────────────────────────────────────────────
         vk::ImageInfo ahbInfo;
-        ahbInfo.extent = extent;
-        ahbInfo.format = format;
+        ahbInfo.extent = extent; ahbInfo.format = format;
         ahbInfo.usage  = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
                        | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-        ahbInfo.aspect = VK_IMAGE_ASPECT_COLOR_BIT;
         ctx->prevFrame_ = vk::Image(ctx->device_, ahbInfo, prevAhb);
         ctx->currFrame_ = vk::Image(ctx->device_, ahbInfo, currAhb);
-
-        // Import AHB-backed output images
         ctx->outputImages_.reserve(outputAhbs.size());
-        for (auto* ahb : outputAhbs) {
+        for (auto* ahb : outputAhbs)
             ctx->outputImages_.emplace_back(ctx->device_, ahbInfo, ahb);
-        }
 
-        // Pyramid levels (device-local, 6 levels, each half the previous)
+        // ── Pyramid images (R8_UNORM, 6 levels) ───────────────────────────
         ctx->pyramidA_.reserve(6); ctx->pyramidB_.reserve(6);
         for (int i = 0; i < 6; ++i) {
-            uint32_t lw = std::max(1u, W >> i);
-            uint32_t lh = std::max(1u, H >> i);
             vk::ImageInfo pi;
-            pi.extent = {lw, lh};
-            pi.format = VK_FORMAT_R8_UNORM;  // luma pyramid
+            pi.extent = {std::max(1u,W>>i), std::max(1u,H>>i)};
+            pi.format = VK_FORMAT_R8_UNORM;
             pi.usage  = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
             ctx->pyramidA_.emplace_back(ctx->device_, pi);
             ctx->pyramidB_.emplace_back(ctx->device_, pi);
         }
 
-        // Flow images (RGBA16F for packed fwd+bwd xy pairs)
-        vk::ImageInfo flowInfo;
-        flowInfo.extent = extent;
-        flowInfo.format = VK_FORMAT_R16G16B16A16_SFLOAT;
-        flowInfo.usage  = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-        ctx->flowFwd_    = vk::Image(ctx->device_, flowInfo);
-        ctx->flowBwd_    = vk::Image(ctx->device_, flowInfo);
-        ctx->flowMerged_ = vk::Image(ctx->device_, flowInfo);
-        ctx->flowExpA_   = vk::Image(ctx->device_, flowInfo);
-        ctx->flowExpB_   = vk::Image(ctx->device_, flowInfo);
+        // ── Feature maps (W/2 × H/2, RGBA16F) ────────────────────────────
+        vk::ImageInfo fi;
+        fi.extent = {W2, H2};
+        fi.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+        fi.usage  = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        ctx->featA_     = vk::Image(ctx->device_, fi);
+        ctx->featB_     = vk::Image(ctx->device_, fi);
+        ctx->featChanA_ = vk::Image(ctx->device_, fi);
+        ctx->featChanB_ = vk::Image(ctx->device_, fi);
+        ctx->featChanC_ = vk::Image(ctx->device_, fi);
+
+        // ── Flow images (W × H, RGBA16F) ─────────────────────────────────
+        vk::ImageInfo flow;
+        flow.extent = extent;
+        flow.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+        flow.usage  = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        ctx->flowFwd_        = vk::Image(ctx->device_, flow);
+        ctx->flowBwd_        = vk::Image(ctx->device_, flow);
+        ctx->flowRefinedFwd_ = vk::Image(ctx->device_, flow);
+        ctx->flowRefinedBwd_ = vk::Image(ctx->device_, flow);
+        ctx->flowMerged_     = vk::Image(ctx->device_, flow);
+        ctx->flowExpA_       = vk::Image(ctx->device_, flow);
+        ctx->flowExpB_       = vk::Image(ctx->device_, flow);
 
         // Confidence placeholder (RGBA8 all-ones)
-        vk::ImageInfo confInfo;
-        confInfo.extent = extent;
-        confInfo.format = format;
-        confInfo.usage  = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
-                        | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-        ctx->confidence_ = vk::Image(ctx->device_, confInfo);
-        clearImageToOne(ctx->device_, ctx->cmdPool_, ctx->confidence_);
+        vk::ImageInfo ci;
+        ci.extent = extent; ci.format = format;
+        ci.usage  = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
+                  | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        ctx->confidence_ = vk::Image(ctx->device_, ci);
+        clearImageWhite(ctx->device_, ctx->cmdPool_, ctx->confidence_);
 
-        // UBO buffers
-        PyramidUBO pyubo;
-        pyubo.scale = 2; pyubo.aspect = (W > H) ? W / H : H / W;
-        ctx->uboPyramid_ = vk::Buffer(ctx->device_,
-            sizeof(PyramidUBO), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &pyubo);
-
-        FlowUBO fubo;
-        fubo.flowScale = cfg.flowScale;
-        ctx->uboFlow_ = vk::Buffer(ctx->device_,
-            sizeof(FlowUBO), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &fubo);
-
+        // ── UBOs ──────────────────────────────────────────────────────────
+        PyramidUBO pyubo; pyubo.scale=2; pyubo.aspect=W/std::max(1u,H); pyubo.pad0=0; pyubo.pad1=0;
+        ctx->uboPyramid_ = vk::Buffer(ctx->device_, sizeof(PyramidUBO),
+                                       VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &pyubo);
+        FlowUBO fubo; fubo.flowScale=cfg.flowScale; fubo.pad0=fubo.pad1=fubo.pad2=0;
+        ctx->uboFlow_ = vk::Buffer(ctx->device_, sizeof(FlowUBO),
+                                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &fubo);
         ctx->uboSynth_.reserve(outputs);
         for (uint32_t k = 0; k < outputs; ++k) {
-            SynthUBO subo;
-            subo.flowScale = cfg.flowScale;
-            subo.alpha     = static_cast<float>(k + 1) / static_cast<float>(cfg.multiplier);
-            subo.epsilon   = 1e-5f;
-            ctx->uboSynth_.emplace_back(ctx->device_,
-                sizeof(SynthUBO), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &subo);
+            SynthUBO s;
+            s.flowScale = cfg.flowScale;
+            s.alpha     = float(k+1) / float(cfg.multiplier);
+            s.epsilon   = 1e-5f;
+            ctx->uboSynth_.emplace_back(ctx->device_, sizeof(SynthUBO),
+                                         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, &s);
         }
 
-        // Build pipelines ─────────────────────────────────────────────────────
-
-        // Pass: pyramid (shader_03)
-        // bindings: 0=UBO, 32=SAMPLED, 48-53=STORAGE
+        // ── Stage 1: Pyramid (separate Pass per frame to avoid descriptor aliasing) ──
         {
             std::vector<vk::DescriptorBinding> binds = {
                 {0,  VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
@@ -257,56 +262,94 @@ std::unique_ptr<FramegenContext> FramegenContext::create(
                 {52, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
                 {53, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
             };
-            ctx->passPyramid_ = Pass(ctx->device_, ctx->descPool_, 3, binds);
-            ctx->passPyramid_.bindUBO    (ctx->device_, 0, ctx->uboPyramid_);
-            // NB: input and outputs are re-bound per-invocation, see dispatchPipeline
+            // pyramidA_ ← currFrame (frame t)
+            ctx->passPyramidA_ = Pass(ctx->device_, ctx->descPool_, 3, binds);
+            ctx->passPyramidA_.bindUBO(ctx->device_, 0, ctx->uboPyramid_);
+            ctx->passPyramidA_.bindSampled(ctx->device_, 32, ctx->currFrame_, ctx->linearSampler_);
+            for (int i=0;i<6;++i) ctx->passPyramidA_.bindStorage(ctx->device_, uint32_t(48+i), ctx->pyramidA_[size_t(i)]);
+            // pyramidB_ ← prevFrame (frame t-1)
+            ctx->passPyramidB_ = Pass(ctx->device_, ctx->descPool_, 3, binds);
+            ctx->passPyramidB_.bindUBO(ctx->device_, 0, ctx->uboPyramid_);
+            ctx->passPyramidB_.bindSampled(ctx->device_, 32, ctx->prevFrame_, ctx->linearSampler_);
+            for (int i=0;i<6;++i) ctx->passPyramidB_.bindStorage(ctx->device_, uint32_t(48+i), ctx->pyramidB_[size_t(i)]);
         }
 
-        // Pass: coarse OF (shader_09)
-        // bindings: 32-37=SAMPLED (6 pyramid levels), 48-49=STORAGE
+        // ── Stage 2: Feature extraction ──────────────────────────────────────
+        // shader_05: curr → featA  (half-res)
+        ctx->passFeatA_     = make1Tex1Img(ctx->device_, ctx->descPool_, 5,  32, 48,
+                                            ctx->currFrame_, ctx->linearSampler_, ctx->featA_);
+        // shader_06: curr → featB
+        ctx->passFeatB_     = make1Tex1Img(ctx->device_, ctx->descPool_, 6,  32, 48,
+                                            ctx->currFrame_, ctx->linearSampler_, ctx->featB_);
+        // shader_26,27,28: featA → channels A/B/C
+        ctx->passFeatChanA_ = make1Tex1Img(ctx->device_, ctx->descPool_, 26, 32, 48,
+                                            ctx->featA_, ctx->linearSampler_, ctx->featChanA_);
+        ctx->passFeatChanB_ = make1Tex1Img(ctx->device_, ctx->descPool_, 27, 32, 48,
+                                            ctx->featA_, ctx->linearSampler_, ctx->featChanB_);
+        ctx->passFeatChanC_ = make1Tex1Img(ctx->device_, ctx->descPool_, 28, 32, 48,
+                                            ctx->featA_, ctx->linearSampler_, ctx->featChanC_);
+
+        // ── Stage 3: Coarse OF (shader_09) ──────────────────────────────────
+        // bindings: 32-34 = prev pyramid (pyramidB_), 35-37 = curr pyramid (pyramidA_)
         {
             std::vector<vk::DescriptorBinding> binds = {
-                {32, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1},
-                {33, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1},
-                {34, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1},
-                {35, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1},
-                {36, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1},
-                {37, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1},
-                {48, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
-                {49, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
+                {32,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1},
+                {33,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1},
+                {34,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1},
+                {35,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1},
+                {36,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1},
+                {37,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1},
+                {48,VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,1},
+                {49,VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,1},
             };
             ctx->passCoarseOF_ = Pass(ctx->device_, ctx->descPool_, 9, binds);
-            for (int i = 0; i < 3; ++i) {
-                ctx->passCoarseOF_.bindSampled(ctx->device_, 32+i,
-                    ctx->pyramidA_[i], ctx->linearSampler_);
-                ctx->passCoarseOF_.bindSampled(ctx->device_, 35+i,
-                    ctx->pyramidB_[i], ctx->linearSampler_);
+            for (int i=0;i<3;++i) {
+                ctx->passCoarseOF_.bindSampled(ctx->device_, uint32_t(32+i),
+                    ctx->pyramidB_[size_t(i)], ctx->linearSampler_); // prev
+                ctx->passCoarseOF_.bindSampled(ctx->device_, uint32_t(35+i),
+                    ctx->pyramidA_[size_t(i)], ctx->linearSampler_); // curr
             }
             ctx->passCoarseOF_.bindStorage(ctx->device_, 48, ctx->flowFwd_);
             ctx->passCoarseOF_.bindStorage(ctx->device_, 49, ctx->flowBwd_);
         }
 
-        // Pass: flow merge (shader_29)
-        // bindings: 32-33=SAMPLED, 48=STORAGE
+        // ── Stage 4: OF refinement chain ────────────────────────────────────
+        // shaders 08, 10, 11, 12: UBO + featChanA(prev+curr) → refined flow
+        // For our purposes, featChanA acts as both prev and curr feature inputs
+        // (in a real pipeline the prev features come from the prior frame's extraction)
+        ctx->passOFRefine0_    = make2Tex2Img_UBO(ctx->device_, ctx->descPool_, 8,
+            ctx->uboFlow_, ctx->featChanA_, ctx->featChanB_, ctx->linearSampler_,
+            ctx->flowRefinedFwd_, ctx->flowRefinedBwd_);
+        ctx->passOFRefine1_    = make2Tex2Img_UBO(ctx->device_, ctx->descPool_, 10,
+            ctx->uboFlow_, ctx->flowRefinedFwd_, ctx->featChanA_, ctx->linearSampler_,
+            ctx->flowFwd_, ctx->flowBwd_);
+        ctx->passOFRefine2_    = make2Tex2Img_UBO(ctx->device_, ctx->descPool_, 11,
+            ctx->uboFlow_, ctx->flowFwd_, ctx->featChanB_, ctx->linearSampler_,
+            ctx->flowRefinedFwd_, ctx->flowRefinedBwd_);
+        ctx->passOFRefine3_    = make2Tex2Img_UBO(ctx->device_, ctx->descPool_, 12,
+            ctx->uboFlow_, ctx->flowRefinedFwd_, ctx->featChanC_, ctx->linearSampler_,
+            ctx->flowFwd_, ctx->flowBwd_);
+        ctx->passOFRefineLarge_= make2Tex2Img_UBO(ctx->device_, ctx->descPool_, 17,
+            ctx->uboFlow_, ctx->flowFwd_, ctx->flowBwd_, ctx->linearSampler_,
+            ctx->flowRefinedFwd_, ctx->flowRefinedBwd_);
+
+        // ── Stage 5: Flow post-processing ───────────────────────────────────
         {
             std::vector<vk::DescriptorBinding> binds = {
-                {32, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1},
-                {33, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1},
-                {48, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
+                {32,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1},
+                {33,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1},
+                {48,VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,1},
             };
             ctx->passFlowMerge_ = Pass(ctx->device_, ctx->descPool_, 29, binds);
-            ctx->passFlowMerge_.bindSampled(ctx->device_, 32, ctx->flowFwd_, ctx->linearSampler_);
-            ctx->passFlowMerge_.bindSampled(ctx->device_, 33, ctx->flowBwd_, ctx->linearSampler_);
+            ctx->passFlowMerge_.bindSampled(ctx->device_, 32, ctx->flowRefinedFwd_, ctx->linearSampler_);
+            ctx->passFlowMerge_.bindSampled(ctx->device_, 33, ctx->flowRefinedBwd_, ctx->linearSampler_);
             ctx->passFlowMerge_.bindStorage(ctx->device_, 48, ctx->flowMerged_);
         }
-
-        // Pass: flow expand (shader_30)
-        // bindings: 32=SAMPLED, 48-49=STORAGE
         {
             std::vector<vk::DescriptorBinding> binds = {
-                {32, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1},
-                {48, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
-                {49, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
+                {32,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1},
+                {48,VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,1},
+                {49,VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,1},
             };
             ctx->passFlowExpand_ = Pass(ctx->device_, ctx->descPool_, 30, binds);
             ctx->passFlowExpand_.bindSampled(ctx->device_, 32, ctx->flowMerged_, ctx->linearSampler_);
@@ -314,8 +357,7 @@ std::unique_ptr<FramegenContext> FramegenContext::create(
             ctx->passFlowExpand_.bindStorage(ctx->device_, 49, ctx->flowExpB_);
         }
 
-        // Synthesis passes (shader_04) × (multiplier-1)
-        // bindings: 0=UBO, 32-36=SAMPLED (prev, curr, fwdFlow, bwdFlow, confidence), 48=STORAGE
+        // ── Stage 6: Synthesis ───────────────────────────────────────────────
         ctx->passSynth_.reserve(outputs);
         for (uint32_t k = 0; k < outputs; ++k) {
             std::vector<vk::DescriptorBinding> binds = {
@@ -330,147 +372,127 @@ std::unique_ptr<FramegenContext> FramegenContext::create(
             ctx->passSynth_.emplace_back(ctx->device_, ctx->descPool_, 4, binds);
             auto& ps = ctx->passSynth_.back();
             ps.bindUBO    (ctx->device_, 0,  ctx->uboSynth_[k]);
-            ps.bindSampled(ctx->device_, 32, ctx->prevFrame_, ctx->linearSampler_);
-            ps.bindSampled(ctx->device_, 33, ctx->currFrame_, ctx->linearSampler_);
-            ps.bindSampled(ctx->device_, 34, ctx->flowExpA_,  ctx->linearSampler_);
-            ps.bindSampled(ctx->device_, 35, ctx->flowExpB_,  ctx->linearSampler_);
-            ps.bindSampled(ctx->device_, 36, ctx->confidence_,ctx->linearSampler_);
+            ps.bindSampled(ctx->device_, 32, ctx->prevFrame_,   ctx->linearSampler_);
+            ps.bindSampled(ctx->device_, 33, ctx->currFrame_,   ctx->linearSampler_);
+            ps.bindSampled(ctx->device_, 34, ctx->flowExpA_,    ctx->linearSampler_);
+            ps.bindSampled(ctx->device_, 35, ctx->flowExpB_,    ctx->linearSampler_);
+            ps.bindSampled(ctx->device_, 36, ctx->confidence_,  ctx->linearSampler_);
             ps.bindStorage(ctx->device_, 48, ctx->outputImages_[k]);
         }
 
-        // Frame ring buffers
+        // ── Frame ring ────────────────────────────────────────────────────────
         for (auto& f : ctx->frames_) {
             f.cmd   = vk::CommandBuffer(ctx->device_, ctx->cmdPool_);
-            f.fence = vk::Fence(ctx->device_, true /* start signaled */);
+            f.fence = vk::Fence(ctx->device_, true);
         }
 
-        GNFG_LOGI("FramegenContext ready: %ux%u multiplier=%u shaders=MVP",
-                  W, H, cfg.multiplier);
+        GNFG_LOGI("FramegenContext ready: %ux%u mult=%u model=%u full-OF-chain",
+                  W, H, cfg.multiplier, cfg.model);
         return ctx;
     } catch (const vk::VkError& e) {
         GNFG_LOGE("FramegenContext::create VkError %d: %s", e.code, e.msg.c_str());
-        ctx->destroy();
-        return nullptr;
+        ctx->destroy(); return nullptr;
     } catch (const std::exception& e) {
         GNFG_LOGE("FramegenContext::create exception: %s", e.what());
-        ctx->destroy();
-        return nullptr;
+        ctx->destroy(); return nullptr;
     }
 }
 
-void FramegenContext::present(AHardwareBuffer* newPrevAhb, AHardwareBuffer* newCurrAhb) {
-    const uint32_t W = extent_.width;
-    const uint32_t H = extent_.height;
+void FramegenContext::present(AHardwareBuffer* /*newPrev*/, AHardwareBuffer* /*newCurr*/) {
+    const uint32_t W  = extent_.width,  H  = extent_.height;
+    const uint32_t W2 = std::max(1u,W>>1), H2 = std::max(1u,H>>1);
     const uint32_t fi = frameIdx_ & 1u;
-    auto& frame = frames_[fi];
+    auto& fr = frames_[fi];
+    fr.fence.wait(device_); fr.fence.reset(device_);
 
-    // Wait for this slot's previous submission to complete
-    frame.fence.wait(device_);
-    frame.fence.reset(device_);
+    vkResetCommandBuffer(fr.cmd.handle(), 0);
+    fr.cmd.begin();
+    VkCommandBuffer cmd = fr.cmd.handle();
 
-    // Update AHB-backed images if the caller swapped buffers
-    // (re-importing AHBs into existing image handles is not supported — 
-    //  for now the context assumes the same AHBs are reused each frame,
-    //  with the host writing new pixels into them)
-    (void)newPrevAhb; (void)newCurrAhb;
+    // Acquire AHB inputs from external
+    if (prevFrame_.external()) vk::acquireFromExternal(cmd, prevFrame_, device_.computeFamily(), VK_ACCESS_SHADER_READ_BIT);
+    if (currFrame_.external()) vk::acquireFromExternal(cmd, currFrame_, device_.computeFamily(), VK_ACCESS_SHADER_READ_BIT);
 
-    // Record command buffer
-    vkResetCommandBuffer(frame.cmd.handle(), 0);
-    frame.cmd.begin();
+    // ── Stage 1: Pyramid ─────────────────────────────────────────────────────
+    for (int i=0;i<6;++i) { toStorage(cmd,pyramidA_[size_t(i)]); toStorage(cmd,pyramidB_[size_t(i)]); }
+    passPyramidA_.dispatch(cmd, (W+15)/16, (H+15)/16);
+    computeBarrier(cmd);
+    passPyramidB_.dispatch(cmd, (W+15)/16, (H+15)/16);
+    computeBarrier(cmd);
+    for (int i=0;i<6;++i) { toShaderRead(cmd,pyramidA_[size_t(i)]); toShaderRead(cmd,pyramidB_[size_t(i)]); }
 
-    VkCommandBuffer cmd = frame.cmd.handle();
+    // ── Stage 2: Feature extraction ─────────────────────────────────────────
+    toStorage(cmd,featA_); toStorage(cmd,featB_);
+    toStorage(cmd,featChanA_); toStorage(cmd,featChanB_); toStorage(cmd,featChanC_);
+    passFeatA_.dispatch(cmd, (W2+15)/16, (H2+15)/16);    computeBarrier(cmd);
+    passFeatB_.dispatch(cmd, (W2+15)/16, (H2+15)/16);    computeBarrier(cmd);
+    toShaderRead(cmd,featA_); toShaderRead(cmd,featB_);
+    passFeatChanA_.dispatch(cmd, (W2+15)/16, (H2+15)/16); computeBarrier(cmd);
+    passFeatChanB_.dispatch(cmd, (W2+15)/16, (H2+15)/16); computeBarrier(cmd);
+    passFeatChanC_.dispatch(cmd, (W2+15)/16, (H2+15)/16); computeBarrier(cmd);
+    toShaderRead(cmd,featChanA_); toShaderRead(cmd,featChanB_); toShaderRead(cmd,featChanC_);
 
-    // Acquire AHB-backed inputs from external queue family
-    if (prevFrame_.external())
-        vk::acquireFromExternal(cmd, prevFrame_, device_.computeFamily(), VK_ACCESS_SHADER_READ_BIT);
-    if (currFrame_.external())
-        vk::acquireFromExternal(cmd, currFrame_, device_.computeFamily(), VK_ACCESS_SHADER_READ_BIT);
-
-    // === Stage 1: Build pyramid for curr (A) and prev (B) frames ===
-    auto doPyramid = [&](vk::Image& srcFrame, std::vector<vk::Image>& pyr) {
-        // Bind the specific source image and outputs
-        passPyramid_.bindSampled(device_, 32, srcFrame, linearSampler_);
-        for (int i = 0; i < 6; ++i) {
-            transitionToStorage(cmd, pyr[static_cast<size_t>(i)]);
-            passPyramid_.bindStorage(device_, 48+static_cast<uint32_t>(i),
-                                     pyr[static_cast<size_t>(i)]);
-        }
-        passPyramid_.dispatch(cmd, (W+15)/16, (H+15)/16);
-        computeBarrier(cmd);
-        for (int i = 0; i < 6; ++i)
-            transitionToShaderRead(cmd, pyr[static_cast<size_t>(i)]);
-    };
-    doPyramid(currFrame_, pyramidA_);
-    doPyramid(prevFrame_, pyramidB_);
-
-    // === Stage 2: Coarse optical flow ===
-    transitionToStorage(cmd, flowFwd_);
-    transitionToStorage(cmd, flowBwd_);
+    // ── Stage 3: Coarse OF ───────────────────────────────────────────────────
+    toStorage(cmd,flowFwd_); toStorage(cmd,flowBwd_);
     passCoarseOF_.dispatch(cmd, (W+15)/16, (H+15)/16);
     computeBarrier(cmd);
-    transitionToShaderRead(cmd, flowFwd_);
-    transitionToShaderRead(cmd, flowBwd_);
+    toShaderRead(cmd,flowFwd_); toShaderRead(cmd,flowBwd_);
 
-    // === Stage 3: Flow merge ===
-    transitionToStorage(cmd, flowMerged_);
-    passFlowMerge_.dispatch(cmd, (W+15)/16, (H+15)/16);
-    computeBarrier(cmd);
-    transitionToShaderRead(cmd, flowMerged_);
+    // ── Stage 4: OF refinement chain ────────────────────────────────────────
+    toStorage(cmd,flowRefinedFwd_); toStorage(cmd,flowRefinedBwd_);
+    passOFRefine0_.dispatch(cmd, (W+15)/16, (H+15)/16);    computeBarrier(cmd);
+    toShaderRead(cmd,flowRefinedFwd_); toShaderRead(cmd,flowRefinedBwd_);
+    toStorage(cmd,flowFwd_); toStorage(cmd,flowBwd_);
+    passOFRefine1_.dispatch(cmd, (W+15)/16, (H+15)/16);    computeBarrier(cmd);
+    toShaderRead(cmd,flowFwd_); toShaderRead(cmd,flowBwd_);
+    toStorage(cmd,flowRefinedFwd_); toStorage(cmd,flowRefinedBwd_);
+    passOFRefine2_.dispatch(cmd, (W+15)/16, (H+15)/16);    computeBarrier(cmd);
+    toShaderRead(cmd,flowRefinedFwd_); toShaderRead(cmd,flowRefinedBwd_);
+    toStorage(cmd,flowFwd_); toStorage(cmd,flowBwd_);
+    passOFRefine3_.dispatch(cmd, (W+15)/16, (H+15)/16);    computeBarrier(cmd);
+    toShaderRead(cmd,flowFwd_); toShaderRead(cmd,flowBwd_);
+    toStorage(cmd,flowRefinedFwd_); toStorage(cmd,flowRefinedBwd_);
+    passOFRefineLarge_.dispatch(cmd, (W+15)/16, (H+15)/16); computeBarrier(cmd);
+    toShaderRead(cmd,flowRefinedFwd_); toShaderRead(cmd,flowRefinedBwd_);
 
-    // === Stage 4: Flow expand ===
-    transitionToStorage(cmd, flowExpA_);
-    transitionToStorage(cmd, flowExpB_);
-    passFlowExpand_.dispatch(cmd, (W+15)/16, (H+15)/16);
-    computeBarrier(cmd);
-    transitionToShaderRead(cmd, flowExpA_);
-    transitionToShaderRead(cmd, flowExpB_);
+    // ── Stage 5: Flow post-processing ────────────────────────────────────────
+    toStorage(cmd,flowMerged_);
+    passFlowMerge_.dispatch(cmd, (W+15)/16, (H+15)/16);   computeBarrier(cmd);
+    toShaderRead(cmd,flowMerged_);
+    toStorage(cmd,flowExpA_); toStorage(cmd,flowExpB_);
+    passFlowExpand_.dispatch(cmd, (W+15)/16, (H+15)/16);  computeBarrier(cmd);
+    toShaderRead(cmd,flowExpA_); toShaderRead(cmd,flowExpB_);
 
-    // === Stage 5: Synthesis for each output frame ===
-    for (size_t k = 0; k < passSynth_.size(); ++k) {
-        // Acquire output from external
+    // ── Stage 6: Synthesis ───────────────────────────────────────────────────
+    for (size_t k=0; k<passSynth_.size(); ++k) {
         if (outputImages_[k].external())
-            vk::acquireFromExternal(cmd, outputImages_[k], device_.computeFamily(),
-                                    VK_ACCESS_SHADER_WRITE_BIT);
-
-        transitionToStorage(cmd, outputImages_[k]);
+            vk::acquireFromExternal(cmd, outputImages_[k], device_.computeFamily(), VK_ACCESS_SHADER_WRITE_BIT);
+        toStorage(cmd, outputImages_[k]);
         passSynth_[k].dispatch(cmd, (W+15)/16, (H+15)/16);
         computeBarrier(cmd);
-
-        // Release output to external
         if (outputImages_[k].external())
-            vk::releaseToExternal(cmd, outputImages_[k], device_.computeFamily(),
-                                  VK_ACCESS_SHADER_WRITE_BIT);
+            vk::releaseToExternal(cmd, outputImages_[k], device_.computeFamily(), VK_ACCESS_SHADER_WRITE_BIT);
     }
 
-    // Release AHB-backed inputs back to external
-    if (prevFrame_.external())
-        vk::releaseToExternal(cmd, prevFrame_, device_.computeFamily(), VK_ACCESS_SHADER_READ_BIT);
-    if (currFrame_.external())
-        vk::releaseToExternal(cmd, currFrame_, device_.computeFamily(), VK_ACCESS_SHADER_READ_BIT);
+    // Release inputs to external
+    if (prevFrame_.external()) vk::releaseToExternal(cmd, prevFrame_, device_.computeFamily(), VK_ACCESS_SHADER_READ_BIT);
+    if (currFrame_.external()) vk::releaseToExternal(cmd, currFrame_, device_.computeFamily(), VK_ACCESS_SHADER_READ_BIT);
 
-    frame.cmd.end();
-    frame.cmd.submit(device_, frame.fence.handle());
-
+    fr.cmd.end();
+    fr.cmd.submit(device_, fr.fence.handle());
     frameIdx_++;
 }
 #endif // __ANDROID__
 
 void FramegenContext::updateConfig(const Config& cfg) {
-    cfg_ = cfg;
-    cfg_.sanitize();
-
-    // Update synth UBOs with new flowScale
-    for (size_t k = 0; k < uboSynth_.size(); ++k) {
-        SynthUBO subo;
-        subo.flowScale = cfg_.flowScale;
-        subo.alpha     = static_cast<float>(k + 1) / static_cast<float>(cfg_.multiplier);
-        subo.epsilon   = 1e-5f;
-        uboSynth_[k].write(device_, &subo, sizeof(subo));
+    cfg_ = cfg; cfg_.sanitize();
+    for (size_t k=0;k<uboSynth_.size();++k) {
+        SynthUBO s; s.flowScale=cfg_.flowScale;
+        s.alpha=float(k+1)/float(cfg_.multiplier); s.epsilon=1e-5f;
+        uboSynth_[k].write(device_,&s,sizeof(s));
     }
-
-    FlowUBO fubo;
-    fubo.flowScale = cfg_.flowScale;
-    uboFlow_.write(device_, &fubo, sizeof(fubo));
+    FlowUBO f; f.flowScale=cfg_.flowScale; f.pad0=f.pad1=f.pad2=0;
+    uboFlow_.write(device_,&f,sizeof(f));
 }
 
 void FramegenContext::waitIdle() {
@@ -479,53 +501,40 @@ void FramegenContext::waitIdle() {
 
 void FramegenContext::destroy() {
     waitIdle();
-    for (auto& f : frames_) {
-        f.cmd.destroy(device_, cmdPool_);
-        f.fence.destroy(device_);
-    }
-    // Passes
-    passPyramid_.destroy(device_);
-    passCoarseOF_.destroy(device_);
-    passFlowMerge_.destroy(device_);
-    passFlowExpand_.destroy(device_);
-    for (auto& ps : passSynth_) ps.destroy(device_);
-    passSynth_.clear();
-
-    // UBOs
-    uboPyramid_.destroy(device_);
-    uboFlow_.destroy(device_);
-    for (auto& b : uboSynth_) b.destroy(device_);
-    uboSynth_.clear();
-
+    for (auto& f:frames_) { f.cmd.destroy(device_,cmdPool_); f.fence.destroy(device_); }
+    auto destroyPass=[&](Pass& p){ p.destroy(device_); };
+    destroyPass(passPyramidA_); destroyPass(passPyramidB_);
+    destroyPass(passFeatA_); destroyPass(passFeatB_);
+    destroyPass(passFeatChanA_); destroyPass(passFeatChanB_); destroyPass(passFeatChanC_);
+    destroyPass(passCoarseOF_);
+    destroyPass(passOFRefine0_); destroyPass(passOFRefine1_);
+    destroyPass(passOFRefine2_); destroyPass(passOFRefine3_);
+    destroyPass(passOFRefineLarge_);
+    destroyPass(passFlowMerge_); destroyPass(passFlowExpand_);
+    for (auto& p:passSynth_) p.destroy(device_); passSynth_.clear();
+    uboPyramid_.destroy(device_); uboFlow_.destroy(device_);
+    for (auto& b:uboSynth_) b.destroy(device_); uboSynth_.clear();
     // Images
     prevFrame_.destroy(device_); currFrame_.destroy(device_);
-    for (auto& img : outputImages_) img.destroy(device_);
-    for (auto& img : pyramidA_) img.destroy(device_);
-    for (auto& img : pyramidB_) img.destroy(device_);
+    for (auto& i:outputImages_) i.destroy(device_); outputImages_.clear();
+    for (auto& i:pyramidA_) i.destroy(device_); for (auto& i:pyramidB_) i.destroy(device_);
+    featA_.destroy(device_); featB_.destroy(device_);
+    featChanA_.destroy(device_); featChanB_.destroy(device_); featChanC_.destroy(device_);
     flowFwd_.destroy(device_); flowBwd_.destroy(device_);
-    flowMerged_.destroy(device_);
-    flowExpA_.destroy(device_); flowExpB_.destroy(device_);
+    flowRefinedFwd_.destroy(device_); flowRefinedBwd_.destroy(device_);
+    flowMerged_.destroy(device_); flowExpA_.destroy(device_); flowExpB_.destroy(device_);
     confidence_.destroy(device_);
-
-    // Descriptor pool
     if (descPool_) vkDestroyDescriptorPool(device_.handle(), descPool_, nullptr);
     descPool_ = VK_NULL_HANDLE;
-
-    // Core
-    linearSampler_.destroy(device_);
-    nearestSampler_.destroy(device_);
-    cmdPool_.destroy(device_);
-    device_.destroy();
+    linearSampler_.destroy(device_); nearestSampler_.destroy(device_);
+    cmdPool_.destroy(device_); device_.destroy();
 }
 
 std::string FramegenContext::describe() const {
     std::ostringstream o;
     o << "FramegenContext{" << extent_.width << "x" << extent_.height
-      << " mult=" << cfg_.multiplier
-      << " flowScale=" << cfg_.flowScale
-      << " model=" << cfg_.model
-      << " valid=" << (valid() ? "true" : "false")
-      << "}";
+      << " mult=" << cfg_.multiplier << " flowScale=" << cfg_.flowScale
+      << " model=" << cfg_.model << " valid=" << (valid()?"true":"false") << "}";
     return o.str();
 }
 

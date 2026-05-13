@@ -87,6 +87,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import app.gamenative.PrefManager
 import app.gamenative.R
+import app.gamenative.framegen.GNFramegenQuickMenuHelper
 import app.gamenative.ui.data.PerformanceHudConfig
 import app.gamenative.ui.data.PerformanceHudSize
 import app.gamenative.ui.theme.PluviaTheme
@@ -110,11 +111,12 @@ object QuickMenuAction {
 }
 
 private object QuickMenuTab {
-    const val HUD = 0
-    const val LSFG = 1
-    const val EFFECTS = 2
+    const val HUD        = 0
+    const val LSFG       = 1
+    const val EFFECTS    = 2
     const val CONTROLLER = 3
-    const val TOOLS = 4
+    const val TOOLS      = 4
+    const val GN_FRAMEGEN= 5
 }
 
 data class QuickMenuItem(
@@ -262,6 +264,14 @@ fun QuickMenu(
     onLsfgMultiplierChanged: (Int) -> Unit = {},
     onLsfgFlowScaleChanged: (Float) -> Unit = {},
     onLsfgPerformanceModeChanged: (Boolean) -> Unit = {},
+    // GN Framegen hot-reload state (tab only visible when isGnFramegenAvailable)
+    isGnFramegenAvailable: Boolean = false,
+    gnFramegenMultiplier: Int = 2,
+    gnFramegenFlowScale: Float = 0.6f,
+    gnFramegenModel: Int = 0,
+    onGnFramegenMultiplierChanged: (Int) -> Unit = {},
+    onGnFramegenFlowScaleChanged: (Float) -> Unit = {},
+    onGnFramegenModelChanged: (Int) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val exitGameItem = QuickMenuItem(
@@ -333,9 +343,10 @@ fun QuickMenu(
     }
     val selectedTabLabelResId = when (selectedTab) {
         QuickMenuTab.HUD -> R.string.performance_hud
-        QuickMenuTab.LSFG -> R.string.lsfg_tab_title
-        QuickMenuTab.EFFECTS -> R.string.screen_effects
-        QuickMenuTab.TOOLS -> R.string.task_manager
+        QuickMenuTab.LSFG       -> R.string.lsfg_tab_title
+        QuickMenuTab.EFFECTS    -> R.string.screen_effects
+        QuickMenuTab.TOOLS      -> R.string.task_manager
+        QuickMenuTab.GN_FRAMEGEN-> R.string.gn_framegen_tab_title
         else -> R.string.quick_menu_tab_controller
     }
 
@@ -476,6 +487,19 @@ fun QuickMenu(
                                         focusRequester = lsfgTabFocusRequester,
                                     )
                                 }
+                                if (isGnFramegenAvailable) {
+                                    QuickMenuTabButton(
+                                        icon = Icons.Default.Speed,
+                                        contentDescriptionResId = R.string.gn_framegen_tab_title,
+                                        selected = selectedTab == QuickMenuTab.GN_FRAMEGEN,
+                                        accentColor = PluviaTheme.colors.accentPurple,
+                                        onSelected = {
+                                            selectedTab = QuickMenuTab.GN_FRAMEGEN
+                                            PrefManager.quickMenuLastTab = selectedTab
+                                        },
+                                        modifier = Modifier.width(56.dp),
+                                    )
+                                }
                                 QuickMenuTabButton(
                                     icon = Icons.Default.AutoFixHigh,
                                     contentDescriptionResId = R.string.screen_effects,
@@ -588,6 +612,19 @@ fun QuickMenu(
                                             scrollState = lsfgScrollState,
                                             focusRequester = lsfgItemFocusRequester,
                                             modifier = Modifier.fillMaxSize(),
+                                        )
+                                    }
+
+                                    QuickMenuTab.GN_FRAMEGEN -> {
+                                        GnFramegenQuickMenuTab(
+                                            multiplier = gnFramegenMultiplier,
+                                            flowScale  = gnFramegenFlowScale,
+                                            model      = gnFramegenModel,
+                                            onMultiplierChanged = onGnFramegenMultiplierChanged,
+                                            onFlowScaleChanged  = onGnFramegenFlowScaleChanged,
+                                            onModelChanged      = onGnFramegenModelChanged,
+                                            scrollState = rememberScrollState(),
+                                            modifier    = Modifier.fillMaxSize(),
                                         )
                                     }
 
@@ -2077,5 +2114,90 @@ private fun Preview_QuickMenu_WithController() {
                 hasPhysicalController = true,
             )
         }
+    }
+}
+
+@Composable
+private fun GnFramegenQuickMenuTab(
+    multiplier: Int,
+    flowScale: Float,
+    model: Int,
+    onMultiplierChanged: (Int) -> Unit,
+    onFlowScaleChanged: (Float) -> Unit,
+    onModelChanged: (Int) -> Unit,
+    scrollState: androidx.compose.foundation.ScrollState,
+    focusRequester: FocusRequester? = null,
+    modifier: Modifier = Modifier,
+) {
+    val accentColor = PluviaTheme.colors.accentPurple
+    val isEnabled = multiplier >= 2
+    Column(
+        modifier = modifier
+            .verticalScroll(scrollState)
+            .focusGroup(),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        // Multiplier
+        QuickMenuSectionHeader(title = stringResource(R.string.gn_framegen_multiplier))
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            listOf(0, 2, 3, 4).forEach { value ->
+                QuickMenuChoiceChip(
+                    text = if (value == 0) "Off" else "${value}x",
+                    selected = multiplier == value || (value == 0 && multiplier < 2),
+                    accentColor = accentColor,
+                    onClick = { onMultiplierChanged(value) },
+                    modifier = Modifier.width(56.dp),
+                    focusRequester = if (value == 0) focusRequester else null,
+                )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = isEnabled,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut(),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Spacer(modifier = Modifier.height(4.dp))
+                // Flow scale
+                QuickMenuAdjustmentRow(
+                    title = stringResource(R.string.gn_framegen_flow_scale),
+                    valueText = String.format(java.util.Locale.US, "%.2f", flowScale),
+                    progress = (flowScale - 0.2f) / 0.8f,
+                    onDecrease = {
+                        onFlowScaleChanged(
+                            GNFramegenQuickMenuHelper.sanitizeFlowScale(flowScale - 0.05f)
+                        )
+                    },
+                    onIncrease = {
+                        onFlowScaleChanged(
+                            GNFramegenQuickMenuHelper.sanitizeFlowScale(flowScale + 0.05f)
+                        )
+                    },
+                    accentColor = accentColor,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                // Model selector
+                QuickMenuSectionHeader(title = stringResource(R.string.gn_framegen_model))
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    listOf(0 to "Default", 1 to "HQ").forEach { (value, label) ->
+                        QuickMenuChoiceChip(
+                            text = label,
+                            selected = model == value,
+                            accentColor = accentColor,
+                            onClick = { onModelChanged(value) },
+                            modifier = Modifier.width(80.dp),
+                        )
+                    }
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
     }
 }

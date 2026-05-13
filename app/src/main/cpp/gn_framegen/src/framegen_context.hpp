@@ -15,40 +15,17 @@
 
 namespace gn::framegen {
 
-// ─── UBO layouts (std140, matching GameScopeVK shader expectations) ──────────
+// ─── UBO layouts (matching GameScopeVK shader expectations) ─────────────────
 
-// Synthesis pass (shader_04): {flowScale, alpha, epsilon}
-struct SynthUBO {
-    float flowScale = 0.6f;
-    float alpha     = 0.5f;
-    float epsilon   = 1e-5f;
-};
-
-// Generic single-float UBO used by flow passes
-struct FlowUBO {
-    float flowScale = 0.6f;
-    float pad0      = 0.0f;
-    float pad1      = 0.0f;
-    float pad2      = 0.0f;
-};
-
-// Pyramid UBO
-struct PyramidUBO {
-    uint32_t scale  = 2;
-    uint32_t aspect = 1;
-    uint32_t pad0   = 0;
-    uint32_t pad1   = 0;
-};
+struct SynthUBO { float flowScale; float alpha; float epsilon; };
+struct FlowUBO   { float flowScale; float pad0; float pad1; float pad2; };
+struct PyramidUBO{ uint32_t scale; uint32_t aspect; uint32_t pad0; uint32_t pad1; };
 
 // ─── Pass ────────────────────────────────────────────────────────────────────
 
-// Encapsulates one compute dispatch: pipeline + descriptor set.
 class Pass {
 public:
     Pass() = default;
-
-    // Create a pass from one of the embedded shaders.
-    // bindings: {binding, descriptorType, count} for descriptor set layout
     Pass(const vk::Device& dev,
          VkDescriptorPool descPool,
          int embeddedShaderIdx,
@@ -56,14 +33,12 @@ public:
 
     void destroy(const vk::Device& dev);
 
-    // Update descriptor bindings before dispatch
-    void bindUBO      (const vk::Device& dev, uint32_t binding, const vk::Buffer& buf);
-    void bindSampled  (const vk::Device& dev, uint32_t binding, const vk::Image& img,
-                       const vk::Sampler& sampler);
-    void bindStorage  (const vk::Device& dev, uint32_t binding, const vk::Image& img);
+    void bindUBO    (const vk::Device& dev, uint32_t binding, const vk::Buffer& buf);
+    void bindSampled(const vk::Device& dev, uint32_t binding, const vk::Image&  img,
+                     const vk::Sampler& sampler);
+    void bindStorage(const vk::Device& dev, uint32_t binding, const vk::Image&  img);
 
     void dispatch(VkCommandBuffer cmd, uint32_t gx, uint32_t gy) const;
-
     bool valid() const { return pipeline_.valid(); }
 
 private:
@@ -79,83 +54,106 @@ public:
     FramegenContext() = default;
 
 #ifdef __ANDROID__
-    // Creates the context. prevAhb and currAhb are the rotating input AHBs.
-    // outputAhbs[multiplier-1] are the generated-frame AHBs.
     static std::unique_ptr<FramegenContext> create(
         AHardwareBuffer* prevAhb,
         AHardwareBuffer* currAhb,
         const std::vector<AHardwareBuffer*>& outputAhbs,
         VkExtent2D extent,
-        VkFormat format,
+        VkFormat   format,
         const Config& cfg);
 
-    // Called each "present" cycle.
-    // Swaps the input AHBs (caller must have already written new frames into them),
-    // dispatches the pipeline, and signals the output AHBs.
-    // After return, all output AHBs contain the generated frames.
-    void present(AHardwareBuffer* newPrevAhb,
-                 AHardwareBuffer* newCurrAhb);
+    void present(AHardwareBuffer* newPrevAhb, AHardwareBuffer* newCurrAhb);
 #endif
 
     void updateConfig(const Config& cfg);
     void waitIdle();
     void destroy();
 
-    bool valid() const { return device_.valid(); }
+    bool        valid()    const { return device_.valid(); }
     std::string describe() const;
 
 private:
-    void buildPipelines();
-    void buildDescriptors();
-    void dispatchPipeline(VkCommandBuffer cmd, uint32_t frameIdx);
-
-    Config cfg_;
-    VkExtent2D extent_ = {0, 0};
-    VkFormat format_   = VK_FORMAT_R8G8B8A8_UNORM;
+    // ── Vulkan core ──────────────────────────────────────────────────────────
+    Config      cfg_;
+    VkExtent2D  extent_  = {};
+    VkFormat    format_  = VK_FORMAT_R8G8B8A8_UNORM;
 
     vk::Device      device_;
     vk::CommandPool cmdPool_;
     vk::Sampler     linearSampler_;
     vk::Sampler     nearestSampler_;
-
     VkDescriptorPool descPool_ = VK_NULL_HANDLE;
 
-    // AHB-backed input images (not owned here — caller owns the AHBs)
+    // ── AHB-backed images (external, not owned) ───────────────────────────
     vk::Image prevFrame_;
     vk::Image currFrame_;
-
-    // AHB-backed output images (not owned here — caller owns the AHBs)
     std::vector<vk::Image> outputImages_;
 
-    // Intermediate device-local images
-    std::vector<vk::Image> pyramidA_;       // 6 levels for curr frame
-    std::vector<vk::Image> pyramidB_;       // 6 levels for prev frame
-    vk::Image flowFwd_;                     // forward flow RGBA16F
-    vk::Image flowBwd_;                     // backward flow RGBA16F
-    vk::Image flowMerged_;                  // merged flow
-    vk::Image flowExpA_, flowExpB_;         // expanded flow A, B
-    vk::Image confidence_;                  // placeholder confidence (all 1s)
+    // ── Device-local intermediate images ────────────────────────────────
+    // Pyramid (6 levels each at W>>i × H>>i, R8_UNORM)
+    std::vector<vk::Image> pyramidA_;   // built from currFrame (frame t)
+    std::vector<vk::Image> pyramidB_;   // built from prevFrame (frame t-1)
 
-    // Passes
-    Pass passPyramid_;    // shader_03: builds 6-level pyramid
-    Pass passCoarseOF_;   // shader_09: coarse optical flow
-    Pass passFlowMerge_;  // shader_29: merge fwd+bwd flow
-    Pass passFlowExpand_; // shader_30: expand merged flow
+    // Feature maps (W/2 × H/2, RGBA16F)
+    vk::Image featA_;        // shader_05 output
+    vk::Image featB_;        // shader_06 output
+    vk::Image featChanA_;    // shader_26 output
+    vk::Image featChanB_;    // shader_27 output
+    vk::Image featChanC_;    // shader_28 output
 
-    // Per-output synthesis passes (one per generated frame)
+    // Optical flow (W × H, RGBA16F — packed fwd+bwd)
+    vk::Image flowFwd_;      // coarse OF fwd (shader_09)
+    vk::Image flowBwd_;      // coarse OF bwd
+    vk::Image flowRefinedFwd_;   // after refinement chain
+    vk::Image flowRefinedBwd_;
+
+    // Post-processing flow
+    vk::Image flowMerged_;
+    vk::Image flowExpA_, flowExpB_;
+
+    // Confidence placeholder (W × H, RGBA8, filled white)
+    vk::Image confidence_;
+
+    // ── Passes ──────────────────────────────────────────────────────────────
+    // Stage 1: Pyramid
+    Pass passPyramidA_;    // shader_03 — curr frame → pyramidA_
+    Pass passPyramidB_;    // shader_03 — prev frame → pyramidB_ (separate descriptor set)
+
+    // Stage 2: Feature extraction
+    Pass passFeatA_;       // shader_05
+    Pass passFeatB_;       // shader_06
+    Pass passFeatChanA_;   // shader_26
+    Pass passFeatChanB_;   // shader_27
+    Pass passFeatChanC_;   // shader_28
+
+    // Stage 3: Coarse OF
+    Pass passCoarseOF_;    // shader_09 — pyramid (prev @32-34, curr @35-37)
+
+    // Stage 4: OF refinement chain (shaders 08, 10, 11, 12, 17)
+    Pass passOFRefine0_;   // shader_08
+    Pass passOFRefine1_;   // shader_10
+    Pass passOFRefine2_;   // shader_11
+    Pass passOFRefine3_;   // shader_12
+    Pass passOFRefineLarge_; // shader_17 (final large refinement)
+
+    // Stage 5: Flow post-processing
+    Pass passFlowMerge_;   // shader_29
+    Pass passFlowExpand_;  // shader_30
+
+    // Stage 6: Synthesis (one per output frame)
     std::vector<Pass> passSynth_;  // shader_04 × (multiplier-1)
 
-    // UBO buffers
-    vk::Buffer uboFlow_;     // FlowUBO
-    vk::Buffer uboPyramid_;  // PyramidUBO
-    std::vector<vk::Buffer> uboSynth_; // SynthUBO × outputs
+    // ── UBO buffers ──────────────────────────────────────────────────────────
+    vk::Buffer uboPyramid_;
+    vk::Buffer uboFlow_;
+    std::vector<vk::Buffer> uboSynth_;
 
-    // Per-frame command buffer + fence
+    // ── Per-frame command buffer + fence ─────────────────────────────────────
     struct Frame {
         vk::CommandBuffer cmd;
         vk::Fence         fence;
     };
-    Frame frames_[2];
+    Frame    frames_[2];
     uint32_t frameIdx_ = 0;
 };
 

@@ -103,6 +103,8 @@ import app.gamenative.utils.ContainerUtils
 import app.gamenative.utils.CustomGameScanner
 import app.gamenative.utils.ExecutableSelectionUtils
 import app.gamenative.utils.LsfgQuickMenuHelper
+import app.gamenative.framegen.GNFramegenQuickMenuHelper
+import app.gamenative.framegen.GNFramegenManager
 import app.gamenative.utils.ManifestComponentHelper
 import app.gamenative.utils.PreInstallSteps
 import app.gamenative.utils.SteamTokenLogin
@@ -447,6 +449,13 @@ fun XServerScreen(
     val initialLsfgSettings = remember(container.id) { LsfgQuickMenuHelper.readSettings(container) }
     var lsfgMultiplier by rememberSaveable(container.id) { mutableIntStateOf(initialLsfgSettings.multiplier) }
     var lsfgFlowScale by rememberSaveable(container.id) { mutableStateOf(initialLsfgSettings.flowScale) }
+
+    // GN Framegen tab in QuickMenu only visible when enabled in container settings
+    val isGnFramegenAvailable = GNFramegenQuickMenuHelper.isAvailable(container)
+    val initialGnFgSettings = remember(container.id) { GNFramegenQuickMenuHelper.readSettings(container) }
+    var gnFramegenMultiplier by rememberSaveable(container.id) { mutableIntStateOf(initialGnFgSettings.multiplier) }
+    var gnFramegenFlowScale  by rememberSaveable(container.id) { mutableStateOf(initialGnFgSettings.flowScale) }
+    var gnFramegenModel      by rememberSaveable(container.id) { mutableIntStateOf(initialGnFgSettings.model) }
     var lsfgPerformanceMode by rememberSaveable(container.id) { mutableStateOf(initialLsfgSettings.performanceMode) }
 
     fun persistFpsLimiterState() {
@@ -564,6 +573,25 @@ fun XServerScreen(
     fun applyLsfgPerformanceMode(enabled: Boolean) {
         lsfgPerformanceMode = enabled
         applyLsfgSettings()
+    }
+
+    fun applyGnFramegenSettings() {
+        GNFramegenQuickMenuHelper.applySettings(
+            container,
+            GNFramegenQuickMenuHelper.Settings(gnFramegenMultiplier, gnFramegenFlowScale, gnFramegenModel),
+        )
+    }
+    fun applyGnFramegenMultiplier(mult: Int) {
+        gnFramegenMultiplier = GNFramegenQuickMenuHelper.sanitizeMultiplier(mult)
+        applyGnFramegenSettings()
+    }
+    fun applyGnFramegenFlowScale(scale: Float) {
+        gnFramegenFlowScale = GNFramegenQuickMenuHelper.sanitizeFlowScale(scale)
+        applyGnFramegenSettings()
+    }
+    fun applyGnFramegenModel(model: Int) {
+        gnFramegenModel = GNFramegenQuickMenuHelper.sanitizeModel(model)
+        applyGnFramegenSettings()
     }
 
     LaunchedEffect(xServerView) {
@@ -2394,6 +2422,14 @@ fun XServerScreen(
             onLsfgMultiplierChanged = ::applyLsfgMultiplier,
             onLsfgFlowScaleChanged = ::applyLsfgFlowScale,
             onLsfgPerformanceModeChanged = ::applyLsfgPerformanceMode,
+            // GN Framegen hot-reload
+            isGnFramegenAvailable = isGnFramegenAvailable,
+            gnFramegenMultiplier = gnFramegenMultiplier,
+            gnFramegenFlowScale  = gnFramegenFlowScale,
+            gnFramegenModel      = gnFramegenModel,
+            onGnFramegenMultiplierChanged = ::applyGnFramegenMultiplier,
+            onGnFramegenFlowScaleChanged  = ::applyGnFramegenFlowScale,
+            onGnFramegenModelChanged      = ::applyGnFramegenModel,
         )
 
         if (manualResumeMode && PluviaApp.isOverlayPaused && !showQuickMenu && !keepPausedForEditor) {
