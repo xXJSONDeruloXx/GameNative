@@ -4,6 +4,7 @@ import android.content.Context
 import app.gamenative.PrefManager
 import app.gamenative.data.GameSource
 import app.gamenative.enums.Marker
+import app.gamenative.framegen.GNFramegenManager
 import app.gamenative.service.SteamService
 import app.gamenative.service.amazon.AmazonService
 import app.gamenative.utils.LsfgVkManager
@@ -320,6 +321,10 @@ object ContainerUtils {
             sharpnessDenoise = container.getExtra("sharpnessDenoise", "100").toIntOrNull() ?: 100,
             // LSFG Vulkan frame generation
             lsfgEnabled = container.getExtra(LsfgVkManager.EXTRA_ARMED, "false").toBoolean(),
+            gnFramegenEnabled = container.getExtra(GNFramegenManager.EXTRA_ENABLED, "false").toBoolean(),
+            gnFramegenMultiplier = container.getExtra(GNFramegenManager.EXTRA_MULTIPLIER, "2").toIntOrNull() ?: 2,
+            gnFramegenFlowScale = container.getExtra(GNFramegenManager.EXTRA_FLOW_SCALE, "0.6").toFloatOrNull() ?: 0.6f,
+            gnFramegenModel = container.getExtra(GNFramegenManager.EXTRA_MODEL, "0").toIntOrNull() ?: 0,
         )
     }
 
@@ -488,6 +493,11 @@ object ContainerUtils {
         container.putExtra("sharpnessDenoise", containerData.sharpnessDenoise.toString())
         // LSFG Vulkan frame generation
         container.putExtra(LsfgVkManager.EXTRA_ARMED, containerData.lsfgEnabled.toString())
+        // GN Framegen standalone bootstrap
+        container.putExtra(GNFramegenManager.EXTRA_ENABLED, containerData.gnFramegenEnabled.toString())
+        container.putExtra(GNFramegenManager.EXTRA_MULTIPLIER, containerData.gnFramegenMultiplier.toString())
+        container.putExtra(GNFramegenManager.EXTRA_FLOW_SCALE, containerData.gnFramegenFlowScale.toString())
+        container.putExtra(GNFramegenManager.EXTRA_MODEL, containerData.gnFramegenModel.toString())
         try {
             container.language = containerData.language
         } catch (e: Exception) {

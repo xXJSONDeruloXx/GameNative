@@ -1488,6 +1488,16 @@
     <string name="lsfg_install_message">This will download Lossless Scaling from Steam to enable frame generation.</string>
     <string name="lsfg_installing">Downloading Lossless Scaling…</string>
     <string name="lsfg_performance_mode_desc">Reduces quality for higher throughput</string>
+
+    <!-- GN Framegen standalone -->
+    <string name="gn_framegen_tab_title">GN Framegen</string>
+    <string name="gn_framegen_enable">Enable GN Framegen (standalone)</string>
+    <string name="gn_framegen_description">Standalone Vulkan frame generation using embedded GameScopeVK shaders. No Lossless.dll required. Bionic containers only.</string>
+    <string name="gn_framegen_active">Active — configure in the Quick Menu in-game.</string>
+    <string name="gn_framegen_not_supported">GN Framegen requires a Bionic container.</string>
+    <string name="gn_framegen_multiplier">Frame multiplier</string>
+    <string name="gn_framegen_flow_scale">Flow scale</string>
+    <string name="gn_framegen_model">Quality model</string>
     <string name="settings_interface_show_recommendations_title">Show game recommendations</string>
     <string name="settings_interface_show_recommendations_subtitle">Show curated indie game picks in your library. Keeping this on helps support indie developers and GameNative.</string>
 </resources>

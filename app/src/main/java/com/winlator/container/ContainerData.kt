@@ -97,6 +97,11 @@ data class ContainerData(
     // LSFG Vulkan frame generation
     /** Whether LSFG frame generation is enabled for this container */
     val lsfgEnabled: Boolean = false,
+    // GN Framegen standalone bootstrap
+    val gnFramegenEnabled: Boolean = false,
+    val gnFramegenMultiplier: Int = 2,
+    val gnFramegenFlowScale: Float = 0.6f,
+    val gnFramegenModel: Int = 0,
 ) {
     companion object {
         val Saver = mapSaver(
@@ -161,6 +166,10 @@ data class ContainerData(
                     "sharpnessLevel" to state.sharpnessLevel,
                     "sharpnessDenoise" to state.sharpnessDenoise,
                     "lsfgEnabled" to state.lsfgEnabled,
+                    "gnFramegenEnabled" to state.gnFramegenEnabled,
+                    "gnFramegenMultiplier" to state.gnFramegenMultiplier,
+                    "gnFramegenFlowScale" to state.gnFramegenFlowScale,
+                    "gnFramegenModel" to state.gnFramegenModel,
                 )
             },
             restore = { savedMap ->
@@ -224,6 +233,10 @@ data class ContainerData(
                     sharpnessLevel = (savedMap["sharpnessLevel"] as? Int) ?: 100,
                     sharpnessDenoise = (savedMap["sharpnessDenoise"] as? Int) ?: 100,
                     lsfgEnabled = (savedMap["lsfgEnabled"] as? Boolean) ?: false,
+                    gnFramegenEnabled = (savedMap["gnFramegenEnabled"] as? Boolean) ?: false,
+                    gnFramegenMultiplier = (savedMap["gnFramegenMultiplier"] as? Int) ?: 2,
+                    gnFramegenFlowScale = (savedMap["gnFramegenFlowScale"] as? Float) ?: 0.6f,
+                    gnFramegenModel = (savedMap["gnFramegenModel"] as? Int) ?: 0,
                 )
             },
         )

@@ -18,6 +18,7 @@ import androidx.annotation.NonNull;
 import com.winlator.PrefManager;
 
 import app.gamenative.utils.LsfgVkManager;
+import app.gamenative.framegen.GNFramegenManager;
 import com.winlator.box86_64.Box86_64Preset;
 import com.winlator.box86_64.Box86_64PresetManager;
 import com.winlator.container.Container;
@@ -319,6 +320,24 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
             LsfgVkManager.ensureRuntimeInstalled(environment.getContext(), container);
             LsfgVkManager.writeConfig(container);
             LsfgVkManager.applyLaunchEnv(container, envVars);
+        }
+
+        // GN Framegen standalone: pre-validate the embedded shader bundle at launch.
+        // The actual Vulkan context is created lazily once AHBs are available.
+        if (GNFramegenManager.INSTANCE.isEnabled(container)) {
+            boolean bundleOk = GNFramegenManager.INSTANCE.ensureLibraryReady();
+            if (!bundleOk) {
+                Log.w("BionicProgramLauncherComponent",
+                    "GN Framegen: embedded shader bundle not ready — disabling for this session");
+            } else {
+                Log.i("BionicProgramLauncherComponent",
+                    "GN Framegen: " + GNFramegenManager.INSTANCE.bundleDescription());
+            }
+            // Mutual exclusion: if GN Framegen is enabled, silence LSFG env vars
+            if (bundleOk) {
+                envVars.remove("LSFG_CONFIG");
+                envVars.remove("LSFG_PROCESS");
+            }
         }
 
         Log.d("BionicProgramLauncherComponent", "env vars are " + envVars.toString());

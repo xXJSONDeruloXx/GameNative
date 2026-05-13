@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -19,6 +20,7 @@ import app.gamenative.ui.component.settings.SettingsMultiListDropdown
 import app.gamenative.ui.theme.settingsTileColors
 import app.gamenative.ui.theme.settingsTileColorsAlt
 import app.gamenative.utils.LsfgVkManager
+import app.gamenative.framegen.GNFramegenManager
 import com.alorma.compose.settings.ui.SettingsGroup
 import com.alorma.compose.settings.ui.SettingsSwitch
 import com.winlator.contents.ContentProfile
@@ -325,6 +327,9 @@ fun GraphicsTabContent(state: ContainerConfigState) {
         // with a Vortek/Adreno graphics driver.
         LsfgSection(state)
 
+        // GN Framegen standalone — embedded shader engine, no Lossless.dll needed
+        GNFramegenSection(state)
+
         SettingsSwitch(
             colors = settingsTileColorsAlt(),
             title = { Text(text = stringResource(R.string.use_dri3)) },
@@ -508,5 +513,37 @@ private fun LsfgSection(state: ContainerConfigState) {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun GNFramegenSection(state: ContainerConfigState) {
+    val config = state.config.value
+    val supported = config.containerVariant.equals(Container.BIONIC, ignoreCase = true)
+    if (!supported) return
+
+    val bundleReady = rememberSaveable { GNFramegenManager.ensureLibraryReady() }
+
+    SettingsGroup {
+        SettingsSwitch(
+            colors = settingsTileColorsAlt(),
+            title = { Text(text = stringResource(R.string.gn_framegen_enable)) },
+            subtitle = {
+                Text(
+                    text = if (config.gnFramegenEnabled)
+                        stringResource(R.string.gn_framegen_active)
+                    else
+                        stringResource(R.string.gn_framegen_description)
+                )
+            },
+            state = config.gnFramegenEnabled && bundleReady,
+            onCheckedChange = { enabled ->
+                state.config.value = config.copy(
+                    gnFramegenEnabled = enabled && bundleReady,
+                    // Mutual exclusion with LSFG
+                    lsfgEnabled = if (enabled) false else config.lsfgEnabled,
+                )
+            },
+        )
     }
 }

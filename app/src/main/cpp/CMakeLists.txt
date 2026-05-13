@@ -7,6 +7,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2 -Wno-unused-function -Wimplicit-function
 #add_subdirectory(proot)
 add_subdirectory(virglrenderer)
 add_subdirectory(patchelf)
+add_subdirectory(gn_framegen)
 
 add_library(winlator SHARED
             winlator/drawable.c
