@@ -322,22 +322,23 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
             LsfgVkManager.applyLaunchEnv(container, envVars);
         }
 
-        // GN Framegen standalone: pre-validate the embedded shader bundle at launch.
-        // The actual Vulkan context is created lazily once AHBs are available.
+        // GN Framegen standalone Vulkan layer. When enabled, it owns the framegen
+        // path and disables LSFG's config/process env to avoid double injection.
         if (GNFramegenManager.INSTANCE.isEnabled(container)) {
             boolean bundleOk = GNFramegenManager.INSTANCE.ensureLibraryReady();
-            if (!bundleOk) {
+            boolean runtimeOk = GNFramegenManager.INSTANCE.ensureRuntimeInstalled(environment.getContext(), container);
+            if (!bundleOk || !runtimeOk) {
                 Log.w("BionicProgramLauncherComponent",
-                    "GN Framegen: embedded shader bundle not ready — disabling for this session");
+                    "GN Framegen: runtime not ready — disabling for this session");
             } else {
+                envVars.remove("LSFG_CONFIG");
+                envVars.remove("LSFG_PROCESS");
+                GNFramegenManager.INSTANCE.applyLaunchEnv(container, envVars);
                 Log.i("BionicProgramLauncherComponent",
                     "GN Framegen: " + GNFramegenManager.INSTANCE.bundleDescription());
             }
-            // Mutual exclusion: if GN Framegen is enabled, silence LSFG env vars
-            if (bundleOk) {
-                envVars.remove("LSFG_CONFIG");
-                envVars.remove("LSFG_PROCESS");
-            }
+        } else {
+            GNFramegenManager.INSTANCE.applyLaunchEnv(container, envVars);
         }
 
         Log.d("BionicProgramLauncherComponent", "env vars are " + envVars.toString());

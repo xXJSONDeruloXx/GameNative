@@ -15,6 +15,7 @@ add_library(gn_framegen SHARED
     src/jni_bridge.cpp
     src/vulkan/vk_impl.cpp
     src/framegen_context.cpp
+    src/vk_layer/layer.cpp
 )
 
 target_include_directories(gn_framegen

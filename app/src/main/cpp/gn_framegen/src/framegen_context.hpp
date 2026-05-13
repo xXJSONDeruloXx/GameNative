@@ -111,8 +111,11 @@ private:
     vk::Image flowMerged_;
     vk::Image flowExpA_, flowExpB_;
 
-    // Confidence placeholder (W × H, RGBA8, filled white)
-    vk::Image confidence_;
+    // Confidence/warp intermediates (W × H, RGBA8)
+    vk::Image confidence_;     // initial all-ones occlusion prior
+    vk::Image warpedPrev_;     // shader_14/39 output b48
+    vk::Image warpedCurr_;     // shader_14/39 output b49
+    vk::Image confidenceMap_;  // shader_14/39 output b50, consumed by shader_04 b36
 
     // ── Passes ──────────────────────────────────────────────────────────────
     // Stage 1: Pyramid
@@ -140,8 +143,9 @@ private:
     Pass passFlowMerge_;   // shader_29
     Pass passFlowExpand_;  // shader_30
 
-    // Stage 6: Synthesis (one per output frame)
-    std::vector<Pass> passSynth_;  // shader_04 × (multiplier-1)
+    // Stage 6: Confidence warp + synthesis (one per output frame)
+    std::vector<Pass> passWarpBlend_; // shader_14/model1 shader_39 × (multiplier-1)
+    std::vector<Pass> passSynth_;     // shader_04 × (multiplier-1)
 
     // ── UBO buffers ──────────────────────────────────────────────────────────
     vk::Buffer uboPyramid_;
@@ -155,6 +159,12 @@ private:
     };
     Frame    frames_[2];
     uint32_t frameIdx_ = 0;
+
+#ifdef __ANDROID__
+    AHardwareBuffer* prevAhbPtr_ = nullptr;
+    AHardwareBuffer* currAhbPtr_ = nullptr;
+    void rebindFrameInputs();
+#endif
 };
 
 } // namespace gn::framegen

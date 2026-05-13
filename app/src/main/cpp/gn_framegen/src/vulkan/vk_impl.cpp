@@ -148,11 +148,23 @@ Device Device::create() {
     return d;
 }
 
+Device Device::wrap(VkInstance inst, VkPhysicalDevice phys, VkDevice dev,
+                    uint32_t computeFamily, VkQueue queue) {
+    Device d;
+    d.owned_         = false;
+    d.instance_      = inst;
+    d.physical_      = phys;
+    d.device_        = dev;
+    d.computeFamily_ = computeFamily;
+    d.computeQueue_  = queue;
+    return d;
+}
+
 void Device::destroy() {
+    if (!owned_) { device_ = VK_NULL_HANDLE; instance_ = VK_NULL_HANDLE; return; }
     if (device_)   vkDestroyDevice(device_, nullptr);
     if (instance_) vkDestroyInstance(instance_, nullptr);
-    device_   = VK_NULL_HANDLE;
-    instance_ = VK_NULL_HANDLE;
+    device_ = VK_NULL_HANDLE; instance_ = VK_NULL_HANDLE;
 }
 
 // ─── Image ───────────────────────────────────────────────────────────────────

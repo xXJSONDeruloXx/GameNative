@@ -36,6 +36,9 @@ public:
     // Creates a standalone Vulkan device on the first capable physical device.
     // On Android, requests the AHB extension chain automatically.
     static Device create();
+    // Wrap an existing device (owned=false: destroy() does nothing)
+    static Device wrap(VkInstance inst, VkPhysicalDevice phys, VkDevice dev,
+                       uint32_t computeFamily, VkQueue queue);
 
     VkDevice handle()           const { return device_; }
     VkPhysicalDevice physical() const { return physical_; }
@@ -46,6 +49,7 @@ public:
     void destroy();
 
 private:
+    bool         owned_       = true;
     VkInstance   instance_     = VK_NULL_HANDLE;
     VkDevice     device_       = VK_NULL_HANDLE;
     VkPhysicalDevice physical_ = VK_NULL_HANDLE;

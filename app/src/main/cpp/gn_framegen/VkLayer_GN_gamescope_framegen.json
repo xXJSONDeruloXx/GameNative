@@ -1,0 +1,18 @@
+{
+    "file_format_version": "1.0.0",
+    "layer": {
+        "name": "VK_LAYER_GN_gamescope_framegen",
+        "type": "GLOBAL",
+        "library_path": "../../../lib/libgn_framegen.so",
+        "api_version": "1.1.0",
+        "implementation_version": "2",
+        "description": "GameNative standalone frame generation (authorized GameScopeVK shaders)",
+        "functions": {
+            "vkGetInstanceProcAddr": "GNFramegen_GetInstanceProcAddr",
+            "vkGetDeviceProcAddr":   "GNFramegen_GetDeviceProcAddr"
+        },
+        "enable_environment": {
+            "GN_FG_ENABLE": "1"
+        }
+    }
+}
