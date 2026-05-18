@@ -56,11 +56,13 @@ fun GeneralTabContent(
     val suspendBehaviorEntries = listOf(
         stringResource(R.string.suspend_behavior_manual),
         stringResource(R.string.suspend_behavior_auto),
+        stringResource(R.string.suspend_behavior_keep_alive),
         stringResource(R.string.suspend_behavior_never),
     )
     val suspendBehaviorIndex = when {
         config.suspendPolicy.equals(Container.SUSPEND_POLICY_MANUAL, ignoreCase = true) -> 0
-        config.suspendPolicy.equals(Container.SUSPEND_POLICY_NEVER, ignoreCase = true) -> 2
+        config.suspendPolicy.equals(Container.SUSPEND_POLICY_KEEP_ALIVE, ignoreCase = true) -> 2
+        config.suspendPolicy.equals(Container.SUSPEND_POLICY_NEVER, ignoreCase = true) -> 3
         else -> 1
     }
 
@@ -416,7 +418,8 @@ fun GeneralTabContent(
                 val policy = when (index) {
                     0 -> Container.SUSPEND_POLICY_MANUAL
                     1 -> Container.SUSPEND_POLICY_AUTO
-                    2 -> Container.SUSPEND_POLICY_NEVER
+                    2 -> Container.SUSPEND_POLICY_KEEP_ALIVE
+                    3 -> Container.SUSPEND_POLICY_NEVER
                     else -> Container.SUSPEND_POLICY_MANUAL
                 }
                 state.config.value = config.copy(suspendPolicy = policy)

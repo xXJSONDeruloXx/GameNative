@@ -340,6 +340,7 @@ class MainActivity : ComponentActivity() {
 
         // disable auto-stop when returning to foreground
         SteamService.autoStopWhenIdle = false
+        PluviaApp.stopSuspendKeepAliveTicker()
 
         // Resume game according to the active suspend policy.
         if (hasReadyGameLifecycleState("resume")) {
@@ -390,7 +391,12 @@ class MainActivity : ComponentActivity() {
                         PluviaApp.isOverlayPaused = true
                         Timber.d("Game paused due to app backgrounded (manual resume required)")
                     } else {
-                        Timber.d("Game paused due to app backgrounded")
+                        if (PluviaApp.isKeepAliveSuspendMode()) {
+                            PluviaApp.startSuspendKeepAliveTicker()
+                            Timber.d("Game paused due to app backgrounded (keep-alive ticker active)")
+                        } else {
+                            Timber.d("Game paused due to app backgrounded")
+                        }
                     }
                 }
             }

@@ -35,7 +35,10 @@ import dagger.hilt.android.HiltAndroidApp
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 typealias NavChangedListener = NavController.OnDestinationChangedListener
@@ -199,6 +202,11 @@ class PluviaApp : SplitCompatApplication() {
         var touchpadView: TouchpadView? = null
         var achievementWatcher: app.gamenative.service.AchievementWatcher? = null
 
+        private const val SUSPEND_KEEP_ALIVE_INTERVAL_MS = 60_000L
+        private const val SUSPEND_KEEP_ALIVE_AWAKE_MS = 500L
+        private val suspendKeepAliveScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        private var suspendKeepAliveJob: Job? = null
+
         var isOverlayPaused by mutableStateOf(false)
         @Volatile
         var isActivityInForeground: Boolean = true
@@ -211,6 +219,46 @@ class PluviaApp : SplitCompatApplication() {
         fun setActiveSuspendPolicy(policy: String) {
             activeSuspendPolicy = Container.normalizeSuspendPolicy(policy)
             hasInitializedSuspendPolicyState = true
+        }
+
+        private fun shouldRunSuspendKeepAliveTicker(): Boolean {
+            return SteamService.keepAlive &&
+                !isActivityInForeground &&
+                hasInitializedSuspendPolicyState &&
+                activeSuspendPolicy.equals(Container.SUSPEND_POLICY_KEEP_ALIVE, ignoreCase = true) &&
+                xEnvironment != null
+        }
+
+        fun startSuspendKeepAliveTicker() {
+            if (suspendKeepAliveJob?.isActive == true) return
+            if (!shouldRunSuspendKeepAliveTicker()) return
+
+            suspendKeepAliveJob = suspendKeepAliveScope.launch {
+                Timber.i(
+                    "Suspend keep-alive ticker started (interval=%dms, wake=%dms)",
+                    SUSPEND_KEEP_ALIVE_INTERVAL_MS,
+                    SUSPEND_KEEP_ALIVE_AWAKE_MS,
+                )
+
+                try {
+                    while (isActive) {
+                        delay(SUSPEND_KEEP_ALIVE_INTERVAL_MS)
+                        if (!shouldRunSuspendKeepAliveTicker()) break
+
+                        val env = xEnvironment ?: break
+                        Timber.d("Suspend keep-alive tick")
+                        env.performKeepAliveTick(SUSPEND_KEEP_ALIVE_AWAKE_MS)
+                    }
+                } finally {
+                    Timber.i("Suspend keep-alive ticker stopped")
+                    suspendKeepAliveJob = null
+                }
+            }
+        }
+
+        fun stopSuspendKeepAliveTicker() {
+            suspendKeepAliveJob?.cancel()
+            suspendKeepAliveJob = null
         }
 
         /**
@@ -231,6 +279,7 @@ class PluviaApp : SplitCompatApplication() {
             runCatching { env?.stopEnvironmentComponents() }
                 .onFailure { Timber.e(it, "shutdownEnvironment: stopEnvironmentComponents") }
 
+            stopSuspendKeepAliveTicker()
             xEnvironment = null
             inputControlsView = null
             inputControlsManager = null
@@ -243,6 +292,7 @@ class PluviaApp : SplitCompatApplication() {
         }
 
         fun clearActiveSuspendState() {
+            stopSuspendKeepAliveTicker()
             activeSuspendPolicy = Container.SUSPEND_POLICY_MANUAL
             isOverlayPaused = false
             hasInitializedSuspendPolicyState = false
@@ -253,6 +303,8 @@ class PluviaApp : SplitCompatApplication() {
         fun isNeverSuspendMode(): Boolean = activeSuspendPolicy.equals(Container.SUSPEND_POLICY_NEVER, ignoreCase = true)
 
         fun isManualSuspendMode(): Boolean = activeSuspendPolicy.equals(Container.SUSPEND_POLICY_MANUAL, ignoreCase = true)
+
+        fun isKeepAliveSuspendMode(): Boolean = activeSuspendPolicy.equals(Container.SUSPEND_POLICY_KEEP_ALIVE, ignoreCase = true)
 
     }
 

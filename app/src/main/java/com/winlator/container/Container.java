@@ -64,6 +64,7 @@ public class Container {
     public static final String SUSPEND_POLICY_AUTO = "auto";
     public static final String SUSPEND_POLICY_NEVER = "never";
     public static final String SUSPEND_POLICY_MANUAL = "manual";
+    public static final String SUSPEND_POLICY_KEEP_ALIVE = "keep_alive";
 
     public static final String STEAM_TYPE_NORMAL = "normal";
     public static final String STEAM_TYPE_LIGHT = "light";
@@ -1027,6 +1028,8 @@ public class Container {
                 return SUSPEND_POLICY_NEVER;
             case SUSPEND_POLICY_MANUAL:
                 return SUSPEND_POLICY_MANUAL;
+            case SUSPEND_POLICY_KEEP_ALIVE:
+                return SUSPEND_POLICY_KEEP_ALIVE;
             case SUSPEND_POLICY_AUTO:
             default:
                 return SUSPEND_POLICY_AUTO;

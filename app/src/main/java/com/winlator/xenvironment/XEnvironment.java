@@ -23,6 +23,7 @@ public class XEnvironment implements Iterable<EnvironmentComponent> {
     private final Context context;
     private final ImageFs imageFs;
     private final ArrayList<EnvironmentComponent> components = new ArrayList<>();
+    private final Object lifecycleLock = new Object();
 
     private boolean winetricksRunning = false;
 
@@ -82,34 +83,69 @@ public class XEnvironment implements Iterable<EnvironmentComponent> {
         for (EnvironmentComponent environmentComponent : this) environmentComponent.stop();
     }
 
-    public void onPause() {
+    private void suspendGameProcessesLocked() {
         GuestProgramLauncherComponent guestProgramLauncherComponent = getComponent(GuestProgramLauncherComponent.class);
         if (guestProgramLauncherComponent != null) guestProgramLauncherComponent.suspendProcess();
         GlibcProgramLauncherComponent glibcProgramLauncherComponent = getComponent(GlibcProgramLauncherComponent.class);
         if (glibcProgramLauncherComponent != null) glibcProgramLauncherComponent.suspendProcess();
         BionicProgramLauncherComponent bionicProgramLauncherComponent = getComponent(BionicProgramLauncherComponent.class);
         if (bionicProgramLauncherComponent != null) bionicProgramLauncherComponent.suspendProcess();
-
-        // Pause audio components
-        PulseAudioComponent pulseAudioComponent = getComponent(PulseAudioComponent.class);
-        if (pulseAudioComponent != null) pulseAudioComponent.pause();
-        ALSAServerComponent alsaServerComponent = getComponent(ALSAServerComponent.class);
-        if (alsaServerComponent != null) alsaServerComponent.pause();
     }
 
-    public void onResume() {
-        // Resume audio FIRST so it's ready when game processes wake up
-        PulseAudioComponent pulseAudioComponent = getComponent(PulseAudioComponent.class);
-        if (pulseAudioComponent != null) pulseAudioComponent.resume();
-        ALSAServerComponent alsaServerComponent = getComponent(ALSAServerComponent.class);
-        if (alsaServerComponent != null) alsaServerComponent.resume();
-
-        // Then resume game processes
+    private void resumeGameProcessesLocked() {
         GuestProgramLauncherComponent guestProgramLauncherComponent = getComponent(GuestProgramLauncherComponent.class);
         if (guestProgramLauncherComponent != null) guestProgramLauncherComponent.resumeProcess();
         GlibcProgramLauncherComponent glibcProgramLauncherComponent = getComponent(GlibcProgramLauncherComponent.class);
         if (glibcProgramLauncherComponent != null) glibcProgramLauncherComponent.resumeProcess();
         BionicProgramLauncherComponent bionicProgramLauncherComponent = getComponent(BionicProgramLauncherComponent.class);
         if (bionicProgramLauncherComponent != null) bionicProgramLauncherComponent.resumeProcess();
+    }
+
+    private void pauseAudioLocked() {
+        PulseAudioComponent pulseAudioComponent = getComponent(PulseAudioComponent.class);
+        if (pulseAudioComponent != null) pulseAudioComponent.pause();
+        ALSAServerComponent alsaServerComponent = getComponent(ALSAServerComponent.class);
+        if (alsaServerComponent != null) alsaServerComponent.pause();
+    }
+
+    private void resumeAudioLocked() {
+        PulseAudioComponent pulseAudioComponent = getComponent(PulseAudioComponent.class);
+        if (pulseAudioComponent != null) pulseAudioComponent.resume();
+        ALSAServerComponent alsaServerComponent = getComponent(ALSAServerComponent.class);
+        if (alsaServerComponent != null) alsaServerComponent.resume();
+    }
+
+    public void onPause() {
+        synchronized (lifecycleLock) {
+            suspendGameProcessesLocked();
+            pauseAudioLocked();
+        }
+    }
+
+    public void onResume() {
+        synchronized (lifecycleLock) {
+            // Resume audio FIRST so it's ready when game processes wake up
+            resumeAudioLocked();
+
+            // Then resume game processes
+            resumeGameProcessesLocked();
+        }
+    }
+
+    public void performKeepAliveTick(long awakeDurationMs) {
+        synchronized (lifecycleLock) {
+            long safeAwakeDurationMs = Math.max(100L, awakeDurationMs);
+            Log.d("XEnvironment", "Performing suspend keep-alive tick for " + safeAwakeDurationMs + "ms");
+            resumeGameProcessesLocked();
+            try {
+                Thread.sleep(safeAwakeDurationMs);
+            }
+            catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            finally {
+                suspendGameProcessesLocked();
+            }
+        }
     }
 }

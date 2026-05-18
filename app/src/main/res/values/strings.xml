@@ -822,6 +822,7 @@
     <string name="startup_selection">Startup Selection</string>
     <string name="suspend_behavior">Suspend Behavior</string>
     <string name="suspend_behavior_auto">Suspend and auto-resume</string>
+    <string name="suspend_behavior_keep_alive">Safety suspend (tick every minute)</string>
     <string name="suspend_behavior_never">Never suspend</string>
     <string name="suspend_behavior_manual">Suspend until Resume button (Default)</string>
     <string name="processor_affinity_32bit">Processor Affinity (32-bit apps)</string>
