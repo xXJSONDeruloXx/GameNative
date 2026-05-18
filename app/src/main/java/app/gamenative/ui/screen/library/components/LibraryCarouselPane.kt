@@ -306,7 +306,24 @@ internal fun LibraryCarouselPane(
 
     var settledBackdropItem by remember { mutableStateOf<LibraryItem?>(null) }
     val currentAppInfoList by rememberUpdatedState(state.appInfoList)
-    LaunchedEffect(listState) {
+    val freezeBackdropUpdates = state.isOptionsPanelOpen
+
+    LaunchedEffect(state.appInfoList, freezeBackdropUpdates) {
+        if (!freezeBackdropUpdates) {
+            val list = state.appInfoList
+            if (list.isEmpty()) {
+                settledBackdropItem = null
+            } else if (settledBackdropItem == null || list.none { it.appId == settledBackdropItem?.appId }) {
+                val idx = centeredIndex.takeIf { it in list.indices }
+                    ?: listState.firstVisibleItemIndex.coerceIn(0, list.lastIndex)
+                settledBackdropItem = list.getOrNull(idx)
+            }
+        }
+    }
+
+    LaunchedEffect(listState, freezeBackdropUpdates) {
+        if (freezeBackdropUpdates) return@LaunchedEffect
+
         var pendingUpdate: Job? = null
         snapshotFlow { listState.isScrollInProgress to centeredIndex }
             .collect { (isScrolling, _) ->
