@@ -1695,7 +1695,7 @@ fun preLaunchApp(
                     "experimental-drm-20260116.tzst",
                 ).await()
             }
-            if (container.isLaunchRealSteam && !SteamService.isFileInstallable(context, "steam.tzst")) {
+            if ((container.isLaunchRealSteam || container.isLaunchBionicSteam) && !SteamService.isFileInstallable(context, "steam.tzst")) {
                 setLoadingMessage(context.getString(R.string.main_downloading_steam))
                 SteamService.downloadSteam(
                     onDownloadProgress = { setLoadingProgress(it / 1.0f) },
@@ -1703,7 +1703,7 @@ fun preLaunchApp(
                     context = context,
                 ).await()
             }
-            if (container.isLaunchRealSteam && !SteamService.isFileInstallable(context, "steam-token.tzst")) {
+            if ((container.isLaunchRealSteam || container.isLaunchBionicSteam) && !SteamService.isFileInstallable(context, "steam-token.tzst")) {
                 setLoadingMessage("Downloading steam-token")
                 SteamService.downloadFile(
                     onDownloadProgress = { setLoadingProgress(it / 1.0f) },
@@ -1852,7 +1852,7 @@ fun preLaunchApp(
 
             // Delete Ownership Token if exists
             Timber.tag("Epic").i("[Ownership Tokens] Cleaning up launch tokens for Epic games...")
-            EpicService.cleanupLaunchTokens(context)
+            EpicService.cleanupLaunchTokens(context, container)
 
             setLoadingDialogVisible(false)
             onSuccess(context, appId)
