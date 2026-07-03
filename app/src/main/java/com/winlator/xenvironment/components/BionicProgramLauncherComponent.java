@@ -259,7 +259,7 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
 
         envVars.put("PATH", winePath + ":" +
                 rootDir.getPath() + "/usr/bin");
-        if (BuildConfig.MODERN_ANDROID) envVars.put("REDIRECT_EXEC__PROC_SELF_EXE", winePath + "/wine");
+        configureOpenExecShimEnv(context, imageFs, envVars, winePath);
 
         String ldLibraryPath = rootDir.getPath() + "/usr/lib" + ":" + "/system/lib64";
         if (BuildConfig.MODERN_ANDROID) ldLibraryPath += ":" + imageFs.getWinePath() + "/lib";
@@ -301,13 +301,12 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
         String ld_preload = "";
         String sysvPath = imageFs.getLibDir() + "/libandroid-sysvshm.so";
         String evshimPath = context.getApplicationInfo().nativeLibraryDir + "/libevshim.so";
-        String replacePath = imageFs.getLibDir() + "/" + BuildConfig.PRELOAD_BIONIC_SO;
+        String replacePath = context.getApplicationInfo().nativeLibraryDir + "/" + BuildConfig.PRELOAD_BIONIC_SO;
 
         if (new File(sysvPath).exists()) ld_preload += sysvPath;
 
-
         ld_preload += ":" + evshimPath;
-        ld_preload += ":" + replacePath;
+        if (new File(replacePath).exists()) ld_preload += ":" + replacePath;
 
         envVars.put("LD_PRELOAD", ld_preload);
         envVars.put("EVSHIM_WINE", 1);
@@ -661,7 +660,7 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
         Log.d("BionicProgramLauncherComponent", "WinePath is " + winePath);
 
         envVars.put("PATH", winePath + ":" + rootDir.getPath() + "/usr/bin");
-        if (BuildConfig.MODERN_ANDROID) envVars.put("REDIRECT_EXEC__PROC_SELF_EXE", winePath + "/wine");
+        configureOpenExecShimEnv(context, imageFs, envVars, winePath);
 
         String ldLibraryPath = rootDir.getPath() + "/usr/lib" + ":" + "/system/lib64";
         if (BuildConfig.MODERN_ANDROID) ldLibraryPath += ":" + imageFs.getWinePath() + "/lib";
@@ -674,11 +673,11 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
 
         String ld_preload = "";
         String sysvPath = imageFs.getLibDir() + "/libandroid-sysvshm.so";
-        String replacePath = imageFs.getLibDir() + "/" + BuildConfig.PRELOAD_BIONIC_SO;
+        String replacePath = context.getApplicationInfo().nativeLibraryDir + "/" + BuildConfig.PRELOAD_BIONIC_SO;
 
         if (new File(sysvPath).exists()) ld_preload += sysvPath;
 
-        ld_preload += ":" + replacePath;
+        if (new File(replacePath).exists()) ld_preload += ":" + replacePath;
 
         envVars.put("LD_PRELOAD", ld_preload);
 
@@ -695,6 +694,18 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
         Log.d("BionicProgramLauncherComponent", "Shell command is " + finalCommand);
         return ProcessHelper.execWithOutput(finalCommand, envVars.toStringArray(),
                 workingDir != null ? workingDir : imageFs.getRootDir(), includeStderr);
+    }
+
+    private void configureOpenExecShimEnv(Context context, ImageFs imageFs, EnvVars envVars, String winePath) {
+        envVars.put("GN_PACKAGE_NAME", context.getPackageName());
+        envVars.put("GN_IMAGEFS_ROOT", imageFs.getRootDir().getPath());
+        envVars.put("GN_WINE_LIB", imageFs.getWinePath() + "/lib/wine");
+        envVars.put("GN_PROC_SELF_EXE", winePath + "/wine");
+        envVars.put("GN_EXEC_USE_LINKER", BuildConfig.MODERN_ANDROID ? "1" : "0");
+
+        if (BuildConfig.MODERN_ANDROID) {
+            envVars.put("REDIRECT_EXEC__PROC_SELF_EXE", winePath + "/wine");
+        }
     }
 
     public void restartWineServer() {

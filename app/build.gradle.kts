@@ -37,6 +37,36 @@ val copyDebugManifest by tasks.registering(Copy::class) {
     into(layout.buildDirectory.dir("generated/debugManifest"))
 }
 
+val glibcRedirectCompiler =
+    project.findProperty("GLIBC_REDIRECT_CC") as String?
+        ?: System.getenv("GLIBC_REDIRECT_CC")
+        ?: "aarch64-linux-gnu-gcc"
+val glibcRedirectAssetsDir = layout.buildDirectory.dir("generated/glibcRedirectAssets")
+val buildGlibcRedirectAsset by tasks.registering(Exec::class) {
+    val outputFile = glibcRedirectAssetsDir.get().file("libredirect.so").asFile
+    inputs.file(file("src/main/cpp/gamenative_execshim/gamenative_execshim.c"))
+    outputs.file(outputFile)
+    workingDir = projectDir
+    doFirst {
+        outputFile.parentFile.mkdirs()
+    }
+    commandLine(
+        glibcRedirectCompiler,
+        "-shared",
+        "-fPIC",
+        "-O2",
+        "-o",
+        outputFile.absolutePath,
+        file("src/main/cpp/gamenative_execshim/gamenative_execshim.c").absolutePath,
+        "-ldl",
+        "-pthread",
+    )
+}
+
+tasks.named("preBuild").configure {
+    dependsOn(buildGlibcRedirectAsset)
+}
+
 android {
     namespace = "app.gamenative"
     compileSdk = 36
@@ -127,14 +157,14 @@ android {
             targetSdk = 28
             ndk.abiFilters += listOf("arm64-v8a", "armeabi-v7a")
             buildConfigField("boolean", "MODERN_ANDROID", "false")
-            buildConfigField("String", "PRELOAD_BIONIC_SO", "\"libredirect-bionic.so\"")
+            buildConfigField("String", "PRELOAD_BIONIC_SO", "\"libgamenative_execshim.so\"")
         }
         create("legacyXr") {
             dimension = "androidApi"
             targetSdk = 28
             ndk.abiFilters += listOf("arm64-v8a", "armeabi-v7a")
             buildConfigField("boolean", "MODERN_ANDROID", "false")
-            buildConfigField("String", "PRELOAD_BIONIC_SO", "\"libredirect-bionic.so\"")
+            buildConfigField("String", "PRELOAD_BIONIC_SO", "\"libgamenative_execshim.so\"")
             buildConfigField("boolean", "XR_BUILD", "true")
             manifestPlaceholders["screenOrientation"] = "landscape"
         }
@@ -144,7 +174,7 @@ android {
             targetSdk = 36
             ndk.abiFilters += listOf("arm64-v8a")
             buildConfigField("boolean", "MODERN_ANDROID", "true")
-            buildConfigField("String", "PRELOAD_BIONIC_SO", "\"libredirect-bionic-wx.so\"")
+            buildConfigField("String", "PRELOAD_BIONIC_SO", "\"libgamenative_execshim.so\"")
         }
         create("modernXr") {
             dimension = "androidApi"
@@ -152,7 +182,7 @@ android {
             targetSdk = 36
             ndk.abiFilters += listOf("arm64-v8a")
             buildConfigField("boolean", "MODERN_ANDROID", "true")
-            buildConfigField("String", "PRELOAD_BIONIC_SO", "\"libredirect-bionic-wx.so\"")
+            buildConfigField("String", "PRELOAD_BIONIC_SO", "\"libgamenative_execshim.so\"")
             buildConfigField("boolean", "XR_BUILD", "true")
             buildConfigField("boolean", "MODERN_XR", "true")
             buildConfigField("String", "META_APP_ID", "\"$metaAppId\"")
@@ -209,6 +239,13 @@ android {
         buildConfig = true
     }
 
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/gamenative_execshim/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
+
     packaging {
         resources {
             excludes += "/DebugProbesKt.bin"
@@ -238,6 +275,9 @@ android {
 
     // Configure Assets to be used in different variants
     sourceSets {
+        getByName("main") {
+            assets.srcDir(glibcRedirectAssetsDir)
+        }
         getByName("legacy") {
             java.srcDir("src/nonXr/java")
             assets {

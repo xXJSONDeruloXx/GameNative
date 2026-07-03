@@ -189,7 +189,7 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
         envVars.put("PATH", winePath + ":" +
                 imageFs.getRootDir().getPath() + "/usr/bin:" +
                 imageFs.getRootDir().getPath() + "/usr/local/bin");
-        if (BuildConfig.MODERN_ANDROID) envVars.put("REDIRECT_EXEC__PROC_SELF_EXE", winePath + "/wine");
+        configureOpenRedirectEnv(context, imageFs, envVars, winePath);
 
         envVars.put("LD_LIBRARY_PATH", imageFs.getRootDir().getPath() + "/usr/lib"
                 + (BuildConfig.MODERN_ANDROID ? ":" + imageFs.getWinePath() + "/lib" : ""));
@@ -280,6 +280,22 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
         envVars.put("BOX64_RCFILE", box64RCFile.getPath());
     }
 
+    private String getProcSelfExePath(String winePath) {
+        String fileName = new File(winePath).getName();
+        if ("wine".equals(fileName) || "wine64".equals(fileName)) return winePath;
+        return winePath + "/wine";
+    }
+
+    private void configureOpenRedirectEnv(Context context, ImageFs imageFs, EnvVars envVars, String winePath) {
+        String procSelfExe = getProcSelfExePath(winePath);
+        envVars.put("GN_PACKAGE_NAME", context.getPackageName());
+        envVars.put("GN_IMAGEFS_ROOT", imageFs.getRootDir().getPath());
+        envVars.put("GN_WINE_LIB", imageFs.getWinePath() + "/lib/wine");
+        envVars.put("GN_PROC_SELF_EXE", procSelfExe);
+        envVars.put("GN_EXEC_USE_LINKER", "0");
+        envVars.put("REDIRECT_EXEC__PROC_SELF_EXE", procSelfExe);
+    }
+
     public String execShellCommand(String command) {
         return execShellCommand(command, true);
     }
@@ -301,7 +317,7 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
         envVars.put("PATH", winePath + ":" +
                 imageFs.getRootDir().getPath() + "/usr/bin:" +
                 imageFs.getRootDir().getPath() + "/usr/local/bin");
-        if (BuildConfig.MODERN_ANDROID) envVars.put("REDIRECT_EXEC__PROC_SELF_EXE", winePath + "/wine");
+        configureOpenRedirectEnv(context, imageFs, envVars, winePath);
 
         envVars.put("LD_LIBRARY_PATH", imageFs.getRootDir().getPath() + "/usr/lib"
                 + (BuildConfig.MODERN_ANDROID ? ":" + imageFs.getWinePath() + "/lib" : ""));

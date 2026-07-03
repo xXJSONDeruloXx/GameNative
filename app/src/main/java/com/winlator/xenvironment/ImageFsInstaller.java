@@ -43,7 +43,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 
 public abstract class ImageFsInstaller {
-    public static final byte LATEST_VERSION = 28;
+    public static final byte LATEST_VERSION = 29;
 
     private static void resetContainerImgVersions(Context context) {
         ContainerManager manager = new ContainerManager(context);
@@ -87,17 +87,25 @@ public abstract class ImageFsInstaller {
         }
     }
 
-    // Modern flavor ships an additional bionic preload shipped as a flat asset
-    // (src/modern/assets/) until it's folded into redirect.tzst. Copy it next to
-    // the tarball-extracted variant so BionicProgramLauncherComponent can find it
-    private static void ensureBionicLib(Context context, File imagefs) {
-        if (BuildConfig.MODERN_ANDROID) {
-            File wxDest = new File(imagefs, "usr/lib/libredirect-bionic-wx.so");
-            if (!wxDest.exists()) {
-                FileUtils.copy(context, "libredirect-bionic-wx.so", wxDest);
-                chmod(wxDest);
-            }
+    private static boolean assetExists(Context context, String name) {
+        try (InputStream ignored = context.getAssets().open(name)) {
+            return true;
+        } catch (IOException ignored) {
+            return false;
         }
+    }
+
+    private static void removeLegacyRedirectLibs(File imagefs) {
+        FileUtils.delete(new File(imagefs, "usr/lib/libredirect.so"));
+        FileUtils.delete(new File(imagefs, "usr/lib/libredirect-bionic.so"));
+        FileUtils.delete(new File(imagefs, "usr/lib/libredirect-bionic-wx.so"));
+    }
+
+    private static void copyOpenGlibcRedirectLib(Context context, File imagefs) {
+        if (!assetExists(context, "libredirect.so")) return;
+        File dst = new File(imagefs, "usr/lib/libredirect.so");
+        FileUtils.copy(context, "libredirect.so", dst);
+        chmod(dst);
     }
 
     private static Future<Boolean> installFromAssetsFuture(
@@ -120,7 +128,7 @@ public abstract class ImageFsInstaller {
             clearRootDir(context, rootDir);
             ensureSharedHomeRoot(context, rootDir);
             ensureProtonVersionSymlink(context, rootDir, wineVersion);
-            ensureBionicLib(context, rootDir);
+            removeLegacyRedirectLibs(rootDir);
 
             final byte compressionRatio = 22;
             String imagefsFile = containerVariant.equals(Container.GLIBC) ? "imagefs_gamenative.txz" : "imagefs_bionic.txz";
@@ -168,6 +176,7 @@ public abstract class ImageFsInstaller {
 
                 installWineFromDownloads(context);
                 installGuestLibs(context);
+                GlibcRuntimePathPatcher.patch(context, imageFs, containerVariant);
                 imageFs.createImgVersionFile(LATEST_VERSION);
                 resetContainerImgVersions(context);
 
@@ -187,23 +196,17 @@ public abstract class ImageFsInstaller {
     }
 
     private static void installGuestLibs(Context ctx) {
-        final String ASSET_TAR = "redirect.tzst";          // ➊  add this to assets/
         File imagefs = new File(ctx.getFilesDir(), "imagefs");
-        // ➋  Unpack straight into imagefs, preserving relative paths.
-        try (InputStream in  = ctx.getAssets().open(ASSET_TAR)) {
-            TarCompressorUtils.extract(
-                    TarCompressorUtils.Type.ZSTD,      // you said .tzst
-                    in, imagefs);                      // helper already exists in the project
-        } catch (IOException e) {
-            Log.e("ImageFsInstaller", "redirect deploy failed", e);
-            return;
+        removeLegacyRedirectLibs(imagefs);
+
+        if (assetExists(ctx, "redirect.tzst")) {
+            try (InputStream in  = ctx.getAssets().open("redirect.tzst")) {
+                TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, in, imagefs);
+                removeLegacyRedirectLibs(imagefs);
+            } catch (IOException e) {
+                Log.e("ImageFsInstaller", "optional redirect deploy failed", e);
+            }
         }
-
-        // ➌  Make sure the new libs are world-readable / executable
-        chmod(new File(imagefs, "usr/lib/libredirect.so"));
-        chmod(new File(imagefs, "usr/lib/libredirect-bionic.so"));
-
-        ensureBionicLib(ctx, imagefs);
 
         // Extract extras.tzst - download from server for modern variant, use bundled assets for legacy
         if (app.gamenative.BuildConfig.MODERN_ANDROID) {
@@ -241,6 +244,8 @@ public abstract class ImageFsInstaller {
             }
         }
 
+        copyOpenGlibcRedirectLib(ctx, imagefs);
+
         // ➌  Make sure the new libs are world-readable / executable
         chmod(new File(imagefs, "generate_interfaces_file.exe"));
         chmod(new File(imagefs, "Steamless/Steamless.CLI.exe"));
@@ -268,7 +273,9 @@ public abstract class ImageFsInstaller {
         } else {
             Log.d("ImageFsInstaller", "Image FS already valid and at latest version");
             return Executors.newSingleThreadExecutor().submit(() -> {
-                ensureBionicLib(context, imageFs.getRootDir());
+                removeLegacyRedirectLibs(imageFs.getRootDir());
+                copyOpenGlibcRedirectLib(context, imageFs.getRootDir());
+                GlibcRuntimePathPatcher.patch(context, imageFs, container.getContainerVariant());
                 return true;
             });
         }
