@@ -453,6 +453,11 @@ internal fun LibraryCarouselPane(
                                 state.statsFor(item)
                             }
 
+                            // The carousel tracks focus externally via focusTargetListIndex (the index the
+                            // FocusRequester is routed to). Because enableFocusTracking is false, AppItem
+                            // can't detect focus itself, so feed it the known state to keep the focus border.
+                            val isCardFocused = focusTargetListIndex == listIndex
+
                             Box(
                                 modifier = Modifier
                                     .zIndex(zOrder)
@@ -550,6 +555,7 @@ internal fun LibraryCarouselPane(
                                             enableFocusScale = false,
                                             animateStats = stepsFromCenter == 0,
                                             enableFocusTracking = false,
+                                            isFocused = isCardFocused,
                                         )
                                     }
                                 }

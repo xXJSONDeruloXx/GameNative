@@ -75,6 +75,12 @@ internal fun AppItem(
     enableFocusScale: Boolean = true,
     animateStats: Boolean = true,
     enableFocusTracking: Boolean = true,
+    // When enableFocusTracking is false, AppItem cannot detect focus internally (it skips the
+    // per-card interaction-source collection that is the perf win). Callers that handle focus
+    // externally -- e.g. the carousel, which routes a FocusRequester to a known index -- should
+    // pass that focused state here so focus-dependent visuals (the card border) still update.
+    // Grid/list callers leave this false and track focus internally, so they are unaffected.
+    isFocused: Boolean = false,
 ) {
     val context = LocalContext.current
     var hideText by remember { mutableStateOf(true) }
@@ -92,11 +98,14 @@ internal fun AppItem(
         }
     }
 
-    var isFocused by remember { mutableStateOf(false) }
+    // Internal focus state, driven by the card's own interaction source when enableFocusTracking
+    // is true. When tracking is disabled, the caller-supplied [isFocused] is the source of truth.
+    var trackedFocus by remember { mutableStateOf(false) }
+    val effectiveFocus = if (enableFocusTracking) trackedFocus else isFocused
 
     // More subtle scale for list view, slightly larger for grid views
     val targetScale = when {
-        !enableFocusScale || !isFocused -> 1f
+        !enableFocusScale || !effectiveFocus -> 1f
         paneType == PaneType.LIST -> 1.015f
         else -> 1.03f
     }
@@ -120,8 +129,8 @@ internal fun AppItem(
             appInfo = appInfo,
             onClick = onClick,
             onFocus = onFocus,
-            isFocused = isFocused,
-            onFocusChanged = { isFocused = it },
+            isFocused = effectiveFocus,
+            onFocusChanged = { trackedFocus = it },
             isRefreshing = isRefreshing,
             compatibilityStatus = compatibilityStatus,
             gameStats = gameStats,
@@ -133,8 +142,8 @@ internal fun AppItem(
             appInfo = appInfo,
             onClick = onClick,
             onFocus = onFocus,
-            isFocused = isFocused,
-            onFocusChanged = { isFocused = it },
+            isFocused = effectiveFocus,
+            onFocusChanged = { trackedFocus = it },
             scale = scale,
             paneType = paneType,
             imageRefreshCounter = imageRefreshCounter,
