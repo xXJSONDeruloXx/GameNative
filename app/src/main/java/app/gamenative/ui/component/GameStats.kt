@@ -19,6 +19,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -39,19 +40,22 @@ private data class StatEntry(val icon: ImageVector, val value: String)
 
 private fun Int?.orUnknown(): String = this?.toString() ?: "?"
 
-private fun statEntries(stats: GameCardStats?): List<StatEntry> = listOf(
-    StatEntry(Icons.Rounded.SportsEsports, (stats?.runsGpu ?: 0).toString()),
-    StatEntry(Icons.Rounded.Star, "${stats?.reviewsGpu ?: 0}/${stats?.reviewsDevice ?: 0}"),
-    StatEntry(Icons.Rounded.Speed, (stats?.fps).orUnknown()),
-    StatEntry(Icons.Rounded.Timer, (stats?.sessionSec)?.let { formatSessionLength(it) } ?: "?"),
+private fun statEntries(stats: GameCardStats): List<StatEntry> = listOf(
+    StatEntry(Icons.Rounded.SportsEsports, stats.runsGpu.toString()),
+    StatEntry(Icons.Rounded.Star, "${stats.reviewsGpu}/${stats.reviewsDevice}"),
+    StatEntry(Icons.Rounded.Speed, stats.fps.orUnknown()),
+    StatEntry(Icons.Rounded.Timer, stats.sessionSec?.let { formatSessionLength(it) } ?: "?"),
 )
 
 /**
- * Compact horizontal row of device play stats shown under a card's title. Auto-scrolls (marquee)
- * when [animate] is true and the values are too wide to fit the card. Renders nothing when [stats] is null.
+ * Compact horizontal row of device play stats shown under a card's title. Renders nothing when
+ * [stats] is null, so the absent-stats case costs essentially zero composition/layout/draw work.
+ * Auto-scrolls (marquee) only when [enableMarquee] is true, since marquee is expensive to measure
+ * on every scroll frame and is a poor default for transformed containers like the carousel.
  *
  * @param tint Color for icons and text.
  * @param onDark When true, text gets a subtle shadow for legibility over images.
+ * @param enableMarquee When true, auto-scrolls values that are too wide to fit the card.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -60,16 +64,21 @@ fun GameStatsRow(
     tint: Color,
     modifier: Modifier = Modifier,
     onDark: Boolean = false,
-    animate: Boolean = true,
+    enableMarquee: Boolean = false,
 ) {
+    if (stats == null) return
+    val entries = remember(stats) { statEntries(stats) }
+    val rowModifier = if (enableMarquee) {
+        modifier.fillMaxWidth().basicMarquee()
+    } else {
+        modifier.fillMaxWidth()
+    }
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .then(if (animate) Modifier.basicMarquee() else Modifier),
+        modifier = rowModifier,
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        statEntries(stats).forEach { entry ->
+        entries.forEach { entry ->
             StatItem(icon = entry.icon, value = entry.value, tint = tint, onDark = onDark)
         }
     }

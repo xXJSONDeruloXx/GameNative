@@ -292,7 +292,7 @@ internal fun GridViewCard(
                         stats = gameStats,
                         tint = Color.White.copy(alpha = 0.55f),
                         onDark = true,
-                        animate = animateStats,
+                        enableMarquee = animateStats,
                     )
                 }
 

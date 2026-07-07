@@ -187,6 +187,7 @@ internal fun ListViewCard(
                 GameStatsRow(
                     stats = gameStats,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                    enableMarquee = true,
                 )
             }
 
