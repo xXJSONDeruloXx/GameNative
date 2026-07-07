@@ -89,6 +89,7 @@ internal fun GridViewCard(
     compatibilityStatus: GameCompatibilityStatus?,
     gameStats: GameCardStats?,
     showFocusGlow: Boolean,
+    enableFocusTracking: Boolean = true,
     context: Context,
     animateStats: Boolean = true,
 ) {
@@ -134,11 +135,17 @@ internal fun GridViewCard(
             .then(focusHaloModifier),
     ) {
         val interactionSource = remember { MutableInteractionSource() }
-        val isItemFocused by interactionSource.collectIsFocusedAsState()
+        val isItemFocused by if (enableFocusTracking) {
+            interactionSource.collectIsFocusedAsState()
+        } else {
+            remember { mutableStateOf(false) }
+        }
 
-        LaunchedEffect(isItemFocused) {
-            onFocusChanged(isItemFocused)
-            if (isItemFocused) onFocus()
+        if (enableFocusTracking) {
+            LaunchedEffect(isItemFocused) {
+                onFocusChanged(isItemFocused)
+                if (isItemFocused) onFocus()
+            }
         }
 
         Card(

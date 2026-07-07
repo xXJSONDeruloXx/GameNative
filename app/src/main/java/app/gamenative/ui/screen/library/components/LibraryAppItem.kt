@@ -74,6 +74,7 @@ internal fun AppItem(
     showFocusGlow: Boolean = true,
     enableFocusScale: Boolean = true,
     animateStats: Boolean = true,
+    enableFocusTracking: Boolean = true,
 ) {
     val context = LocalContext.current
     var hideText by remember { mutableStateOf(true) }
@@ -146,6 +147,7 @@ internal fun AppItem(
             compatibilityStatus = compatibilityStatus,
             gameStats = gameStats,
             showFocusGlow = showFocusGlow,
+            enableFocusTracking = enableFocusTracking,
             context = context,
             animateStats = animateStats,
         )

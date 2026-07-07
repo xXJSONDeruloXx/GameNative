@@ -549,6 +549,7 @@ internal fun LibraryCarouselPane(
                                             showFocusGlow = false,
                                             enableFocusScale = false,
                                             animateStats = stepsFromCenter == 0,
+                                            enableFocusTracking = false,
                                         )
                                     }
                                 }
